@@ -1,21 +1,23 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import StudentDashboard from "./pages/StudentDashboard";
+import StudentDirectory from "./pages/StudentDirectory";
+import MentorBookingView from "./pages/MentorBookingView";
 import MentorDashboard from "./pages/MentorDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/student" replace />} />
-      <Route path="/student" element={<StudentDashboard />} />
+
+      {/* Student Flows */}
+      <Route path="/student" element={<StudentDirectory />} />
+      <Route path="/student/:group/:mentorId" element={<MentorBookingView />} />
+
+      {/* Mentor Flow */}
       <Route path="/mentor" element={<MentorDashboard />} />
 
-      {/* Placeholder for Placement Chair */}
-      <Route
-        path="/admin"
-        element={
-          <div className="p-8 text-emerald-950">Admin UI Coming Next</div>
-        }
-      />
+      {/* Placement Chair Flow */}
+      <Route path="/admin" element={<AdminDashboard />} />
     </Routes>
   );
 }
