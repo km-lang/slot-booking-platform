@@ -63,6 +63,13 @@ export default function MentorDashboard() {
             <div className="flex items-center gap-2 text-white font-bold">
               <Shield size={18} className="text-emerald-400" /> Mentor Console
             </div>
+            <button
+              onClick={() => navigate("/")}
+              className="bg-emerald-950 text-white text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-inner border border-emerald-800 active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <Shield size={12} className="text-emerald-400" />
+              Shukracharya
+            </button>
             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-xs font-bold border border-white/20">
               SJ
             </div>

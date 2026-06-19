@@ -154,6 +154,12 @@ export default function StudentDashboard() {
               SIP Prep 2026
             </p>
           </div>
+          <button
+            onClick={() => navigate("/")}
+            className="bg-emerald-900 hover:bg-emerald-800 text-white text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-[0_4px_10px_rgba(6,45,28,0.15)] active:scale-95 transition-all"
+          >
+            Shukracharya
+          </button>
         </header>
 
         <main className="flex-1 px-4 py-6 overflow-y-auto pb-24">
