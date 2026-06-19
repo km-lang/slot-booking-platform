@@ -32,11 +32,11 @@ export default function AdminDashboard() {
   const COLORS = ["#064E3B", "#047857", "#10B981", "#6EE7B7"]; // Deep to light emeralds
 
   const mentorUtilization = [
-    { name: "Dr. Jenkins", offered: 60, completed: 48 },
-    { name: "Prof. Thorne", offered: 45, completed: 38 },
+    { name: "Jenkins", offered: 60, completed: 48 },
+    { name: "Thorne", offered: 45, completed: 38 },
     { name: "Priya Sharma", offered: 30, completed: 27 },
     { name: "Rahul Menon", offered: 40, completed: 31 },
-    { name: "Dr. Vance", offered: 55, completed: 44 },
+    { name: "Vance", offered: 55, completed: 44 },
   ];
 
   return (
@@ -307,7 +307,7 @@ export default function AdminDashboard() {
                     10:08 AM
                   </td>
                   <td className="py-3 px-4 font-bold text-emerald-950">
-                    Dr. Jenkins
+                    Jenkins
                   </td>
                   <td className="py-3 px-4 font-semibold text-emerald-800/80">
                     Running 15 min late
