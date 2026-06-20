@@ -3,7 +3,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { verifySession, requireRole } = require("../middleware/auth");
+const { verifySession, requireRole, requireAigScope } = require("../middleware/auth");
 const bookingRateLimiter = require("../middleware/rateLimiter");
 
 const slotController = require("../controllers/slotController");
@@ -55,6 +55,7 @@ router.get("/cohort", requireRole("MENTOR"), slotController.getMentorCohort);
 router.get(
   "/admin/aig/:aigSlug",
   requireRole("AIGs"),
+  requireAigScope("aigSlug"),
   adminController.getAigOverview,
 );
 

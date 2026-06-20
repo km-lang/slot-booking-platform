@@ -1,19 +1,69 @@
 "use strict";
 
-// Phase 2 stub — full implementation in Phase 3.
-// Flow: verify Google id_token → check AccessWhitelist → upsert User → issue session JWT
+const { OAuth2Client } = require("google-auth-library");
+const jwt = require("jsonwebtoken");
+const prisma = require("../lib/prisma");
 
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Flow: verify Google id_token → check AccessWhitelist → upsert User → issue session JWT
 const googleSignIn = async (req, res, next) => {
   try {
-    // TODO Phase 3:
-    // 1. const { idToken } = req.body
-    // 2. Verify with google-auth-library OAuth2Client.verifyIdToken()
-    // 3. Extract email from payload
-    // 4. Look up email in AccessWhitelist — 403 if absent
-    // 5. prisma.user.upsert({ where: { email }, create: { email, role, name } })
-    // 6. Sign and return our own JWT: jwt.sign({ sub: user.id, role, aigId? }, JWT_SECRET)
-    res.status(501).json({ error: "Auth not implemented yet — Phase 3" });
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ error: "idToken is required" });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const email = payload?.email;
+    if (!email) {
+      return res.status(401).json({ error: "Invalid Google credential" });
+    }
+
+    const whitelistEntry = await prisma.accessWhitelist.findUnique({
+      where: { email },
+      include: { aig: true },
+    });
+    if (!whitelistEntry) {
+      return res.status(403).json({ error: "This email is not authorised to access Parthsaarthi" });
+    }
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      create: { email, role: whitelistEntry.role, name: payload.name },
+      update: { role: whitelistEntry.role, name: payload.name },
+    });
+
+    const sessionPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      ...(whitelistEntry.aigId && { aigId: whitelistEntry.aigId }),
+      ...(whitelistEntry.aig?.slug && { aigSlug: whitelistEntry.aig.slug }),
+    };
+
+    const token = jwt.sign(sessionPayload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+    });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        ...(whitelistEntry.aig?.slug && { aigSlug: whitelistEntry.aig.slug }),
+      },
+    });
   } catch (err) {
+    if (err.message?.includes("Token used too late") || err.message?.includes("Wrong number of segments")) {
+      return res.status(401).json({ error: "Invalid Google credential" });
+    }
     next(err);
   }
 };
