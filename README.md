@@ -11,7 +11,7 @@ slot-booking-platform/
 ├── client/                     React 19 + Vite 8 + Tailwind CSS 3
 │   └── src/
 │       ├── components/
-│       │   └── RequireRole.jsx     Route guard (stub → Phase 3)
+│       │   └── RequireRole.jsx     Route guard (live)
 │       ├── pages/
 │       │   ├── StudentLayout.jsx
 │       │   ├── StudentDashboard.jsx
@@ -20,7 +20,7 @@ slot-booking-platform/
 │       │   ├── MentorCohortDetails.jsx
 │       │   ├── AigAdminDashboard.jsx   Generic AIG-tier view (/admin/:aigSlug)
 │       │   ├── PlacementAdminDashboard.jsx  SuperADMIN KPI + live ops
-│       │   ├── LoginPage.jsx           (stub → Phase 3)
+│       │   ├── LoginPage.jsx           (live — Google Identity Services)
 │       │   └── UnauthorizedPage.jsx
 │       └── App.jsx                 Route map (RBAC-structured)
 │
@@ -35,12 +35,12 @@ slot-booking-platform/
         │   ├── auth.js             POST /api/auth/google
         │   └── api.js              All authenticated routes
         ├── controllers/
-        │   ├── authController.js   (stub → Phase 3)
-        │   ├── slotController.js   (stub → Phase 4)
-        │   ├── bookingController.js (stub → Phase 4)
+        │   ├── authController.js   (live)
+        │   ├── slotController.js   (live)
+        │   ├── bookingController.js (live — OCC + idempotency + penalty tiers)
         │   └── adminController.js  (stub → Phase 6)
         └── middleware/
-            ├── auth.js             verifySession, requireRole, requireAigScope (stub → Phase 3)
+            ├── auth.js             verifySession, requireRole, requireAigScope (live)
             └── rateLimiter.js      10s / 8 req cap on POST /api/bookings (live)
 ```
 
@@ -201,8 +201,8 @@ npm run build           # VITE_BASE_PATH defaults to "/"
 
 ---
 
-### 🔲 Phase 3 — Authentication
-**Status: Pending**
+### ✅ Phase 3 — Authentication
+**Status: Complete**
 
 Scope:
 - **Server** — `authController.googleSignIn`:
@@ -231,8 +231,8 @@ Scope:
 
 ---
 
-### 🔲 Phase 4 — Booking API + OCC
-**Status: Pending**
+### ✅ Phase 4 — Booking API + OCC
+**Status: Complete**
 
 Scope:
 - **`slotController`**:
