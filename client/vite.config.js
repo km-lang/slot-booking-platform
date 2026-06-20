@@ -3,9 +3,12 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/slot-booking-platform/", // Replace with your exact GitHub repo name
+  base: process.env.VITE_BASE_PATH ?? "/",
   server: {
     port: 3000,
     host: true,
+    proxy: {
+      "/api": "http://localhost:4000",
+    },
   },
 });

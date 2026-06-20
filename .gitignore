@@ -1,1 +1,6 @@
 node_modules/
+server/.env
+server/prisma/dev.db
+server/prisma/dev.db-journal
+server/prisma/dev.db-shm
+server/prisma/dev.db-wal

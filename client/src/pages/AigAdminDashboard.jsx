@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   Shield,
   Clock,
@@ -10,10 +11,16 @@ import {
   Bell,
 } from "lucide-react";
 
-export default function TeamDishaDashboard() {
+export default function AigAdminDashboard() {
+  const { aigSlug } = useParams();
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Mock Data for Cohorts
+  const aigName = aigSlug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+  // Mock data — replaced by API in Phase 5
   const cohorts = [
     {
       id: "C4",
@@ -41,7 +48,6 @@ export default function TeamDishaDashboard() {
     },
   ];
 
-  // Mock Data for Intervention List
   const atRiskStudents = [
     {
       name: "Dhriti Srivastava",
@@ -59,10 +65,18 @@ export default function TeamDishaDashboard() {
     },
   ];
 
+  const filteredCohorts = searchQuery.trim()
+    ? cohorts.filter(
+        (c) =>
+          c.mentor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          c.id.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : cohorts;
+
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans pb-24 sm:bg-slate-100">
       <div className="max-w-md md:max-w-4xl mx-auto min-h-screen bg-[#F8FAF7] shadow-2xl relative">
-        {/* --- Sticky Header --- */}
+        {/* Sticky Header */}
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-4">
           <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2 font-bold text-emerald-950">
@@ -70,7 +84,7 @@ export default function TeamDishaDashboard() {
                 <Shield size={18} />
               </div>
               <div>
-                Team Disha{" "}
+                {aigName}{" "}
                 <span className="text-[10px] uppercase tracking-widest text-emerald-600 block leading-none mt-0.5">
                   Cohort Control
                 </span>
@@ -82,7 +96,7 @@ export default function TeamDishaDashboard() {
             </button>
           </div>
 
-          {/* CV Freeze Countdown Banner */}
+          {/* CV Freeze Countdown — timestamp from SystemConfig in Phase 5 */}
           <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-3 shadow-sm">
             <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
               <Clock size={18} />
@@ -99,7 +113,7 @@ export default function TeamDishaDashboard() {
         </header>
 
         <main className="px-4 py-6">
-          {/* --- Global Batch Progress --- */}
+          {/* Global Batch Progress */}
           <section className="mb-8">
             <div className="flex justify-between items-end mb-3">
               <h2 className="text-lg font-black text-emerald-950">
@@ -118,13 +132,13 @@ export default function TeamDishaDashboard() {
                   432 / 600 Cleared
                 </span>
               </div>
-              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden flex">
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div className="bg-emerald-500 w-[72%] h-full rounded-full"></div>
               </div>
             </div>
           </section>
 
-          {/* --- Intervention Required (At Risk) --- */}
+          {/* Intervention Required */}
           <section className="mb-8">
             <h2 className="text-lg font-black text-emerald-950 mb-3 flex items-center gap-2">
               <AlertTriangle size={18} className="text-amber-500" />{" "}
@@ -157,15 +171,12 @@ export default function TeamDishaDashboard() {
             </div>
           </section>
 
-          {/* --- Cohort Tracking --- */}
+          {/* Cohort Drilldown */}
           <section>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-black text-emerald-950">
-                Cohort Drilldown
-              </h2>
-            </div>
+            <h2 className="text-lg font-black text-emerald-950 mb-4">
+              Cohort Drilldown
+            </h2>
 
-            {/* Mobile Search */}
             <div className="relative mb-4">
               <Search
                 size={16}
@@ -174,12 +185,14 @@ export default function TeamDishaDashboard() {
               <input
                 type="text"
                 placeholder="Search cohort or mentor..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-white border border-emerald-900/10 rounded-xl pl-9 pr-4 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
               />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {cohorts.map((cohort) => (
+              {filteredCohorts.map((cohort) => (
                 <div
                   key={cohort.id}
                   className="bg-white border border-emerald-900/10 rounded-2xl p-4 shadow-sm"
@@ -206,7 +219,6 @@ export default function TeamDishaDashboard() {
                     )}
                   </div>
 
-                  {/* Progress Line */}
                   <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full ${cohort.status === "Critical" ? "bg-amber-500" : "bg-emerald-500"}`}

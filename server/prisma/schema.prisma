@@ -1,0 +1,230 @@
+// Parthsaarthi — Prisma Schema
+//
+// Local dev:  provider = "sqlite",  DATABASE_URL = "file:./dev.db"
+// Production: provider = "postgresql", DATABASE_URL = "postgresql://..."
+//             Also change Json? below — SQLite stores it as text; Postgres uses native jsonb.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  MENTOR
+  AIGs
+  SuperADMIN
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
+enum WarnType {
+  WARNING // 3 warnings auto-convert to 1 STRIKE via bookingController
+  STRIKE  // directly feeds ban evaluation
+}
+
+// ─── Access Control ───────────────────────────────────────────────────────────
+
+// The sole gate to the platform. No email outside this table can log in,
+// regardless of a valid Google credential.
+model AccessWhitelist {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      Role
+  aigId     String?  // scopes AIGs-tier rows to one AIG
+  cohortId  String?  // optionally scopes a MENTOR to a specific cohort at invite time
+  addedBy   String   // email of the SuperADMIN who added this row
+  createdAt DateTime @default(now())
+
+  aig    AIG?    @relation(fields: [aigId], references: [id])
+  cohort Cohort? @relation(fields: [cohortId], references: [id])
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      Role
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studentProfile StudentProfile?
+  mentorProfile  MentorProfile?
+  bookings       Booking[]
+  warnings       StudentWarning[]
+  bans           Ban[]
+  auditEvents    AuditEvent[]
+}
+
+model StudentProfile {
+  id       String  @id @default(cuid())
+  userId   String  @unique
+  pgpId    String  @unique // e.g. "25110"
+  cohortId String?
+
+  user   User    @relation(fields: [userId], references: [id])
+  cohort Cohort? @relation(fields: [cohortId], references: [id])
+}
+
+model MentorProfile {
+  id       String  @id @default(cuid())
+  userId   String  @unique
+  slug     String  @unique // e.g. "evelyn-vance" — server-generated at profile creation
+  firm     String
+  domain   String
+  aigId    String
+  cohortId String?
+
+  user            User            @relation(fields: [userId], references: [id])
+  aig             AIG             @relation(fields: [aigId], references: [id])
+  cohort          Cohort?         @relation(fields: [cohortId], references: [id])
+  bookingReleases BookingRelease[]
+  slots           Slot[]
+}
+
+// ─── Organisation ─────────────────────────────────────────────────────────────
+
+model AIG {
+  id   String @id @default(cuid())
+  slug String @unique // e.g. "disha" — used in /admin/:aigSlug routes
+  name String          // e.g. "Team Disha" — display name fetched by AigAdminDashboard
+  type String          // e.g. "Core Preparation" | "Domain AIG"
+
+  cohorts          Cohort[]
+  mentorProfiles   MentorProfile[]
+  whitelistEntries AccessWhitelist[]
+}
+
+model Cohort {
+  id     String @id @default(cuid())
+  label  String // e.g. "Q4"
+  aigId  String
+
+  aig              AIG               @relation(fields: [aigId], references: [id])
+  studentProfiles  StudentProfile[]
+  mentorProfiles   MentorProfile[]
+  whitelistEntries AccessWhitelist[]
+}
+
+// ─── Slots & Bookings ─────────────────────────────────────────────────────────
+
+model BookingRelease {
+  id              String   @id @default(cuid())
+  mentorProfileId String
+  startTime       DateTime
+  endTime         DateTime
+  slotDuration    Int      // minutes per slot
+  venue           String
+  cohortOnly      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
+  slots         Slot[]
+}
+
+model Slot {
+  id              String   @id @default(cuid())
+  releaseId       String
+  mentorProfileId String
+  startTime       DateTime
+  endTime         DateTime
+  venue           String
+  version         Int      @default(0) // OCC — incremented atomically on each state change
+
+  release       BookingRelease @relation(fields: [releaseId], references: [id])
+  mentorProfile MentorProfile  @relation(fields: [mentorProfileId], references: [id])
+  capacity      SlotCapacity?
+  bookings      Booking[]
+}
+
+// Separate table so max capacity is configurable per slot without touching Slot itself
+model SlotCapacity {
+  slotId  String @id
+  max     Int    @default(1)
+  current Int    @default(0)
+
+  slot Slot @relation(fields: [slotId], references: [id])
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  slotId         String
+  studentUserId  String
+  focus          String        // "overall" | "workex" | "por"
+  idempotencyKey String        @unique // client-generated UUID; replays return existing booking
+  status         BookingStatus @default(CONFIRMED)
+  createdAt      DateTime      @default(now())
+
+  slot    Slot @relation(fields: [slotId], references: [id])
+  student User @relation(fields: [studentUserId], references: [id])
+}
+
+// ─── Penalties & Bans ─────────────────────────────────────────────────────────
+
+model StudentWarning {
+  id        String   @id @default(cuid())
+  userId    String
+  bookingId String?  // the booking that triggered this warning/strike
+  type      WarnType @default(WARNING)
+  reason    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Ban {
+  id       String    @id @default(cuid())
+  userId   String
+  reason   String
+  startsAt DateTime  @default(now())
+  endsAt   DateTime? // null = permanent
+  liftedAt DateTime? // set when a SuperADMIN manually lifts the ban
+  liftedBy String?   // email of the admin who lifted it
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// Seeded tiers that the booking controller reads at runtime (no hardcoded thresholds)
+model BanPolicyTier {
+  id               Int    @id @default(autoincrement())
+  strikeThreshold  Int    @unique // minimum strike count to trigger this tier
+  banDurationHours Int?   // null = permanent ban
+  description      String
+}
+
+// ─── Observability ────────────────────────────────────────────────────────────
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  userId    String?  // null for system-generated events
+  action    String   // e.g. "BOOKING_CREATED", "BAN_APPLIED", "SLOT_RELEASED"
+  entity    String   // e.g. "Booking", "Ban", "Slot"
+  entityId  String?
+  meta      String?  // JSON string (use JSON.parse/stringify in controllers)
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+// ─── Global Config ────────────────────────────────────────────────────────────
+
+// Key/value store for global settings: cv_freeze_deadline, booking_open, etc.
+// Read by AigAdminDashboard (countdown) and potentially booking controller (gate).
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
