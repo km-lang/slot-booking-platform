@@ -1,21 +1,35 @@
 "use strict";
 
-// Phase 2 stub — full implementation (JWT verify + requireRole + requireAigScope) in Phase 3.
+const jwt = require("jsonwebtoken");
 
-const verifySession = (req, _res, next) => {
-  // TODO Phase 3: verify our JWT, attach req.user = { id, email, role, aigId? }
-  next();
+const verifySession = (req, res, next) => {
+  const header = req.headers.authorization || "";
+  const [scheme, token] = header.split(" ");
+  if (scheme !== "Bearer" || !token) {
+    return res.status(401).json({ error: "Missing or malformed Authorization header" });
+  }
+
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired session" });
+  }
 };
 
 const requireRole = (...roles) =>
   (req, res, next) => {
-    // TODO Phase 3: check req.user.role against roles array, return 403 if mismatch
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Forbidden — insufficient role" });
+    }
     next();
   };
 
 const requireAigScope = (slugParam) =>
   (req, res, next) => {
-    // TODO Phase 3: verify req.user.aigSlug === req.params[slugParam]
+    if (!req.user || req.user.aigSlug !== req.params[slugParam]) {
+      return res.status(403).json({ error: "Forbidden — outside your AIG scope" });
+    }
     next();
   };
 
