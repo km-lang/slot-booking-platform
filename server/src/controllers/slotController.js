@@ -254,12 +254,95 @@ const getMentorCohort = async (req, res, next) => {
   }
 };
 
+// ─── Mentor own slots + dashboard data ───────────────────────────────────────
+
+const listMentorOwnSlots = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 86400000);
+
+    const fmtTime = (d) =>
+      new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    // Today's slots (we filter to those with confirmed bookings below)
+    const slotsToday = await prisma.slot.findMany({
+      where: { mentorProfileId: mentorProfile.id, startTime: { gte: todayStart, lt: todayEnd } },
+      include: {
+        bookings: {
+          where: { status: "CONFIRMED" },
+          include: { student: { select: { name: true, studentProfile: { select: { pgpId: true } } } } },
+        },
+      },
+      orderBy: { startTime: "asc" },
+    });
+
+    const bookedSessions = slotsToday
+      .filter((s) => s.bookings.length > 0)
+      .map((s) => ({
+        id: s.id,
+        bookingId: s.bookings[0].id,
+        time: fmtTime(s.startTime),
+        venue: s.venue,
+        student: {
+          name: s.bookings[0].student?.name ?? "—",
+          pgp: s.bookings[0].student?.studentProfile?.pgpId ?? "N/A",
+          purpose: s.bookings[0].focus,
+        },
+      }));
+
+    // Upcoming unbooked slots (for the live slot list)
+    const upcomingSlots = await prisma.slot.findMany({
+      where: { mentorProfileId: mentorProfile.id, startTime: { gte: now } },
+      include: {
+        bookings: { where: { status: "CONFIRMED" } },
+        release: { select: { cohortOnly: true } },
+      },
+      orderBy: { startTime: "asc" },
+    });
+
+    const availableSlots = upcomingSlots
+      .filter((s) => s.bookings.length === 0)
+      .map((s) => ({
+        id: s.id,
+        time: `${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}`,
+        venue: s.venue,
+        cohortOnly: s.release?.cohortOnly ?? false,
+      }));
+
+    // Cohort aggregate stats
+    let cohortStats = { totalMentees: 0, totalSlotsTaken: 0 };
+    if (mentorProfile.cohortId) {
+      const [menteeCount, bookingCount] = await Promise.all([
+        prisma.studentProfile.count({ where: { cohortId: mentorProfile.cohortId } }),
+        prisma.booking.count({
+          where: {
+            slot: { mentorProfileId: mentorProfile.id },
+            status: { in: ["CONFIRMED", "ATTENDED"] },
+          },
+        }),
+      ]);
+      cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
+    }
+
+    res.json({ bookedSessions, availableSlots, cohortStats });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listAigs,
   getAig,
   listMentors,
   getMentor,
   listSlots,
+  listMentorOwnSlots,
   releaseSlots,
   deleteSlot,
   getMentorCohort,

@@ -22,8 +22,10 @@ router.get("/mentors", slotController.listMentors);
 router.get("/mentors/:slug", slotController.getMentor);
 
 // ── Slots ──────────────────────────────────────────────────────────────────
+// GET  /api/slots/mine                      mentor: own dashboard data (today's sessions + available slots)
 // GET  /api/slots?mentorSlug=evelyn-vance   student: list slots (auth-aware: marks bookedByMe)
 // POST /api/slots                           mentor: release a new block
+router.get("/slots/mine", requireRole("MENTOR"), slotController.listMentorOwnSlots);
 router.get("/slots", slotController.listSlots);
 router.post(
   "/slots",
@@ -84,5 +86,9 @@ router.delete(
 // ── System Config (SuperADMIN only) ───────────────────────────────────────
 router.get("/admin/config", requireRole("SuperADMIN"), adminController.getConfig);
 router.put("/admin/config/:key", requireRole("SuperADMIN"), adminController.setConfig);
+
+// ── Ban Management (SuperADMIN only) ──────────────────────────────────────
+router.get("/admin/bans", requireRole("SuperADMIN"), adminController.listBans);
+router.patch("/admin/bans/:id/lift", requireRole("SuperADMIN"), adminController.liftBan);
 
 module.exports = router;

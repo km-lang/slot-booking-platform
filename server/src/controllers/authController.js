@@ -6,22 +6,34 @@ const prisma = require("../lib/prisma");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// Flow: verify Google id_token → check AccessWhitelist → upsert User → issue session JWT
+// Flow: resolve email → check AccessWhitelist → upsert User → sign session JWT
+// AUTH_MODE=dev: client sends { email } directly (whitelist still enforced)
+// AUTH_MODE=production (default): client sends { idToken } from Google GSI
 const googleSignIn = async (req, res, next) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ error: "idToken is required" });
-    }
+    let email, name;
 
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    const email = payload?.email;
-    if (!email) {
-      return res.status(401).json({ error: "Invalid Google credential" });
+    if (process.env.AUTH_MODE === "dev") {
+      email = req.body.email?.trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: "email is required in dev mode" });
+      name = email.split("@")[0];
+    } else {
+      const { idToken } = req.body;
+      if (!idToken) return res.status(400).json({ error: "idToken is required" });
+
+      let ticket;
+      try {
+        ticket = await googleClient.verifyIdToken({
+          idToken,
+          audience: process.env.GOOGLE_CLIENT_ID,
+        });
+      } catch {
+        return res.status(401).json({ error: "Invalid Google credential" });
+      }
+      const payload = ticket.getPayload();
+      email = payload?.email;
+      name = payload?.name;
+      if (!email) return res.status(401).json({ error: "Invalid Google credential" });
     }
 
     const whitelistEntry = await prisma.accessWhitelist.findUnique({
@@ -29,13 +41,15 @@ const googleSignIn = async (req, res, next) => {
       include: { aig: true },
     });
     if (!whitelistEntry) {
-      return res.status(403).json({ error: "This email is not authorised to access Parthsaarthi" });
+      return res.status(403).json({
+        error: "This email is not authorised to access Parthsaarthi",
+      });
     }
 
     const user = await prisma.user.upsert({
       where: { email },
-      create: { email, role: whitelistEntry.role, name: payload.name },
-      update: { role: whitelistEntry.role, name: payload.name },
+      create: { email, role: whitelistEntry.role, name },
+      update: { role: whitelistEntry.role, ...(name && { name }) },
     });
 
     const sessionPayload = {
@@ -61,9 +75,6 @@ const googleSignIn = async (req, res, next) => {
       },
     });
   } catch (err) {
-    if (err.message?.includes("Token used too late") || err.message?.includes("Wrong number of segments")) {
-      return res.status(401).json({ error: "Invalid Google credential" });
-    }
     next(err);
   }
 };

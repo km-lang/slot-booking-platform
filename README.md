@@ -258,39 +258,57 @@ Scope:
 
 ---
 
-### 🔲 Phase 5 — Frontend API Integration
-**Status: Pending**
+### ✅ Phase 5 — Frontend API Integration
+**Status: Complete**
 
-Replace all hardcoded mock data with real API calls. Add loading, error, and empty states (currently absent — mock data is always present).
+Replace all hardcoded mock data with real API calls. Added loading, error, and empty states throughout.
 
 Per-view changes:
-- **`StudentDashboard`** — fetch `GET /api/aigs` (accordion list + mentor counts); fetch `GET /api/mentors?aigSlug=X` on expand
-- **`MentorBookingView`** — fetch `GET /api/mentors/:slug` on mount (name, firm, domain); fetch `GET /api/slots?mentorSlug=X`; generate `idempotencyKey` once per bottom-sheet open (reuse on retry taps to prevent double-booking); on 409 response refetch slots and show "Someone just booked this — here are the remaining slots"
-- **`MentorDashboard`** — fetch today's `Booking` list + `Slot` list for the authenticated mentor; slot creation bottom sheet calls `POST /api/slots`; Attended/No-Show buttons call `POST /api/bookings/:id/attendance`
-- **`MentorCohortDetails`** — fetch `GET /api/cohort`; download button calls CSV export endpoint
-- **`AigAdminDashboard`** — fetch `GET /api/aigs/:slug` for display name + `GET /api/admin/aig/:aigSlug` for cohort data and at-risk students; replace hardcoded CV freeze countdown with live countdown computed from `SystemConfig.cv_freeze_deadline`
-- **`PlacementAdminDashboard`** — fetch `GET /api/admin/batch` for KPIs and chart data
+- **`StudentDashboard`** — fetches `GET /api/aigs` (accordion list + mentor counts); lazy-loads `GET /api/mentors?aigSlug=X` on expand; all-mentor fetch on first search keystroke
+- **`MentorBookingView`** — fetches `GET /api/mentors/:slug` + `GET /api/slots?mentorSlug=X` in parallel; generates `idempotencyKey` once per bottom-sheet open (reused on retry taps to prevent double-booking); 409 silently refreshes slot list
+- **`MentorDashboard`** — fetches `GET /api/slots/mine` for today's sessions + available slots; slot creation calls `POST /api/slots`; Attended/No-Show buttons call `POST /api/bookings/:id/attendance`
+- **`MentorCohortDetails`** — fetches `GET /api/cohort`; member list with real attendance status
+- **`AigAdminDashboard`** — fetches `GET /api/admin/aig/:aigSlug` for cohort data, batch readiness %, at-risk students; live CV freeze countdown from `SystemConfig.cv_freeze_deadline`
+- **`PlacementAdminDashboard`** — fetches `GET /api/admin/batch` for KPIs and chart data
 
 ---
 
-### 🔲 Phase 6 — Admin & Whitelist Management UI
-**Status: Pending**
+### ✅ Phase 6 — Admin & Whitelist Management UI
+**Status: Complete**
 
-Scope:
-- **`adminController`** implementations:
+- **`adminController`** — all functions fully implemented:
   - `GET /api/admin/aig/:aigSlug` — cohort list + at-risk students + batch readiness % scoped to one AIG
-  - `GET /api/admin/batch` — cross-AIG KPIs, mentor utilisation, purpose distribution
-  - `GET/POST/DELETE /api/admin/whitelist` — whitelist CRUD (SuperADMIN only)
+  - `GET /api/admin/batch` — cross-AIG KPIs, mentor utilisation, purpose distribution, recent audit events
+  - `GET/POST/DELETE /api/admin/whitelist` — whitelist CRUD (SuperADMIN only); `addedBy` tracked per entry
   - `GET/PUT /api/admin/config` — read and update `SystemConfig` entries
-  - CSV export endpoint for `PlacementAdminDashboard`
-- **`PlacementAdminDashboard`** whitelist section:
-  - Table of current whitelist entries (email, role, AIG scope, added by, date)
-  - Add entry form: email + role selector + optional AIG dropdown
-  - Remove entry (cannot remove own SuperADMIN row)
-  - Update `cv_freeze_deadline` and `booking_open` via the config endpoint
-- **Ban management** (SuperADMIN):
-  - List active bans with student details
-  - Manual lift: `PATCH /api/admin/bans/:id/lift`
+- **`PlacementAdminDashboard`** — three-tab layout:
+  - **Overview**: KPI cards, Milestone Focus pie chart, Mentor Utilization bar chart, live audit events table
+  - **Whitelist**: add/remove entries with email + role + optional AIG scope; cannot remove own row
+  - **Config**: booking window toggle + CV freeze deadline datetime picker
+
+---
+
+### ✅ Phase 7 — Demo Seed + Ban Management
+**Status: Complete**
+
+**Rich demo seed** (`server/prisma/seed.js`):
+- 3 demo cohorts: `Q4` (disha), `Summer Batch` (consulting), `Finance Track` (finance)
+- 3 mentor users with whitelist entries and `MentorProfile` rows:
+  - Evelyn Vance — McKinsey & Co. — slug `evelyn-vance` — disha / Q4 cohort
+  - Arjun Mehta — Bain & Company — slug `arjun-mehta` — consulting / Summer Batch
+  - Priya Sharma — Goldman Sachs — slug `priya-sharma` — finance / Finance Track
+- 3 student users with whitelist entries and `StudentProfile` rows in the Q4 cohort (PGP 25101, 25089, 25125)
+- 4 upcoming 15-minute slots for Evelyn Vance (tomorrow 2:00–3:00 PM) with `SlotCapacity`
+- 1 confirmed booking: Rohan Gupta → Evelyn Vance slot 1 (focus=overall, idempotency-keyed)
+- 1 active ban: Kabir Khan (demo strike, expires 24 hours from seed run)
+- All seed operations are idempotent — safe to re-run via `npx prisma db seed`
+
+**Ban management** (SuperADMIN):
+- `GET /api/admin/bans` — list all active (not-lifted, not-expired) bans with student name + email + reason + expiry
+- `PATCH /api/admin/bans/:id/lift` — lift a ban immediately; records `liftedBy` email + `BAN_LIFTED` audit event
+- **Bans tab** in `PlacementAdminDashboard` — table of active bans with "Lift Ban" button per row; live count badge
+
+**Bug fix**: `addToWhitelist` controller was missing `addedBy` (required schema field); now populated from `req.user.email`.
 
 ---
 
