@@ -131,6 +131,9 @@ const releaseSlots = async (req, res, next) => {
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || duration <= 0) {
       return res.status(400).json({ error: "Invalid time range or slotDuration" });
     }
+    if (start <= new Date()) {
+      return res.status(400).json({ error: "Start time must be in the future" });
+    }
 
     const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
     if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
@@ -197,19 +200,30 @@ const deleteSlot = async (req, res, next) => {
 
     const slot = await prisma.slot.findUnique({
       where: { id: req.params.id },
-      include: { bookings: { where: { status: "CONFIRMED" } } },
+      include: { bookings: true },
     });
     if (!slot) return res.status(404).json({ error: "Slot not found" });
     if (slot.mentorProfileId !== mentorProfile.id) {
       return res.status(403).json({ error: "Not your slot" });
     }
     if (slot.bookings.length > 0) {
-      return res.status(409).json({ error: "Cannot delete a slot with an active booking" });
+      // Any booking row (even cancelled/attended) still references this slot via
+      // foreign key — deleting it would either violate that constraint or destroy
+      // booking history, so block it regardless of status.
+      return res.status(409).json({ error: "Cannot delete a slot with existing booking history" });
     }
 
     await prisma.$transaction([
       prisma.slotCapacity.deleteMany({ where: { slotId: slot.id } }),
       prisma.slot.delete({ where: { id: slot.id } }),
+      prisma.auditEvent.create({
+        data: {
+          userId: req.user.sub,
+          action: "SLOT_DELETED",
+          entity: "Slot",
+          entityId: slot.id,
+        },
+      }),
     ]);
 
     res.status(204).send();
