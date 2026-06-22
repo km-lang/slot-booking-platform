@@ -320,6 +320,224 @@ Per-view changes:
 | `JWT_SECRET` | `server/.env` | Long random string for signing session JWTs |
 | `JWT_EXPIRES_IN` | `server/.env` | e.g. `8h` — session lifetime |
 | `GOOGLE_CLIENT_ID` | `server/.env` | OAuth 2.0 client ID from Google Cloud Console |
+| `AUTH_MODE` | `server/.env` | `dev` (email bypass) or omit for production Google OAuth |
 | `PORT` | `server/.env` | Server port (default 4000) |
 | `CLIENT_ORIGIN` | `server/.env` | Frontend URL for CORS allow-origin |
+| `SMTP_HOST` | `server/.env` | SMTP server hostname (omit to log emails to console) |
+| `SMTP_PORT` | `server/.env` | SMTP port, e.g. `587` |
+| `SMTP_SECURE` | `server/.env` | `true` for port 465 (TLS), `false` for STARTTLS |
+| `SMTP_USER` | `server/.env` | SMTP authentication username |
+| `SMTP_PASS` | `server/.env` | SMTP authentication password |
+| `SMTP_FROM` | `server/.env` | Sender address, e.g. `Parthsaarthi <noreply@iiml.ac.in>` |
 | `VITE_BASE_PATH` | build env | `/slot-booking-platform/` for GH Pages, `/` for on-prem |
+
+---
+
+## Production Deployment Guide
+
+All features are built and tested. The remaining steps before go-live are infrastructure and credentials — no feature development is outstanding.
+
+### Pre-deployment Checklist
+
+- [ ] Google Cloud Console OAuth client ID obtained (see below)
+- [ ] PostgreSQL database provisioned (Supabase / Neon / Railway all work)
+- [ ] SMTP credentials ready (IIM mail relay or transactional service like Resend/Postmark)
+- [ ] Server host decided (VPS, Railway, Render, etc.)
+- [ ] Custom domain / SSL certificate in place
+
+---
+
+### Step 1 — Google OAuth Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
+2. Create an **OAuth 2.0 Client ID** (Web application)
+3. Add your production domain to **Authorised JavaScript origins** (e.g. `https://parthsaarthi.iiml.ac.in`)
+4. No redirect URIs needed — this app uses the GSI one-tap / popup flow
+5. Copy the **Client ID**
+
+In `server/.env` (production):
+```
+GOOGLE_CLIENT_ID=123456789-abc.apps.googleusercontent.com
+# Remove or do NOT set AUTH_MODE — omitting it enables real OAuth
+```
+
+In `client/src/pages/LoginPage.jsx`, swap the dev email input for the real Google button:
+```jsx
+// Replace the dev <input type="email"> form with:
+<div
+  id="g_id_onload"
+  data-client_id="YOUR_CLIENT_ID"
+  data-callback="handleGoogleCredential"
+  data-auto_prompt="false"
+/>
+<div className="g_id_signin" data-type="standard" />
+```
+Then add the GSI script tag to `client/index.html`:
+```html
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+```
+The server's `authController.js` already handles `idToken` verification via `google-auth-library` when `AUTH_MODE` is not `dev`.
+
+---
+
+### Step 2 — PostgreSQL Setup
+
+1. Provision a Postgres database (Supabase free tier works for this scale)
+2. Copy the connection string — looks like:
+   ```
+   postgresql://user:password@host:5432/dbname?sslmode=require
+   ```
+3. In `server/.env`:
+   ```
+   DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
+   ```
+4. The `connection_limit=1` SQLite hack in `server/src/lib/prisma.js` only applies to `file:` URLs — PostgreSQL uses Prisma's default pooling automatically
+5. Run migrations on the production DB:
+   ```bash
+   cd server
+   npx prisma migrate deploy
+   npx prisma db seed
+   ```
+   `migrate deploy` applies all migrations without resetting data. `db seed` is safe to run once to bootstrap SystemConfig, AIGs, BanPolicyTiers, and the initial SuperADMIN whitelist entry.
+
+---
+
+### Step 3 — SMTP Email Setup
+
+In `server/.env`:
+```
+SMTP_HOST=smtp.gmail.com        # or your institution's relay
+SMTP_PORT=587
+SMTP_SECURE=false               # true for port 465
+SMTP_USER=noreply@iiml.ac.in
+SMTP_PASS=your-app-password
+SMTP_FROM=Parthsaarthi <noreply@iiml.ac.in>
+```
+If using Gmail, generate an **App Password** (not your account password) under Google Account → Security → 2-Step Verification → App passwords.
+
+The mailer already sends:
+- Running-late alerts to booked students when a mentor sets a delay
+- Late-cancellation notice to the mentor when a student cancels with a penalty
+- 30-minute reminders to both parties before each session
+- Daily 8 AM digest to each AIG admin listing at-risk students
+
+---
+
+### Step 4 — Build & Serve
+
+The simplest production topology is Express serving the Vite build from the same origin, which avoids CORS entirely:
+
+```bash
+# 1. Build the client
+cd client
+VITE_BASE_PATH=/ npm run build
+# Output lands in client/dist/
+
+# 2. Copy the build to server's public folder (or configure Express to serve it)
+cp -r dist/ ../server/public/
+
+# 3. In server/src/index.js, add static file serving BEFORE api routes:
+#    app.use(express.static(path.join(__dirname, "../../client/dist")));
+#    app.get("*", (req, res) => res.sendFile(path.join(__dirname, "../../client/dist/index.html")));
+```
+
+**Alternatively**, use an nginx reverse proxy:
+```nginx
+server {
+    listen 443 ssl;
+    server_name parthsaarthi.iiml.ac.in;
+
+    # Serve the built React app
+    root /var/www/parthsaarthi/client/dist;
+    index index.html;
+
+    # All non-/api requests → React (HashRouter handles routing client-side)
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API requests → Express on port 4000
+    location /api/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+---
+
+### Step 5 — Process Management (PM2)
+
+```bash
+npm install -g pm2
+
+cd server
+pm2 start src/index.js --name parthsaarthi-api \
+  --env production \
+  --max-memory-restart 512M
+
+# Auto-restart on server reboot
+pm2 startup
+pm2 save
+```
+
+Logs:
+```bash
+pm2 logs parthsaarthi-api
+pm2 monit
+```
+
+---
+
+### Step 6 — Production `.env` Template
+
+```bash
+# server/.env (production)
+
+DATABASE_URL=postgresql://user:pass@host:5432/parthsaarthi?sslmode=require
+JWT_SECRET=<64-char random hex — run: openssl rand -hex 32>
+JWT_EXPIRES_IN=8h
+GOOGLE_CLIENT_ID=<from Google Cloud Console>
+# AUTH_MODE not set (enables real Google OAuth)
+PORT=4000
+CLIENT_ORIGIN=https://parthsaarthi.iiml.ac.in
+
+SMTP_HOST=smtp.iiml.ac.in
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=noreply@iiml.ac.in
+SMTP_PASS=<app password>
+SMTP_FROM=Parthsaarthi <noreply@iiml.ac.in>
+```
+
+---
+
+### ✅ Phase 8 — Notifications, Exports, Profile & Config (complete)
+
+**Email notifications** (`server/src/lib/mailer.js` + `scheduler.js`):
+- Running-late alerts to all confirmed students when mentor sets a delay
+- Late-cancellation email to mentor when student cancels with penalty applied
+- 30-minute session reminders for student + mentor (cron, AuditEvent-deduped)
+- Daily 8 AM digest to each AIG admin listing at-risk students
+- Dev mode: emails logged to console; set `SMTP_HOST` to enable real delivery
+
+**CSV exports** (`server/src/controllers/exportController.js`):
+- `GET /api/cohort/export` (MENTOR) — cohort CSV with slot count, attendance, ban status
+- `GET /api/admin/export/roster` (SuperADMIN) — full batch CSV with 12 columns per student
+
+**Profile editing** (`server/src/controllers/profileController.js` + `client/src/pages/ProfileSettings.jsx`):
+- All roles: edit display name
+- MENTOR: also edit firm and domain
+- Name change syncs back to AuthContext / sessionStorage without re-login
+- "Edit Profile" link in AvatarMenu dropdown (all roles)
+
+**Configurable penalty thresholds** (SystemConfig-driven):
+- `penalty_warning_minutes` (default 60) — cancel ≥ this → no penalty
+- `penalty_strike_minutes` (default 30) — cancel < this → immediate strike
+- `penalty_warning_to_strike` (default 3) — N warnings → escalated to strike
+- Editable in PlacementAdmin → Config tab with per-field Save buttons
+
+**Audit log detail column** — PlacementAdmin Overview tab parses `event.meta` JSON to show human-readable context (e.g. "Released 4 slots", "Penalty: STRIKE", "Lifted by admin@iiml.ac.in")
+
+**AIG Admin notification bell** — clicking scrolls to the Intervention Required section
