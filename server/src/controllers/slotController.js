@@ -87,11 +87,13 @@ const listSlots = async (req, res, next) => {
     const mentor = await prisma.mentorProfile.findUnique({ where: { slug: mentorSlug } });
     if (!mentor) return res.status(404).json({ error: "Mentor not found" });
 
+    const now = new Date();
     const slots = await prisma.slot.findMany({
-      where: { mentorProfileId: mentor.id },
+      where: { mentorProfileId: mentor.id, startTime: { gt: now } },
       include: {
         capacity: true,
         bookings: { where: { status: "CONFIRMED" } },
+        release: { select: { cohortOnly: true } },
       },
       orderBy: { startTime: "asc" },
     });
@@ -108,6 +110,7 @@ const listSlots = async (req, res, next) => {
           startTime: slot.startTime,
           endTime: slot.endTime,
           venue: slot.venue,
+          cohortOnly: slot.release?.cohortOnly ?? false,
           status,
           ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus }),
         };
@@ -238,31 +241,55 @@ const getMentorCohort = async (req, res, next) => {
     if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
     if (!mentorProfile.cohortId) return res.status(404).json({ error: "No cohort assigned" });
 
+    const now = new Date();
     const cohort = await prisma.cohort.findUnique({
       where: { id: mentorProfile.cohortId },
       include: {
         studentProfiles: {
-          include: { user: { include: { bookings: true } } },
+          include: {
+            user: {
+              include: {
+                bookings: true,
+                bans: {
+                  where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+                },
+              },
+            },
+          },
         },
       },
     });
     if (!cohort) return res.status(404).json({ error: "Cohort not found" });
 
+    const fmtDate = (d) =>
+      d
+        ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : "—";
+
     const members = cohort.studentProfiles.map((sp) => {
       const activeBookings = sp.user.bookings.filter((b) => b.status !== "CANCELLED");
       const attended = sp.user.bookings
         .filter((b) => b.status === "ATTENDED")
-        .sort((a, b) => b.createdAt - a.createdAt);
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const isBanned = sp.user.bans.length > 0;
+      const isReady = attended.length > 0;
+      const status = isBanned ? "Action Needed" : isReady ? "Ready" : "In Progress";
       return {
         id: sp.id,
         name: sp.user.name,
         pgp: sp.pgpId,
+        email: sp.user.email,
         slotsTaken: activeBookings.length,
-        lastReview: attended[0]?.createdAt ?? null,
+        lastReview: fmtDate(attended[0]?.createdAt),
+        isBanned,
+        status,
       };
     });
 
-    res.json({ id: cohort.id, label: cohort.label, members });
+    res.json({
+      cohort: { id: cohort.id, label: cohort.label, memberCount: members.length },
+      members,
+    });
   } catch (err) {
     next(err);
   }
@@ -278,43 +305,52 @@ const listMentorOwnSlots = async (req, res, next) => {
     if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
 
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(todayStart.getTime() + 86400000);
 
     const fmtTime = (d) =>
       new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
-    // Today's slots (we filter to those with confirmed bookings below)
-    const slotsToday = await prisma.slot.findMany({
-      where: { mentorProfileId: mentorProfile.id, startTime: { gte: todayStart, lt: todayEnd } },
+    const fmtSlotTime = (start, end) => {
+      const date = new Date(start).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return `${date}, ${fmtTime(start)} – ${fmtTime(end)}`;
+    };
+
+    // All upcoming slots with confirmed bookings (full schedule view)
+    const upcomingBooked = await prisma.slot.findMany({
+      where: {
+        mentorProfileId: mentorProfile.id,
+        startTime: { gte: now },
+        bookings: { some: { status: "CONFIRMED" } },
+      },
       include: {
         bookings: {
           where: { status: "CONFIRMED" },
-          include: { student: { select: { name: true, studentProfile: { select: { pgpId: true } } } } },
+          include: { student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } } },
         },
       },
       orderBy: { startTime: "asc" },
     });
 
-    const bookedSessions = slotsToday
-      .filter((s) => s.bookings.length > 0)
-      .map((s) => ({
-        id: s.id,
-        bookingId: s.bookings[0].id,
-        time: fmtTime(s.startTime),
-        venue: s.venue,
-        student: {
-          name: s.bookings[0].student?.name ?? "—",
-          pgp: s.bookings[0].student?.studentProfile?.pgpId ?? "N/A",
-          purpose: s.bookings[0].focus,
-        },
-      }));
+    const bookedSessions = upcomingBooked.map((s) => ({
+      id:           s.id,
+      bookingId:    s.bookings[0].id,
+      date:         new Date(s.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      time:         fmtTime(s.startTime),
+      venue:        s.venue,
+      delayMinutes: s.delayMinutes,
+      student: {
+        name:    s.bookings[0].student?.name ?? "—",
+        email:   s.bookings[0].student?.email ?? null,
+        pgp:     s.bookings[0].student?.studentProfile?.pgpId ?? "N/A",
+        purpose: s.bookings[0].focus,
+      },
+    }));
 
     // Upcoming unbooked slots (for the live slot list)
+    // Include any non-CANCELLED booking so used slots (ATTENDED/NO_SHOW) are excluded.
     const upcomingSlots = await prisma.slot.findMany({
       where: { mentorProfileId: mentorProfile.id, startTime: { gte: now } },
       include: {
-        bookings: { where: { status: "CONFIRMED" } },
+        bookings: { where: { status: { not: "CANCELLED" } } },
         release: { select: { cohortOnly: true } },
       },
       orderBy: { startTime: "asc" },
@@ -324,7 +360,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       .filter((s) => s.bookings.length === 0)
       .map((s) => ({
         id: s.id,
-        time: `${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}`,
+        time: fmtSlotTime(s.startTime, s.endTime),
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
       }));
@@ -350,6 +386,31 @@ const listMentorOwnSlots = async (req, res, next) => {
   }
 };
 
+const setSlotDelay = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const delay = Number(req.body.delayMinutes);
+    if (!Number.isInteger(delay) || delay < 0 || delay > 120) {
+      return res.status(400).json({ error: "delayMinutes must be an integer between 0 and 120" });
+    }
+
+    const slot = await prisma.slot.findUnique({ where: { id: req.params.id } });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your slot" });
+
+    const updated = await prisma.slot.update({
+      where: { id: slot.id },
+      data: { delayMinutes: delay },
+    });
+
+    res.json({ id: updated.id, delayMinutes: updated.delayMinutes });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listAigs,
   getAig,
@@ -359,5 +420,6 @@ module.exports = {
   listMentorOwnSlots,
   releaseSlots,
   deleteSlot,
+  setSlotDelay,
   getMentorCohort,
 };

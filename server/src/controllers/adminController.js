@@ -144,17 +144,19 @@ const getBatchOverview = async (_req, res, next) => {
       totalUtilized > 0 ? +((noShowCount / totalUtilized) * 100).toFixed(1) : 0;
 
     // Per-mentor completion counts (N+1 acceptable at take:8 scale)
-    const mentorUtil = await Promise.all(
-      mentors.map(async (m) => {
-        const completed = await prisma.booking.count({
-          where: {
-            slot: { mentorProfileId: m.id },
-            status: { in: ["CONFIRMED", "ATTENDED"] },
-          },
-        });
-        return { name: m.user.name?.split(" ").pop() ?? "—", offered: m._count.slots, completed };
-      })
-    );
+    const mentorUtil = (
+      await Promise.all(
+        mentors.map(async (m) => {
+          const completed = await prisma.booking.count({
+            where: {
+              slot: { mentorProfileId: m.id },
+              status: { in: ["CONFIRMED", "ATTENDED"] },
+            },
+          });
+          return { name: m.user.name?.split(" ")[0] ?? "—", offered: m._count.slots, completed };
+        })
+      )
+    ).filter((m) => m.offered > 0);
 
     res.json({
       kpis: {

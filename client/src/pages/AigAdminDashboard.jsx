@@ -1,22 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Shield,
-  Clock,
-  AlertTriangle,
-  CheckCircle,
-  Search,
-  Mail,
-  Bell,
-} from "lucide-react";
-import { apiFetch } from "../lib/apiClient";
+import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell } from "lucide-react";
+import { useAigOverview } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 
 const getCountdown = (deadline) => {
   if (!deadline) return null;
   const diff = new Date(deadline) - Date.now();
   if (diff <= 0) return "Deadline has passed";
-  const days = Math.floor(diff / 86400000);
+  const days  = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
   return `${days} Day${days !== 1 ? "s" : ""}, ${hours} Hr${hours !== 1 ? "s" : ""}`;
 };
@@ -24,30 +16,18 @@ const getCountdown = (deadline) => {
 export default function AigAdminDashboard() {
   const { aigSlug } = useParams();
   const [searchQuery, setSearchQuery] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    apiFetch(`/admin/aig/${aigSlug}`)
-      .then(setData)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [aigSlug]);
+  const { data, isLoading, error } = useAigOverview(aigSlug);
 
-  // Use API name when loaded, derive from slug while loading
   const aigName =
     data?.aigName ??
-    aigSlug
-      .split("-")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
+    aigSlug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
   const filteredCohorts = (data?.cohorts ?? []).filter(
     (c) =>
       !searchQuery.trim() ||
       c.mentorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.label.toLowerCase().includes(searchQuery.toLowerCase())
+      c.label.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const countdown = data?.cvFreezeDeadline ? getCountdown(data.cvFreezeDeadline) : null;
@@ -93,15 +73,9 @@ export default function AigAdminDashboard() {
                 Master CV Freeze
               </h2>
               <div className="text-sm font-bold text-red-950">
-                {loading ? (
-                  "—"
-                ) : countdown ? (
-                  <>
-                    Ends in <span className="text-red-600">{countdown}</span>
-                  </>
-                ) : (
-                  "No deadline configured"
-                )}
+                {isLoading ? "—" : countdown
+                  ? <>Ends in <span className="text-red-600">{countdown}</span></>
+                  : "No deadline configured"}
               </div>
             </div>
           </div>
@@ -110,7 +84,7 @@ export default function AigAdminDashboard() {
         <main className="px-4 py-6">
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700 mb-6">
-              {error}
+              {error.message}
             </div>
           )}
 
@@ -118,58 +92,42 @@ export default function AigAdminDashboard() {
           <section className="mb-8">
             <div className="flex justify-between items-end mb-3">
               <h2 className="text-lg font-black text-emerald-950">Batch Readiness</h2>
-              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">
-                PGP1 2026
-              </span>
+              <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">PGP1 2026</span>
             </div>
             <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-3xl font-black text-emerald-950">
-                  {loading ? "—" : `${pct}%`}
-                </span>
+                <span className="text-3xl font-black text-emerald-950">{isLoading ? "—" : `${pct}%`}</span>
                 <span className="text-xs font-bold text-emerald-700/60">
-                  {loading ? "Loading…" : `${cleared} / ${total} Cleared`}
+                  {isLoading ? "Loading…" : `${cleared} / ${total} Cleared`}
                 </span>
               </div>
               <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                  style={{ width: `${pct}%` }}
-                />
+                <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
               </div>
             </div>
           </section>
 
           {/* Intervention Required */}
-          {(loading || atRisk.length > 0) && (
+          {(isLoading || atRisk.length > 0) && (
             <section className="mb-8">
               <h2 className="text-lg font-black text-emerald-950 mb-3 flex items-center gap-2">
                 <AlertTriangle size={18} className="text-amber-500" /> Intervention Required
               </h2>
-              {loading ? (
+              {isLoading ? (
                 <div className="text-xs font-bold text-emerald-800/40 px-1">Loading…</div>
               ) : (
                 <div className="space-y-3">
-                  {atRisk.map((student, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-white border border-amber-200/60 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3"
-                    >
+                  {atRisk.slice(0, 20).map((student, idx) => (
+                    <div key={idx} className="bg-white border border-amber-200/60 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
                       <div className="flex-1">
-                        <h3 className="font-bold text-[14px] text-emerald-950 leading-tight">
-                          {student.name}
-                        </h3>
+                        <h3 className="font-bold text-[14px] text-emerald-950 leading-tight">{student.name}</h3>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className="bg-amber-50 text-amber-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-amber-200/50">
                             {student.reason}
                           </span>
-                          <span className="text-[10px] font-bold text-emerald-700/60">
-                            {student.cohortLabel}
-                          </span>
+                          <span className="text-[10px] font-bold text-emerald-700/60">{student.cohortLabel}</span>
                           {student.daysRemaining !== null && (
-                            <span className="text-[10px] font-bold text-red-600">
-                              {student.daysRemaining}d left
-                            </span>
+                            <span className="text-[10px] font-bold text-red-600">{student.daysRemaining}d left</span>
                           )}
                         </div>
                       </div>
@@ -181,6 +139,11 @@ export default function AigAdminDashboard() {
                       </a>
                     </div>
                   ))}
+                  {atRisk.length > 20 && (
+                    <p className="text-center text-xs font-bold text-emerald-700/50 py-2">
+                      +{atRisk.length - 20} more students need attention
+                    </p>
+                  )}
                 </div>
               )}
             </section>
@@ -193,55 +156,42 @@ export default function AigAdminDashboard() {
               <Search size={16} className="absolute left-3 top-3 text-emerald-900/40" />
               <input
                 type="text"
-                placeholder="Search cohort or mentor..."
+                placeholder="Search cohort or mentor…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-white border border-emerald-900/10 rounded-xl pl-9 pr-4 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
               />
             </div>
 
-            {loading ? (
+            {isLoading ? (
               <div className="text-xs font-bold text-emerald-800/40 px-1">Loading cohorts…</div>
             ) : filteredCohorts.length === 0 ? (
               <div className="text-xs font-bold text-emerald-800/40 px-1">
-                {data?.cohorts?.length === 0
+                {(data?.cohorts?.length ?? 0) === 0
                   ? "No cohorts configured for this AIG yet"
                   : `No match for "${searchQuery}"`}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {filteredCohorts.map((cohort) => (
-                  <div
-                    key={cohort.id}
-                    className="bg-white border border-emerald-900/10 rounded-2xl p-4 shadow-sm"
-                  >
+                  <div key={cohort.id} className="bg-white border border-emerald-900/10 rounded-2xl p-4 shadow-sm">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center font-black text-emerald-800 border border-emerald-200 text-xs">
-                          {cohort.label}
+                          {cohort.label.replace("Cohort ", "")}
                         </div>
                         <div>
-                          <div className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
-                            {cohort.mentorName}
-                          </div>
-                          <div className="font-bold text-sm text-emerald-950">
-                            {cohort.reviewed} / {cohort.total} Cleared
-                          </div>
+                          <div className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">{cohort.mentorName}</div>
+                          <div className="font-bold text-sm text-emerald-950">{cohort.reviewed} / {cohort.total} Cleared</div>
                         </div>
                       </div>
-                      {cohort.status === "Completed" && (
-                        <CheckCircle size={18} className="text-emerald-500" />
-                      )}
-                      {cohort.status === "Critical" && (
-                        <AlertTriangle size={18} className="text-red-500" />
-                      )}
+                      {cohort.status === "Completed" && <CheckCircle size={18} className="text-emerald-500" />}
+                      {cohort.status === "Critical"  && <AlertTriangle size={18} className="text-red-500" />}
                     </div>
                     <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${cohort.status === "Critical" ? "bg-amber-500" : "bg-emerald-500"}`}
-                        style={{
-                          width: `${cohort.total > 0 ? Math.round((cohort.reviewed / cohort.total) * 100) : 0}%`,
-                        }}
+                        style={{ width: `${cohort.total > 0 ? Math.round((cohort.reviewed / cohort.total) * 100) : 0}%` }}
                       />
                     </div>
                   </div>

@@ -46,10 +46,14 @@ const googleSignIn = async (req, res, next) => {
       });
     }
 
+    const isDevMode = process.env.AUTH_MODE === "dev";
     const user = await prisma.user.upsert({
       where: { email },
       create: { email, role: whitelistEntry.role, name },
-      update: { role: whitelistEntry.role, ...(name && { name }) },
+      // In dev mode the name is derived from the email prefix — never overwrite a
+      // seeded display name with that garbage value. In production the name comes
+      // from Google and is always worth keeping fresh.
+      update: { role: whitelistEntry.role, ...(!isDevMode && name ? { name } : {}) },
     });
 
     const sessionPayload = {

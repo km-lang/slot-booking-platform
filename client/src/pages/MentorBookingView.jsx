@@ -1,21 +1,16 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Clock,
-  MapPin,
-  Video,
-  AlertTriangle,
-  ShieldCheck,
-  ChevronDown,
-  XCircle,
-  Timer,
+  Clock, MapPin, Video, AlertTriangle, ShieldCheck,
+  ChevronDown, XCircle, Timer,
 } from "lucide-react";
-import { apiFetch } from "../lib/apiClient";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMentor, useSlots, useBookSlot, useCancelBooking, QK } from "../hooks/useApi";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
-  workex: "Work Experience Optimization",
-  por: "POR / ECA Formatting",
+  workex:  "Work Experience Optimization",
+  por:     "POR / ECA Formatting",
 };
 
 const fmt = (d) =>
@@ -30,35 +25,23 @@ const penaltyTier = (minsUntilSlot) => {
 export default function MentorBookingView() {
   const { group, mentorId } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const [mentor, setMentor] = useState(null);
-  const [slots, setSlots] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: mentor, isLoading: mentorLoading, error: mentorError } = useMentor(mentorId);
+  const { data: slots = [], isLoading: slotsLoading, error: slotsError } = useSlots(mentorId);
 
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [sheetMode, setSheetMode] = useState("BOOK");
   const [purpose, setPurpose] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [actionError, setActionError] = useState(null);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [mentorData, slotsData] = await Promise.all([
-        apiFetch(`/mentors/${mentorId}`),
-        apiFetch(`/slots?mentorSlug=${mentorId}`),
-      ]);
-      setMentor(mentorData);
-      setSlots(slotsData);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [mentorId]);
+  const bookMutation    = useBookSlot(mentorId);
+  const cancelMutation  = useCancelBooking(mentorId);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const isProcessing = bookMutation.isPending || cancelMutation.isPending;
+  const actionError  = (bookMutation.error?.status !== 409 ? bookMutation.error?.message : null)
+                    ?? cancelMutation.error?.message
+                    ?? null;
 
   useEffect(() => {
     if (selectedSlot) document.body.style.overflow = "hidden";
@@ -66,47 +49,49 @@ export default function MentorBookingView() {
     return () => { document.body.style.overflow = "unset"; };
   }, [selectedSlot]);
 
+  // Reset mutation errors when the sheet closes
+  useEffect(() => {
+    if (!selectedSlot) {
+      bookMutation.reset();
+      cancelMutation.reset();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSlot]);
+
   const openSheet = (slot, mode) => {
     setSelectedSlot(slot);
     setSheetMode(mode);
     setPurpose("");
-    setActionError(null);
     if (mode === "BOOK") setIdempotencyKey(crypto.randomUUID());
   };
 
-  const handleAction = async () => {
-    setIsProcessing(true);
-    setActionError(null);
-    try {
-      if (sheetMode === "BOOK") {
-        await apiFetch("/bookings", {
-          method: "POST",
-          body: JSON.stringify({ slotId: selectedSlot.id, focus: purpose, idempotencyKey }),
-        });
-        setSelectedSlot(null);
-        await fetchData();
-      } else {
-        await apiFetch(`/bookings/${selectedSlot.bookingId}/release`, { method: "DELETE" });
-        setSelectedSlot(null);
-        navigate("/student");
-      }
-    } catch (err) {
-      if (err.status === 409) {
-        // Slot was taken by someone else — refresh state and close sheet
-        setSelectedSlot(null);
-        await fetchData();
-      } else {
-        setActionError(err.message);
-      }
-    } finally {
-      setIsProcessing(false);
+  const handleAction = () => {
+    if (sheetMode === "BOOK") {
+      bookMutation.mutate(
+        { slotId: selectedSlot.id, focus: purpose, idempotencyKey },
+        {
+          onSuccess: () => setSelectedSlot(null),
+          onError: (err) => {
+            if (err.status === 409) {
+              // Slot sniped — cache already invalidated by hook; just close sheet
+              setSelectedSlot(null);
+            }
+          },
+        },
+      );
+    } else {
+      cancelMutation.mutate(selectedSlot.bookingId, {
+        onSuccess: () => navigate("/student"),
+      });
     }
   };
 
-  // Derive display name from slug for initial render (replaced by API name after fetch)
   const displayName =
     mentor?.name ??
     mentorId.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+  const loading = mentorLoading || slotsLoading;
+  const error   = mentorError || slotsError;
 
   if (loading) {
     return (
@@ -120,11 +105,8 @@ export default function MentorBookingView() {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 px-6">
         <AlertTriangle size={32} className="text-red-400" />
-        <p className="text-sm font-bold text-red-700 text-center">{error}</p>
-        <button
-          onClick={() => navigate("/student")}
-          className="text-xs font-bold text-emerald-700 underline"
-        >
+        <p className="text-sm font-bold text-red-700 text-center">{error.message}</p>
+        <button onClick={() => navigate("/student")} className="text-xs font-bold text-emerald-700 underline">
           Back to mentors
         </button>
       </div>
@@ -157,7 +139,6 @@ export default function MentorBookingView() {
         <h3 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-2 px-1">
           Available Sessions
         </h3>
-
         <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
           {slots.length === 0 ? (
             <div className="p-8 text-center text-emerald-800/40 text-sm font-semibold">
@@ -165,11 +146,11 @@ export default function MentorBookingView() {
             </div>
           ) : (
             slots.map((slot) => {
-              const isMine = slot.status === "BOOKED_BY_ME";
+              const isMine      = slot.status === "BOOKED_BY_ME";
               const isAvailable = slot.status === "AVAILABLE";
-              const slotTime = `${fmt(slot.startTime)} – ${fmt(slot.endTime)}`;
-              const minsUntil = Math.floor((new Date(slot.startTime) - Date.now()) / 60000);
-              const tier = isMine ? penaltyTier(minsUntil) : null;
+              const slotTime    = `${fmt(slot.startTime)} – ${fmt(slot.endTime)}`;
+              const minsUntil   = Math.floor((new Date(slot.startTime) - Date.now()) / 60000);
+              const tier        = isMine ? penaltyTier(minsUntil) : null;
 
               return (
                 <div
@@ -177,9 +158,7 @@ export default function MentorBookingView() {
                   className={`w-full p-4 flex items-center justify-between gap-4 transition-colors relative
                     ${isMine ? "bg-emerald-50/50" : !isAvailable ? "bg-slate-50/50 opacity-60" : "hover:bg-emerald-50/30"}`}
                 >
-                  {isMine && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />
-                  )}
+                  {isMine && <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />}
 
                   <div className="flex-1">
                     <div className={`font-bold text-[16px] mb-1 ${isMine ? "text-emerald-700" : "text-emerald-950"}`}>
@@ -187,13 +166,14 @@ export default function MentorBookingView() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-800/60">
                       <span className="flex items-center gap-1">
-                        {slot.venue.toLowerCase().includes("online") ? (
-                          <Video size={12} />
-                        ) : (
-                          <MapPin size={12} />
-                        )}
+                        {slot.venue.toLowerCase().includes("online") ? <Video size={12} /> : <MapPin size={12} />}
                         {slot.venue}
                       </span>
+                      {slot.cohortOnly && (
+                        <span className="flex items-center gap-1 bg-amber-100 text-amber-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
+                          Cohort Only
+                        </span>
+                      )}
                       {isMine && slot.focus && (
                         <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px] uppercase">
                           {FOCUS_LABELS[slot.focus] ?? slot.focus}
@@ -260,23 +240,17 @@ export default function MentorBookingView() {
               <h3 className="text-xl font-black text-emerald-950 mb-1">
                 {sheetMode === "BOOK" ? "Confirm Session" : "Cancel Session"}
               </h3>
-              <p className="text-sm font-semibold text-emerald-700/70 mb-6">
-                with {displayName}
-              </p>
+              <p className="text-sm font-semibold text-emerald-700/70 mb-6">with {displayName}</p>
 
-              <div
-                className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F8FAF7] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}
-              >
+              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F8FAF7] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
                 <div className={`flex items-center gap-3 mb-3 pb-3 border-b ${sheetMode === "BOOK" ? "border-emerald-900/5" : "border-red-900/5"}`}>
                   <Clock className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
                   <span className="font-bold text-emerald-950">{slotTime}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {selectedSlot.venue?.toLowerCase().includes("online") ? (
-                    <Video className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
-                  ) : (
-                    <MapPin className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
-                  )}
+                  {selectedSlot.venue?.toLowerCase().includes("online")
+                    ? <Video className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
+                    : <MapPin className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />}
                   <span className="font-semibold text-emerald-800/80">{selectedSlot.venue}</span>
                 </div>
               </div>
@@ -293,7 +267,7 @@ export default function MentorBookingView() {
                         onChange={(e) => setPurpose(e.target.value)}
                         className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 shadow-sm appearance-none cursor-pointer"
                       >
-                        <option value="" disabled>Select your focus...</option>
+                        <option value="" disabled>Select your focus…</option>
                         <option value="overall">Overall CV Review</option>
                         <option value="workex">Work Experience Optimization</option>
                         <option value="por">POR / ECA Formatting</option>
@@ -304,8 +278,7 @@ export default function MentorBookingView() {
                   <div className="flex items-start gap-2 bg-red-50 p-3 rounded-xl mb-6">
                     <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
                     <p className="text-[11px] font-bold text-red-900/80 leading-tight">
-                      Late cancellations (under 60 min before slot) incur warnings or strikes.
-                      No-shows result in an automatic strike.
+                      Late cancellations (under 60 min before slot) incur warnings or strikes. No-shows result in an automatic strike.
                     </p>
                   </div>
                 </>
@@ -338,8 +311,7 @@ export default function MentorBookingView() {
                     ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                     : sheetMode === "BOOK"
                     ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(6,45,28,0.2)] active:scale-95"
-                    : "bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:scale-95"
-                  }`}
+                    : "bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:scale-95"}`}
               >
                 {isProcessing ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

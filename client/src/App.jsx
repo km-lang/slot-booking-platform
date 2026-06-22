@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import RequireRole from "./components/RequireRole";
 import StudentLayout from "./pages/StudentLayout";
 import StudentDashboard from "./pages/StudentDashboard";
+import StudentMyBookings from "./pages/StudentMyBookings";
 import MentorBookingView from "./pages/MentorBookingView";
 import MentorDashboard from "./pages/MentorDashboard";
 import MentorCohortDetails from "./pages/MentorCohortDetails";
@@ -26,6 +27,7 @@ function App() {
             element={<MentorBookingView />}
           />
         </Route>
+        <Route path="/student/bookings" element={<StudentMyBookings />} />
       </Route>
 
       {/* Mentor flow */}

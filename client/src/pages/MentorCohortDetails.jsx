@@ -1,31 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowLeft,
-  Search,
-  Download,
-  AlertCircle,
-  CheckCircle2,
-  MessageCircle,
-} from "lucide-react";
-import { apiFetch } from "../lib/apiClient";
+import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
+import { useMentorCohort } from "../hooks/useApi";
 
 export default function MentorCohortDetails() {
   const navigate = useNavigate();
-
-  const [cohortData, setCohortData] = useState({ cohort: null, members: [] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    apiFetch("/cohort")
-      .then(setCohortData)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const { cohort, members } = cohortData;
+  const { data, isLoading, error } = useMentorCohort();
+  const cohort  = data?.cohort  ?? null;
+  const members = data?.members ?? [];
 
   const filteredMembers = searchQuery.trim()
     ? members.filter(
@@ -37,7 +21,7 @@ export default function MentorCohortDetails() {
 
   const headerLabel = cohort
     ? `${cohort.label} · ${cohort.memberCount} Mentees`
-    : loading
+    : isLoading
     ? "Loading…"
     : "Cohort Tracker";
 
@@ -53,12 +37,8 @@ export default function MentorCohortDetails() {
               <ArrowLeft size={20} />
             </button>
             <div>
-              <h1 className="font-black text-lg leading-tight text-emerald-950">
-                Cohort Tracker
-              </h1>
-              <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
-                {headerLabel}
-              </p>
+              <h1 className="font-black text-lg leading-tight text-emerald-950">Cohort Tracker</h1>
+              <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">{headerLabel}</p>
             </div>
           </div>
           <button className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors">
@@ -71,7 +51,7 @@ export default function MentorCohortDetails() {
             <Search size={18} className="absolute left-3 top-3.5 text-emerald-900/40" />
             <input
               type="text"
-              placeholder="Search cohort members..."
+              placeholder="Search cohort members…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white border border-emerald-900/10 rounded-xl pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
@@ -80,12 +60,12 @@ export default function MentorCohortDetails() {
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700 mb-4">
-              {error}
+              {error.message}
             </div>
           )}
 
           <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
-            {loading ? (
+            {isLoading ? (
               <div className="p-8 text-center text-emerald-800/40 text-sm font-bold">Loading cohort…</div>
             ) : filteredMembers.length === 0 ? (
               <div className="p-8 text-center text-emerald-800/40 text-sm font-bold">
@@ -94,15 +74,13 @@ export default function MentorCohortDetails() {
             ) : (
               filteredMembers.map((mentee) => {
                 const isWarning = mentee.status === "Action Needed";
-                const isReady = mentee.status === "Ready";
+                const isReady   = mentee.status === "Ready";
 
                 return (
                   <div key={mentee.id} className="p-4">
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="font-bold text-[15px] text-emerald-950 leading-tight">
-                          {mentee.name}
-                        </h3>
+                        <h3 className="font-bold text-[15px] text-emerald-950 leading-tight">{mentee.name}</h3>
                         <div className="text-[11px] font-bold text-emerald-700/60 mt-0.5">
                           PGP-{mentee.pgp}
                           {mentee.isBanned && (
@@ -112,48 +90,36 @@ export default function MentorCohortDetails() {
                           )}
                         </div>
                       </div>
-                      <div
-                        className={`flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded border
-                        ${isWarning
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : isReady
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-slate-50 text-slate-600 border-slate-200"}`}
-                      >
+                      <div className={`flex items-center gap-1 text-[10px] font-black uppercase px-2 py-1 rounded border
+                        ${isWarning ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : isReady ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : "bg-slate-50 text-slate-600 border-slate-200"}`}>
                         {isWarning && <AlertCircle size={10} />}
-                        {isReady && <CheckCircle2 size={10} />}
+                        {isReady   && <CheckCircle2 size={10} />}
                         {mentee.status}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mb-3 bg-[#F8FAF7] rounded-xl p-3 border border-emerald-900/5">
                       <div>
-                        <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">
-                          Slots Taken
-                        </div>
+                        <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">Slots Taken</div>
                         <div className="font-black text-sm text-emerald-950">
                           {mentee.slotsTaken}{" "}
-                          <span className="text-[10px] text-emerald-700/60 font-semibold">
-                            Sessions
-                          </span>
+                          <span className="text-[10px] text-emerald-700/60 font-semibold">Sessions</span>
                         </div>
                       </div>
                       <div>
-                        <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">
-                          Last Review
-                        </div>
-                        <div className="font-black text-sm text-emerald-950">
-                          {mentee.lastReview}
-                        </div>
+                        <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">Last Review</div>
+                        <div className="font-black text-sm text-emerald-950">{mentee.lastReview}</div>
                       </div>
                     </div>
 
                     <a
                       href={`mailto:${mentee.email}`}
                       className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors border
-                      ${isWarning
-                        ? "bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"
-                        : "bg-white text-emerald-800 hover:bg-emerald-50 border-emerald-200"}`}
+                        ${isWarning
+                          ? "bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"
+                          : "bg-white text-emerald-800 hover:bg-emerald-50 border-emerald-200"}`}
                     >
                       <MessageCircle size={14} />
                       {isWarning ? "Nudge Mentee" : "Message"}

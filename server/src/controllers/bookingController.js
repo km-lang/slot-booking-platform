@@ -200,4 +200,59 @@ const markAttendance = async (req, res, next) => {
   }
 };
 
-module.exports = { createBooking, cancelBooking, markAttendance };
+const getMyBookings = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const bookings = await prisma.booking.findMany({
+      where: { studentUserId: req.user.sub },
+      include: {
+        slot: {
+          include: {
+            release: { select: { cohortOnly: true } },
+            mentorProfile: {
+              include: { user: { select: { name: true } } },
+            },
+          },
+        },
+      },
+      orderBy: { slot: { startTime: "asc" } },
+    });
+
+    const fmt = (d) =>
+      new Date(d).toLocaleString("en-US", {
+        month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true,
+      });
+
+    const shape = (b) => ({
+      id:           b.id,
+      status:       b.status,
+      focus:        b.focus,
+      createdAt:    b.createdAt,
+      slotStart:    b.slot.startTime,
+      slotEnd:      b.slot.endTime,
+      slotLabel:    fmt(b.slot.startTime),
+      venue:        b.slot.venue,
+      cohortOnly:   b.slot.release?.cohortOnly ?? false,
+      delayMinutes: b.slot.delayMinutes ?? 0,
+      mentorName:   b.slot.mentorProfile?.user?.name ?? "—",
+      mentorSlug:   b.slot.mentorProfile?.slug ?? null,
+      firm:         b.slot.mentorProfile?.firm ?? null,
+      domain:       b.slot.mentorProfile?.domain ?? null,
+    });
+
+    const upcoming = bookings
+      .filter((b) => b.status === "CONFIRMED" && b.slot.startTime > now)
+      .map(shape);
+
+    const past = bookings
+      .filter((b) => b.status !== "CONFIRMED" || b.slot.startTime <= now)
+      .sort((a, b) => new Date(b.slot.startTime) - new Date(a.slot.startTime))
+      .map(shape);
+
+    res.json({ upcoming, past });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createBooking, cancelBooking, markAttendance, getMyBookings };

@@ -37,11 +37,18 @@ router.delete(
   requireRole("MENTOR"),
   slotController.deleteSlot,
 );
+router.patch(
+  "/slots/:id/delay",
+  requireRole("MENTOR"),
+  slotController.setSlotDelay,
+);
 
 // ── Bookings ───────────────────────────────────────────────────────────────
+// GET    /api/bookings/mine         student: own booking history (upcoming + past)
 // POST   /api/bookings              student: create booking (OCC, idempotency)
 // DELETE /api/bookings/:id/release  student: cancel booking (penalty tiers apply)
 // POST   /api/bookings/:id/attendance  mentor: mark attended / no-show
+router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
 router.post("/bookings", bookingRateLimiter, requireRole("STUDENT"), bookingController.createBooking);
 router.delete("/bookings/:id/release", requireRole("STUDENT"), bookingController.cancelBooking);
 router.post(
