@@ -11,8 +11,21 @@ import {
   useAddWhitelist, useRemoveWhitelist, useSaveConfig, useLiftBan,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
+import { getToken } from "../lib/apiClient";
 
 const COLORS = ["#064E3B", "#047857", "#10B981", "#6EE7B7"];
+
+const downloadCsv = async (url, filename) => {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement("a"), { href, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+};
 
 const ACTION_LABEL = {
   BOOKING_CREATED:    "Booking Created",
@@ -36,6 +49,19 @@ const ACTION_BADGE = {
 
 const fmtTime = (d) =>
   new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+const parseMeta = (action, metaStr) => {
+  if (!metaStr) return null;
+  try {
+    const m = JSON.parse(metaStr);
+    if (action === "SLOT_RELEASED"      && m.count)     return `Released ${m.count} slot${m.count !== 1 ? "s" : ""}`;
+    if (action === "BOOKING_CANCELLED"  && m.penalty)   return `Penalty: ${m.penalty}`;
+    if (action === "BAN_APPLIED"        && m.reason)    return m.reason;
+    if (action === "BAN_LIFTED"         && m.liftedBy)  return `Lifted by ${m.liftedBy}`;
+    if (action === "NO_SHOW_RECORDED"   && m.slotId)    return `Slot ${String(m.slotId).slice(-6)}`;
+    return null;
+  } catch { return null; }
+};
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -175,36 +201,43 @@ function OverviewTab() {
           </span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[560px]">
+          <table className="w-full text-left border-collapse min-w-[640px]">
             <thead>
               <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
                 <th className="py-3 px-4">Event</th>
                 <th className="py-3 px-4">Time</th>
                 <th className="py-3 px-4">User</th>
                 <th className="py-3 px-4">Entity</th>
+                <th className="py-3 px-4">Detail</th>
               </tr>
             </thead>
             <tbody className="text-sm">
               {isLoading ? (
-                <tr><td colSpan={4} className="py-8 text-center text-xs font-bold text-emerald-800/30">Loading…</td></tr>
+                <tr><td colSpan={5} className="py-8 text-center text-xs font-bold text-emerald-800/30">Loading…</td></tr>
               ) : recentAuditEvents.length === 0 ? (
-                <tr><td colSpan={4} className="py-8 text-center text-xs font-bold text-emerald-800/30">No events yet</td></tr>
+                <tr><td colSpan={5} className="py-8 text-center text-xs font-bold text-emerald-800/30">No events yet</td></tr>
               ) : (
-                recentAuditEvents.map((e) => (
-                  <tr key={e.id} className="border-b border-emerald-900/5 hover:bg-emerald-50/50 transition-colors">
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${ACTION_BADGE[e.action] ?? "bg-slate-100 text-slate-700 border-slate-200"}`}>
-                        <Activity size={10} />
-                        {ACTION_LABEL[e.action] ?? e.action}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-emerald-700/60 text-xs">{fmtTime(e.createdAt)}</td>
-                    <td className="py-3 px-4 font-semibold text-emerald-950 text-xs truncate max-w-[140px]">{e.userEmail}</td>
-                    <td className="py-3 px-4">
-                      <span className="font-mono text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-700">{e.entity}</span>
-                    </td>
-                  </tr>
-                ))
+                recentAuditEvents.map((e) => {
+                  const detail = parseMeta(e.action, e.meta);
+                  return (
+                    <tr key={e.id} className="border-b border-emerald-900/5 hover:bg-emerald-50/50 transition-colors">
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${ACTION_BADGE[e.action] ?? "bg-slate-100 text-slate-700 border-slate-200"}`}>
+                          <Activity size={10} />
+                          {ACTION_LABEL[e.action] ?? e.action}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-emerald-700/60 text-xs">{fmtTime(e.createdAt)}</td>
+                      <td className="py-3 px-4 font-semibold text-emerald-950 text-xs truncate max-w-[140px]">{e.userEmail}</td>
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-700">{e.entity}</span>
+                      </td>
+                      <td className="py-3 px-4 text-xs font-semibold text-emerald-700/60">
+                        {detail ?? <span className="text-emerald-900/20">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -356,7 +389,10 @@ function ConfigTab() {
   const { data: config = {}, isLoading } = useConfig();
   const saveMutation                     = useSaveConfig();
 
-  const [deadline, setDeadline] = useState("");
+  const [deadline,     setDeadline]     = useState("");
+  const [warnAt,       setWarnAt]       = useState("");
+  const [strikeAt,     setStrikeAt]     = useState("");
+  const [warnToStrike, setWarnToStrike] = useState("");
 
   useEffect(() => {
     if (config.cv_freeze_deadline) {
@@ -364,7 +400,10 @@ function ConfigTab() {
       const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
       setDeadline(local);
     }
-  }, [config.cv_freeze_deadline]);
+    if (config.penalty_warning_minutes   !== undefined) setWarnAt(config.penalty_warning_minutes);
+    if (config.penalty_strike_minutes    !== undefined) setStrikeAt(config.penalty_strike_minutes);
+    if (config.penalty_warning_to_strike !== undefined) setWarnToStrike(config.penalty_warning_to_strike);
+  }, [config.cv_freeze_deadline, config.penalty_warning_minutes, config.penalty_strike_minutes, config.penalty_warning_to_strike]);
 
   const isBookingOpen = config.booking_open === "true";
 
@@ -413,6 +452,93 @@ function ConfigTab() {
           <Save size={15} />
           {saveMutation.isPending ? "Saving…" : "Save Deadline"}
         </button>
+      </div>
+
+      {/* Penalty Thresholds */}
+      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <AlertTriangle size={16} className="text-amber-500" />
+          <h3 className="font-bold text-emerald-950">Cancellation Penalty Thresholds</h3>
+        </div>
+        <p className="text-xs font-semibold text-emerald-700/60 mb-5">
+          Controls when warnings and strikes are applied on late cancellations.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
+              Warning threshold (minutes before slot)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number" min={1} value={warnAt}
+                onChange={(e) => setWarnAt(e.target.value)}
+                disabled={isLoading}
+                placeholder="60"
+                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={() => saveMutation.mutate({ key: "penalty_warning_minutes", value: warnAt })}
+                disabled={!warnAt || saveMutation.isPending || isLoading}
+                className="px-4 py-2.5 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-1.5"
+              >
+                <Save size={13} /> Save
+              </button>
+            </div>
+            <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
+              Cancel ≥ this many minutes before → no penalty
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
+              Strike threshold (minutes before slot)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number" min={1} value={strikeAt}
+                onChange={(e) => setStrikeAt(e.target.value)}
+                disabled={isLoading}
+                placeholder="30"
+                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={() => saveMutation.mutate({ key: "penalty_strike_minutes", value: strikeAt })}
+                disabled={!strikeAt || saveMutation.isPending || isLoading}
+                className="px-4 py-2.5 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-1.5"
+              >
+                <Save size={13} /> Save
+              </button>
+            </div>
+            <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
+              Cancel &lt; this many minutes before → immediate strike
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
+              Warnings before ban (count)
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number" min={1} value={warnToStrike}
+                onChange={(e) => setWarnToStrike(e.target.value)}
+                disabled={isLoading}
+                placeholder="3"
+                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={() => saveMutation.mutate({ key: "penalty_warning_to_strike", value: warnToStrike })}
+                disabled={!warnToStrike || saveMutation.isPending || isLoading}
+                className="px-4 py-2.5 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-1.5"
+              >
+                <Save size={13} /> Save
+              </button>
+            </div>
+            <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
+              Accumulate this many warnings → escalated to strike
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -515,7 +641,10 @@ export default function PlacementAdminDashboard() {
           <h1 className="text-2xl font-black text-emerald-950">Batch Progress Overview</h1>
           <p className="text-sm font-semibold text-emerald-700/70">PGP &amp; ABM Cohorts · Academic Year 2026</p>
         </div>
-        <button className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-2.5 px-5 rounded-xl transition-colors shadow-md flex items-center gap-2 text-sm">
+        <button
+          onClick={() => downloadCsv("/api/admin/export/roster", "batch-roster.csv")}
+          className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-2.5 px-5 rounded-xl transition-colors shadow-md flex items-center gap-2 text-sm"
+        >
           <Download size={16} /> Export Full Roster CSV
         </button>
       </header>

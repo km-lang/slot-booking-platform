@@ -8,6 +8,7 @@ import MentorDashboard from "./pages/MentorDashboard";
 import MentorCohortDetails from "./pages/MentorCohortDetails";
 import AigAdminDashboard from "./pages/AigAdminDashboard";
 import PlacementAdminDashboard from "./pages/PlacementAdminDashboard";
+import ProfileSettings from "./pages/ProfileSettings";
 import LoginPage from "./pages/LoginPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
 
@@ -16,6 +17,7 @@ function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
+      <Route path="/profile" element={<ProfileSettings />} />
       <Route path="/" element={<Navigate to="/student" replace />} />
 
       {/* Student flow */}

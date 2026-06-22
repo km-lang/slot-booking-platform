@@ -2,6 +2,19 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
 import { useMentorCohort } from "../hooks/useApi";
+import { getToken } from "../lib/apiClient";
+
+const downloadCsv = async (url, filename) => {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), { href, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+};
 
 export default function MentorCohortDetails() {
   const navigate = useNavigate();
@@ -41,7 +54,12 @@ export default function MentorCohortDetails() {
               <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">{headerLabel}</p>
             </div>
           </div>
-          <button className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors">
+          <button
+            onClick={() => downloadCsv("/api/cohort/export", `cohort-${cohort?.label ?? "export"}.csv`)}
+            disabled={isLoading || !cohort}
+            className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
+            title="Download cohort CSV"
+          >
             <Download size={16} />
           </button>
         </header>

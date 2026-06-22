@@ -1,6 +1,7 @@
 "use strict";
 
-const prisma = require("../lib/prisma");
+const prisma  = require("../lib/prisma");
+const mailer  = require("../lib/mailer");
 
 const listAigs = async (_req, res, next) => {
   try {
@@ -402,8 +403,40 @@ const setSlotDelay = async (req, res, next) => {
 
     const updated = await prisma.slot.update({
       where: { id: slot.id },
-      data: { delayMinutes: delay },
+      data:  { delayMinutes: delay },
     });
+
+    // Email all students with a CONFIRMED booking on this slot
+    if (delay > 0) {
+      const bookedSlot = await prisma.slot.findUnique({
+        where:   { id: slot.id },
+        include: {
+          mentorProfile: { include: { user: { select: { name: true } } } },
+          bookings: {
+            where:   { status: "CONFIRMED" },
+            include: { student: { select: { name: true, email: true } } },
+          },
+        },
+      });
+      const mentorName = bookedSlot?.mentorProfile?.user?.name ?? "Your mentor";
+      const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) =>
+        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+      for (const booking of (bookedSlot?.bookings ?? [])) {
+        if (!booking.student?.email) continue;
+        mailer.sendDelayNotification({
+          studentEmail:  booking.student.email,
+          studentName:   booking.student.name ?? booking.student.email,
+          mentorName,
+          date:          fmtDate(slot.startTime),
+          time:          fmtTime(slot.startTime),
+          venue:         slot.venue,
+          delayMinutes:  delay,
+        }).catch(() => {});
+      }
+    }
 
     res.json({ id: updated.id, delayMinutes: updated.delayMinutes });
   } catch (err) {

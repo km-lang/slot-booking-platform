@@ -16,6 +16,7 @@ const getCountdown = (deadline) => {
 export default function AigAdminDashboard() {
   const { aigSlug } = useParams();
   const [searchQuery, setSearchQuery] = useState("");
+  const interventionRef = React.useRef(null);
 
   const { data, isLoading, error } = useAigOverview(aigSlug);
 
@@ -53,10 +54,14 @@ export default function AigAdminDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button className="relative w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-800 border border-emerald-200">
+              <button
+                onClick={() => interventionRef.current?.scrollIntoView({ behavior: "smooth" })}
+                className="relative w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                title={atRisk.length > 0 ? `${atRisk.length} students need intervention` : "No interventions needed"}
+              >
                 <Bell size={16} />
                 {atRisk.length > 0 && (
-                  <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full" />
+                  <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse" />
                 )}
               </button>
               <AvatarMenu />
@@ -109,7 +114,7 @@ export default function AigAdminDashboard() {
 
           {/* Intervention Required */}
           {(isLoading || atRisk.length > 0) && (
-            <section className="mb-8">
+            <section className="mb-8" ref={interventionRef}>
               <h2 className="text-lg font-black text-emerald-950 mb-3 flex items-center gap-2">
                 <AlertTriangle size={18} className="text-amber-500" /> Intervention Required
               </h2>

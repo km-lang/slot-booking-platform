@@ -1,6 +1,20 @@
 "use strict";
 
-const prisma = require("../lib/prisma");
+const prisma  = require("../lib/prisma");
+const mailer  = require("../lib/mailer");
+
+// Read penalty thresholds from SystemConfig; fall back to built-in defaults.
+const getPenaltyThresholds = async () => {
+  const rows = await prisma.systemConfig.findMany({
+    where: { key: { in: ["penalty_warning_minutes", "penalty_strike_minutes", "penalty_warning_to_strike"] } },
+  });
+  const cfg = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  return {
+    warningMinutes:      Number(cfg.penalty_warning_minutes      ?? 60),
+    strikeMinutes:       Number(cfg.penalty_strike_minutes       ?? 30),
+    warningToStrikeAt:   Number(cfg.penalty_warning_to_strike    ?? 3),
+  };
+};
 
 const ALLOWED_FOCUS = ["overall", "workex", "por"];
 
@@ -16,12 +30,12 @@ const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason) => {
   }
 };
 
-// Every 3rd warning auto-converts into 1 additional strike.
-const applyWarning = async (tx, userId, bookingId, reason) => {
+// Every N warnings (configurable via SystemConfig) auto-converts into 1 strike.
+const applyWarning = async (tx, userId, bookingId, reason, warningToStrikeAt = 3) => {
   await tx.studentWarning.create({ data: { userId, bookingId, type: "WARNING", reason } });
   const warningCount = await tx.studentWarning.count({ where: { userId, type: "WARNING" } });
-  if (warningCount % 3 === 0) {
-    await applyStrikeAndMaybeBan(tx, userId, bookingId, "3 warnings converted to 1 strike");
+  if (warningCount % warningToStrikeAt === 0) {
+    await applyStrikeAndMaybeBan(tx, userId, bookingId, `${warningToStrikeAt} warnings converted to 1 strike`);
   }
 };
 
@@ -106,20 +120,28 @@ const createBooking = async (req, res, next) => {
   }
 };
 
-// Penalty tiers:
-//   ≥ 60 min before slot start → no penalty
-//   30–59 min before → WARNING (3 warnings auto-convert to 1 STRIKE)
-//   < 30 min before / after start → STRIKE directly
+// Penalty tiers — thresholds configurable via SystemConfig:
+//   ≥ warningMinutes before slot start → no penalty
+//   strikeMinutes–(warningMinutes-1) min before → WARNING
+//   < strikeMinutes before / after start → STRIKE
 const cancelBooking = async (req, res, next) => {
   try {
     const booking = await prisma.booking.findUnique({
-      where: { id: req.params.id },
-      include: { slot: true },
+      where:   { id: req.params.id },
+      include: {
+        slot: {
+          include: {
+            mentorProfile: { include: { user: { select: { name: true, email: true } } } },
+          },
+        },
+        student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
+      },
     });
     if (!booking) return res.status(404).json({ error: "Booking not found" });
     if (booking.studentUserId !== req.user.sub) return res.status(403).json({ error: "Not your booking" });
     if (booking.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
 
+    const { warningMinutes, strikeMinutes, warningToStrikeAt } = await getPenaltyThresholds();
     const minutesBeforeStart = (booking.slot.startTime.getTime() - Date.now()) / 60000;
     let penalty = "NONE";
 
@@ -127,26 +149,48 @@ const cancelBooking = async (req, res, next) => {
       await tx.booking.update({ where: { id: booking.id }, data: { status: "CANCELLED" } });
       await tx.slotCapacity.update({ where: { slotId: booking.slotId }, data: { current: { decrement: 1 } } });
 
-      if (minutesBeforeStart >= 60) {
+      if (minutesBeforeStart >= warningMinutes) {
         penalty = "NONE";
-      } else if (minutesBeforeStart >= 30) {
+      } else if (minutesBeforeStart >= strikeMinutes) {
         penalty = "WARNING";
-        await applyWarning(tx, booking.studentUserId, booking.id, "Late cancellation (30-59 min before slot)");
+        await applyWarning(tx, booking.studentUserId, booking.id,
+          `Late cancellation (${strikeMinutes}–${warningMinutes - 1} min before slot)`, warningToStrikeAt);
       } else {
         penalty = "STRIKE";
-        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "Late cancellation (<30 min before slot)");
+        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id,
+          `Late cancellation (<${strikeMinutes} min before slot)`);
       }
 
       await tx.auditEvent.create({
         data: {
-          userId: req.user.sub,
-          action: "BOOKING_CANCELLED",
-          entity: "Booking",
+          userId:   req.user.sub,
+          action:   "BOOKING_CANCELLED",
+          entity:   "Booking",
           entityId: booking.id,
-          meta: JSON.stringify({ penalty }),
+          meta:     JSON.stringify({ penalty }),
         },
       });
     });
+
+    // Notify mentor if it was a penalised cancellation
+    if (penalty !== "NONE") {
+      const mentor = booking.slot.mentorProfile?.user;
+      const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) =>
+        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      if (mentor?.email) {
+        mailer.sendLateCancelToMentor({
+          mentorEmail:  mentor.email,
+          mentorName:   mentor.name ?? mentor.email,
+          studentName:  booking.student?.name ?? req.user.email,
+          pgpId:        booking.student?.studentProfile?.pgpId ?? "N/A",
+          date:         fmtDate(booking.slot.startTime),
+          time:         fmtTime(booking.slot.startTime),
+          penalty,
+        }).catch(() => {}); // non-blocking
+      }
+    }
 
     res.json({ id: booking.id, status: "CANCELLED", penalty });
   } catch (err) {

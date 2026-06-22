@@ -7,8 +7,9 @@ const helmet = require("helmet");
 const cors = require("cors");
 const compression = require("compression");
 
-const authRouter = require("./routes/auth");
-const apiRouter = require("./routes/api");
+const authRouter  = require("./routes/auth");
+const apiRouter   = require("./routes/api");
+const { startScheduler } = require("./lib/scheduler");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -37,4 +38,7 @@ app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
 });
 
-app.listen(PORT, () => console.log(`Parthsaarthi server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Parthsaarthi server running on port ${PORT}`);
+  startScheduler();
+});

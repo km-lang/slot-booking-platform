@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { apiFetch, getStoredUser, setSession, clearSession } from "../lib/apiClient";
+import { apiFetch, getStoredUser, getToken, setSession, clearSession } from "../lib/apiClient";
 import { AuthContext } from "./auth-context";
 
 export function AuthProvider({ children }) {
@@ -27,6 +27,12 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const updateUser = (patch) => {
+    const updated = { ...user, ...patch };
+    setSession(getToken(), updated);
+    setUser(updated);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -36,6 +42,7 @@ export function AuthProvider({ children }) {
         isLoading,
         login,
         logout,
+        updateUser,
       }}
     >
       {children}

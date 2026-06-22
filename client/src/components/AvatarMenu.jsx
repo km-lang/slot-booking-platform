@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, UserCog } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 
 const ROLE_BADGE = {
@@ -13,6 +14,7 @@ const ROLE_BADGE = {
 // variant="dark"  — light initials on dark bg (emerald-900 header in MentorDashboard)
 export default function AvatarMenu({ variant = "light" }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -60,10 +62,13 @@ export default function AvatarMenu({ variant = "light" }) {
             </span>
           </div>
           <button
-            onClick={() => {
-              setOpen(false);
-              logout();
-            }}
+            onClick={() => { setOpen(false); navigate("/profile"); }}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-50 active:bg-emerald-100 transition-colors border-b border-emerald-900/5"
+          >
+            <UserCog size={15} className="text-emerald-600" /> Edit Profile
+          </button>
+          <button
+            onClick={() => { setOpen(false); logout(); }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors"
           >
             <LogOut size={15} /> Sign out

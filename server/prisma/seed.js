@@ -88,8 +88,12 @@ async function main() {
     });
   }
   for (const cfg of [
-    { key: "cv_freeze_deadline", value: "2026-07-05T23:59:00.000Z" },
-    { key: "booking_open",       value: "true"                      },
+    { key: "cv_freeze_deadline",       value: "2026-07-05T23:59:00.000Z" },
+    { key: "booking_open",             value: "true"                      },
+    // Penalty thresholds (minutes before slot start)
+    { key: "penalty_warning_minutes",  value: "60" }, // ≥ this → no penalty
+    { key: "penalty_strike_minutes",   value: "30" }, // < this → STRIKE; between → WARNING
+    { key: "penalty_warning_to_strike",value: "3"  }, // N warnings auto-convert to 1 strike
   ]) {
     await prisma.systemConfig.upsert({
       where:  { key: cfg.key },

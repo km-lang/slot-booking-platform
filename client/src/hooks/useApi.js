@@ -5,6 +5,7 @@ import { apiFetch } from "../lib/apiClient";
 // Centralised here so invalidation in mutations always matches the right cache.
 
 export const QK = {
+  profile:         ()        => ["profile"],
   aigs:            ()        => ["aigs"],
   aigMentors:      (slug)    => ["mentors", slug],
   allMentors:      ()        => ["mentors", "all"],
@@ -20,6 +21,22 @@ export const QK = {
 };
 
 // ── Query hooks ───────────────────────────────────────────────────────────────
+
+export const useProfile = () =>
+  useQuery({
+    queryKey: QK.profile(),
+    queryFn:  () => apiFetch("/profile"),
+    staleTime: 60_000,
+  });
+
+export const useUpdateProfile = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) =>
+      apiFetch("/profile", { method: "PATCH", body: JSON.stringify(body) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.profile() }),
+  });
+};
 
 export const useAigs = () =>
   useQuery({

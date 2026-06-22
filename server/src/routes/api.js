@@ -6,12 +6,18 @@ const router = express.Router();
 const { verifySession, requireRole, requireAigScope } = require("../middleware/auth");
 const bookingRateLimiter = require("../middleware/rateLimiter");
 
-const slotController = require("../controllers/slotController");
+const slotController    = require("../controllers/slotController");
 const bookingController = require("../controllers/bookingController");
-const adminController = require("../controllers/adminController");
+const adminController   = require("../controllers/adminController");
+const exportController  = require("../controllers/exportController");
+const profileController = require("../controllers/profileController");
 
 // All routes below require a valid session JWT
 router.use(verifySession);
+
+// ── Profile ────────────────────────────────────────────────────────────────
+router.get("/profile",   profileController.getProfile);
+router.patch("/profile", profileController.updateProfile);
 
 // ── AIGs (public-within-auth) ──────────────────────────────────────────────
 router.get("/aigs", slotController.listAigs);
@@ -58,7 +64,8 @@ router.post(
 );
 
 // ── Cohort (mentor) ────────────────────────────────────────────────────────
-router.get("/cohort", requireRole("MENTOR"), slotController.getMentorCohort);
+router.get("/cohort",        requireRole("MENTOR"), slotController.getMentorCohort);
+router.get("/cohort/export", requireRole("MENTOR"), exportController.exportMentorCohort);
 
 // ── AIG Admin ──────────────────────────────────────────────────────────────
 router.get(
@@ -95,7 +102,10 @@ router.get("/admin/config", requireRole("SuperADMIN"), adminController.getConfig
 router.put("/admin/config/:key", requireRole("SuperADMIN"), adminController.setConfig);
 
 // ── Ban Management (SuperADMIN only) ──────────────────────────────────────
-router.get("/admin/bans", requireRole("SuperADMIN"), adminController.listBans);
+router.get("/admin/bans",          requireRole("SuperADMIN"), adminController.listBans);
 router.patch("/admin/bans/:id/lift", requireRole("SuperADMIN"), adminController.liftBan);
+
+// ── Data Export ────────────────────────────────────────────────────────────
+router.get("/admin/export/roster", requireRole("SuperADMIN"), exportController.exportAdminRoster);
 
 module.exports = router;
