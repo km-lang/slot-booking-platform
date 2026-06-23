@@ -57,6 +57,59 @@ const btn = (href, label) =>
 // ── Exported email senders ─────────────────────────────────────────────────────
 
 /**
+ * Sent to a student immediately after a successful booking.
+ */
+const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus }) => {
+  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
+  return send({
+    to:      studentEmail,
+    subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
+    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}. To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Booking Confirmed</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
+      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b style="font-size:15px">${mentorName}</b>
+        <span style="font-size:13px;color:#064E3B99;margin-left:6px">${firm}</span><br>
+        <span style="font-size:13px;color:#064E3B;margin-top:6px;display:block">${date} · ${time}</span>
+        <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
+      </div>
+      <p style="font-size:13px;color:#064E3B99;margin:0">
+        You will receive a reminder 30 minutes before the session.<br>
+        If you need to cancel, do so <b>at least 60 minutes in advance</b> to avoid a penalty.
+      </p>
+    `),
+  });
+};
+
+/**
+ * Sent to a student when they cancel a booking (always, regardless of penalty).
+ */
+const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName, date, time, penalty }) => {
+  const penaltyNote = penalty === "STRIKE"
+    ? "⚠️ A <b>strike</b> has been added to your account for last-minute cancellation."
+    : penalty === "WARNING"
+    ? "⚠️ A <b>warning</b> has been added to your account for late cancellation."
+    : "No penalty was applied.";
+
+  return send({
+    to:      studentEmail,
+    subject: `Booking cancelled: ${mentorName} on ${date}`,
+    text:    `Hi ${studentName}, your session with ${mentorName} on ${date} at ${time} has been cancelled. ${penalty !== "NONE" ? `Penalty applied: ${penalty}.` : "No penalty applied."}`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Booking Cancelled</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Your session has been removed</p>
+      <div style="background:#FEF9F0;border:1px solid #FDE68A;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b>${mentorName}</b><br>
+        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
+      </div>
+      <p style="font-size:14px;color:#064E3B">${penaltyNote}</p>
+      <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time.</p>
+    `),
+  });
+};
+
+/**
  * Sent to a student when their mentor marks a slot as running late.
  */
 const sendDelayNotification = ({ studentEmail, studentName, mentorName, date, time, venue, delayMinutes }) =>
@@ -174,6 +227,8 @@ const sendAigDigest = ({ adminEmail, adminName, aigName, atRiskCount, deadline, 
 };
 
 module.exports = {
+  sendBookingConfirmation,
+  sendCancelConfirmationToStudent,
   sendDelayNotification,
   sendLateCancelToMentor,
   sendStudentReminder,

@@ -107,6 +107,34 @@ const createBooking = async (req, res, next) => {
         });
         return created;
       });
+
+      // Send booking confirmation email (non-blocking)
+      prisma.user.findUnique({
+        where: { id: req.user.sub },
+        select: { name: true, email: true },
+      }).then(async (student) => {
+        const fmtDate = (d) =>
+          new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+        const fmtTime = (d) =>
+          new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        const mentorUser = await prisma.mentorProfile.findUnique({
+          where: { id: claimedSlot.mentorProfileId },
+          include: { user: { select: { name: true } } },
+        }).catch(() => null);
+        if (student?.email) {
+          mailer.sendBookingConfirmation({
+            studentEmail: student.email,
+            studentName:  student.name ?? student.email,
+            mentorName:   mentorUser?.user?.name ?? "your mentor",
+            firm:         mentorUser?.firm ?? "IIM Lucknow",
+            date:         fmtDate(claimedSlot.startTime),
+            time:         fmtTime(claimedSlot.startTime),
+            venue:        claimedSlot.venue,
+            focus,
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+
       return res.status(201).json(booking);
     } catch (err) {
       if (err.code === "P2002") {
@@ -172,24 +200,36 @@ const cancelBooking = async (req, res, next) => {
       });
     });
 
-    // Notify mentor if it was a penalised cancellation
-    if (penalty !== "NONE") {
-      const mentor = booking.slot.mentorProfile?.user;
-      const fmtDate = (d) =>
-        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-      const fmtTime = (d) =>
-        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-      if (mentor?.email) {
-        mailer.sendLateCancelToMentor({
-          mentorEmail:  mentor.email,
-          mentorName:   mentor.name ?? mentor.email,
-          studentName:  booking.student?.name ?? req.user.email,
-          pgpId:        booking.student?.studentProfile?.pgpId ?? "N/A",
-          date:         fmtDate(booking.slot.startTime),
-          time:         fmtTime(booking.slot.startTime),
-          penalty,
-        }).catch(() => {}); // non-blocking
-      }
+    const fmtDate = (d) =>
+      new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const fmtTime = (d) =>
+      new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    const mentor  = booking.slot.mentorProfile?.user;
+    const student = booking.student;
+
+    // Always notify the student of their cancellation
+    if (student?.email) {
+      mailer.sendCancelConfirmationToStudent({
+        studentEmail: student.email,
+        studentName:  student.name ?? student.email,
+        mentorName:   mentor?.name ?? "your mentor",
+        date:         fmtDate(booking.slot.startTime),
+        time:         fmtTime(booking.slot.startTime),
+        penalty,
+      }).catch(() => {});
+    }
+
+    // Notify mentor only for penalised cancellations
+    if (penalty !== "NONE" && mentor?.email) {
+      mailer.sendLateCancelToMentor({
+        mentorEmail:  mentor.email,
+        mentorName:   mentor.name ?? mentor.email,
+        studentName:  student?.name ?? req.user.email,
+        pgpId:        student?.studentProfile?.pgpId ?? "N/A",
+        date:         fmtDate(booking.slot.startTime),
+        time:         fmtTime(booking.slot.startTime),
+        penalty,
+      }).catch(() => {});
     }
 
     res.json({ id: booking.id, status: "CANCELLED", penalty });
