@@ -172,10 +172,10 @@ function startScheduler() {
   // Every minute — check for 30-min-away sessions
   cron.schedule("* * * * *", sendSessionReminders);
 
-  // Every day at 08:00 server time
-  cron.schedule("0 8 * * *", sendDailyDigests);
+  // Every day at 08:00 IST
+  cron.schedule("0 8 * * *", sendDailyDigests, { timezone: "Asia/Kolkata" });
 
-  console.log("Scheduler started (reminders every minute, digest at 08:00 daily)");
+  console.log("Scheduler started (reminders every minute, digest at 08:00 IST)");
 }
 
 module.exports = { startScheduler };

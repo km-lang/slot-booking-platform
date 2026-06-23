@@ -49,6 +49,9 @@ function App() {
 
       <Route element={<RequireRole role="AIGs" />}>
         <Route path="/admin/:aigSlug" element={<AigAdminDashboard />} />
+      </Route>
+
+      <Route element={<RequireRole role={["AIGs", "SuperADMIN"]} />}>
         <Route path="/admin/:aigSlug/mentor/:mentorSlug" element={<AigMentorDetail />} />
       </Route>
     </Routes>

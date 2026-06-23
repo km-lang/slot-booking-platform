@@ -6,7 +6,9 @@ export default function RequireRole({ role }) {
 
   if (isLoading) return null;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (userRole !== role) return <Navigate to="/unauthorized" replace />;
+
+  const allowed = Array.isArray(role) ? role : [role];
+  if (!allowed.includes(userRole)) return <Navigate to="/unauthorized" replace />;
 
   return <Outlet />;
 }
