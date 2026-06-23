@@ -492,24 +492,98 @@ pm2 monit
 
 ### Step 6 — Production `.env` Template
 
+**Server** (`server/.env`):
 ```bash
-# server/.env (production)
-
 DATABASE_URL=postgresql://user:pass@host:5432/parthsaarthi?sslmode=require
 JWT_SECRET=<64-char random hex — run: openssl rand -hex 32>
 JWT_EXPIRES_IN=8h
 GOOGLE_CLIENT_ID=<from Google Cloud Console>
-# AUTH_MODE not set (enables real Google OAuth)
+# AUTH_MODE must NOT be set — its absence enables real Google OAuth
 PORT=4000
 CLIENT_ORIGIN=https://parthsaarthi.iiml.ac.in
+# DEV_EMAIL_OVERRIDE must NOT be set — remove it so each user gets their own emails
 
-SMTP_HOST=smtp.iiml.ac.in
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=noreply@iiml.ac.in
-SMTP_PASS=<app password>
-SMTP_FROM=Parthsaarthi <noreply@iiml.ac.in>
+SMTP_USER=your@gmail.com
+SMTP_PASS=<16-char Gmail App Password>
+SMTP_FROM=Parthsaarthi <your@gmail.com>
 ```
+
+**Client** (`client/.env`):
+```bash
+VITE_GOOGLE_CLIENT_ID=<same client ID as server>
+```
+
+> See `server/.env.example` and `client/.env.example` for full annotated templates.
+
+---
+
+### ⚠️ Production Readiness Checklist
+
+Go through every item before switching traffic to production.
+
+#### Must fix — app breaks or is insecure without these
+
+| # | What | Why it fails |
+|---|------|-------------|
+| 1 | Remove `AUTH_MODE=dev` from server `.env` | With it set, **any email can log in** without a Google credential — no token verification happens |
+| 2 | Set `GOOGLE_CLIENT_ID` (server + client) | Server: token verification throws. Client: Google button never renders — users see a blank login card |
+| 3 | Set `CLIENT_ORIGIN` to production domain | CORS blocks every browser request — all API calls fail before reaching any route |
+| 4 | Remove `DEV_EMAIL_OVERRIDE` | All booking confirmations, reminders, and digests go to one inbox; real users get nothing |
+| 5 | Change `JWT_SECRET` to a random 64-char string | The dev default is known; anyone can forge a SuperADMIN token |
+| 6 | Wire `/api` proxy or serve client from Express | Vite's dev proxy doesn't exist in the production build — relative `/api` calls will 404 unless nginx forwards them or Express serves the static files |
+| 7 | Switch to PostgreSQL + run migrations | SQLite is ephemeral on container platforms (wiped on every deploy). `prisma db push` has no migration history — `prisma migrate deploy` fails in CI |
+
+#### Feature failures — runs but key flows break
+
+| # | What | Why it matters |
+|---|------|---------------|
+| 8 | No rate limit on `POST /api/auth/google` | Attacker can enumerate which emails are in the whitelist (403 vs. success) |
+| 9 | Attendance marking has no time gate | Mentors can mark NO_SHOW days or weeks after a session — no protection against retroactive penalties |
+| 10 | JWT expires in 8h, no refresh | Student mid-booking at the 8h mark gets a 401, loses their slot claim, and is redirected to login |
+| 11 | Token in `sessionStorage` | Session lost when the browser tab closes — users re-login every time they reopen the browser (especially painful on mobile) |
+
+#### Reliability
+
+| # | What | Why it matters |
+|---|------|---------------|
+| 12 | No SIGTERM handler | PM2 restarts kill in-flight DB transactions — SlotCapacity can drift out of sync with Booking rows |
+| 13 | No React error boundaries | Any uncaught component error (bad API response shape, `.map()` on null) renders a blank white screen with no way to recover |
+| 14 | Email failures are fully silent | `.catch(() => {})` on booking/cancel emails means SMTP failures produce no log entry and no retry |
+| 15 | `node-cron` runs in-process | If the server restarts at 07:59 IST, the 8 AM digest is skipped until the next day |
+| 16 | `dev.db` tracked in git | Binary file with real seed email addresses; grows with every seed run |
+
+#### Quick fixes for items 12, 13, 14
+
+**Add SIGTERM handler** — append to `server/src/index.js`:
+```js
+process.on("SIGTERM", () => {
+  server.close(() => {
+    prisma.$disconnect().then(() => process.exit(0));
+  });
+});
+```
+
+**Add React error boundary** — wrap `<App />` in `main.jsx` with a simple boundary:
+```jsx
+class ErrorBoundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) return (
+      <div style={{padding:40,textAlign:"center"}}>
+        <h2>Something went wrong</h2>
+        <button onClick={() => window.location.reload()}>Reload</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+```
+
+**Log email failures** — replace `.catch(() => {})` with `.catch((e) => console.error("[mailer]", e.message))` in `bookingController.js`.
 
 ---
 

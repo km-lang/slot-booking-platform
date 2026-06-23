@@ -10,6 +10,7 @@ const compression = require("compression");
 const authRouter  = require("./routes/auth");
 const apiRouter   = require("./routes/api");
 const { startScheduler } = require("./lib/scheduler");
+const prisma = require("./lib/prisma");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -38,7 +39,14 @@ app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Parthsaarthi server running on port ${PORT}`);
   startScheduler();
+});
+
+// Graceful shutdown — let in-flight requests finish before closing the DB
+process.on("SIGTERM", () => {
+  server.close(() => {
+    prisma.$disconnect().then(() => process.exit(0));
+  });
 });

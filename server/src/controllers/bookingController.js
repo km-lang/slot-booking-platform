@@ -131,9 +131,9 @@ const createBooking = async (req, res, next) => {
             time:         fmtTime(claimedSlot.startTime),
             venue:        claimedSlot.venue,
             focus,
-          }).catch(() => {});
+          }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
         }
-      }).catch(() => {});
+      }).catch((e) => console.error("[mailer] student lookup:", e.message));
 
       return res.status(201).json(booking);
     } catch (err) {
@@ -216,7 +216,7 @@ const cancelBooking = async (req, res, next) => {
         date:         fmtDate(booking.slot.startTime),
         time:         fmtTime(booking.slot.startTime),
         penalty,
-      }).catch(() => {});
+      }).catch((e) => console.error("[mailer] cancel confirmation:", e.message));
     }
 
     // Notify mentor only for penalised cancellations
@@ -229,7 +229,7 @@ const cancelBooking = async (req, res, next) => {
         date:         fmtDate(booking.slot.startTime),
         time:         fmtTime(booking.slot.startTime),
         penalty,
-      }).catch(() => {});
+      }).catch((e) => console.error("[mailer] late cancel to mentor:", e.message));
     }
 
     res.json({ id: booking.id, status: "CANCELLED", penalty });
