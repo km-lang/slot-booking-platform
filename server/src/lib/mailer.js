@@ -26,16 +26,21 @@ const getTransport = () => {
 
 const FROM = process.env.SMTP_FROM ?? "Parthsaarthi <noreply@iiml.ac.in>";
 
+// DEV_EMAIL_OVERRIDE: when set, ALL emails are redirected to this address.
+// Useful for local testing so real SMTP traffic goes only to the developer.
+const DEV_TO = process.env.DEV_EMAIL_OVERRIDE ?? null;
+
 const send = async ({ to, subject, html, text }) => {
+  const effectiveTo = DEV_TO ?? to;
   const t = getTransport();
   if (!t) {
-    // Dev mode — log to console instead of sending
-    console.log(`\n[EMAIL] To: ${to}`);
+    // No SMTP configured — log to console
+    console.log(`\n[EMAIL] To: ${effectiveTo}${DEV_TO && DEV_TO !== to ? ` (override; original: ${to})` : ""}`);
     console.log(`[EMAIL] Subject: ${subject}`);
     console.log(`[EMAIL] Body: ${text ?? html}\n`);
     return;
   }
-  await t.sendMail({ from: FROM, to, subject, html, text });
+  await t.sendMail({ from: FROM, to: effectiveTo, subject, html, text });
 };
 
 // ── Templates ──────────────────────────────────────────────────────────────────

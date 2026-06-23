@@ -15,8 +15,28 @@ const AIG_DEFS = [
   { slug: "hr",         name: "HR & Organisational Behaviour Club",   type: "Domain AIG",       hasCohort: false },
 ];
 
+// Real Disha mentors — cohortLabel maps to the Q1–Q17 cohorts created in Phase 4
+const DISHA_MENTORS = [
+  { name: "Adit",        email: "pgp41259@iiml.ac.in", cohortLabel: "Q1",  slug: "disha-adit",        firm: "McKinsey & Co.",      domain: "General Management"     },
+  { name: "Anandu",      email: "pgp41294@iiml.ac.in", cohortLabel: "Q2",  slug: "disha-anandu",      firm: "BCG",                 domain: "Strategy Consulting"    },
+  { name: "Chetan",      email: "pgp41302@iiml.ac.in", cohortLabel: "Q3",  slug: "disha-chetan",      firm: "Bain & Co.",          domain: "Finance"                },
+  { name: "Darsh",       email: "pgp41247@iiml.ac.in", cohortLabel: "Q4",  slug: "disha-darsh",       firm: "Goldman Sachs",       domain: "Investment Banking"     },
+  { name: "Deepansh",    email: "pgp41250@iiml.ac.in", cohortLabel: "Q5",  slug: "disha-deepansh",    firm: "JP Morgan",           domain: "Operations"             },
+  { name: "Gayathri",    email: "pgp41191@iiml.ac.in", cohortLabel: "Q6",  slug: "disha-gayathri",    firm: "Deloitte",            domain: "Analytics"              },
+  { name: "Krishnanshu", email: "abm22011@iiml.ac.in", cohortLabel: "Q7",  slug: "disha-krishnanshu", firm: "EY",                  domain: "Human Resources"        },
+  { name: "Lohhit",      email: "pgp41485@iiml.ac.in", cohortLabel: "Q8",  slug: "disha-lohhit",      firm: "KPMG",                domain: "Technology"             },
+  { name: "Manav",       email: "pgp41263@iiml.ac.in", cohortLabel: "Q9",  slug: "disha-manav",       firm: "Amazon",              domain: "Product Management"     },
+  { name: "Manjari",     email: "pgp41020@iiml.ac.in", cohortLabel: "Q10", slug: "disha-manjari",     firm: "ITC",                 domain: "Marketing"              },
+  { name: "Riddhi",      email: "pgp41437@iiml.ac.in", cohortLabel: "Q11", slug: "disha-riddhi",      firm: "HUL",                 domain: "FMCG"                   },
+  { name: "Sarang",      email: "pgp41392@iiml.ac.in", cohortLabel: "Q12", slug: "disha-sarang",      firm: "Samsung India",       domain: "Entrepreneurship"       },
+  { name: "Saumyaa",     email: "pgp41222@iiml.ac.in", cohortLabel: "Q13", slug: "disha-saumyaa",     firm: "TCS",                 domain: "Fintech"                },
+  { name: "Sreeraj",     email: "pgp41052@iiml.ac.in", cohortLabel: "Q14", slug: "disha-sreeraj",     firm: "Reliance Industries", domain: "E-Commerce"             },
+  { name: "Sristi",      email: "pgp41447@iiml.ac.in", cohortLabel: "Q15", slug: "disha-sristi",      firm: "Infosys",             domain: "Sustainability"         },
+  { name: "Tanmay",      email: "pgp41227@iiml.ac.in", cohortLabel: "Q16", slug: "disha-tanmay",      firm: "Accenture",           domain: "Digital Transformation" },
+  { name: "Urvee",       email: "pgp41515@iiml.ac.in", cohortLabel: "Q17", slug: "disha-urvee",       firm: "PwC",                 domain: "Consulting"             },
+];
+
 const FIRMS = {
-  disha:      ["McKinsey & Co.", "BCG", "Bain & Co.", "Goldman Sachs", "JP Morgan", "Deloitte", "EY", "KPMG", "Amazon", "ITC", "HUL", "Samsung India", "TCS", "Reliance Industries", "Infosys"],
   consulting: ["McKinsey & Co.", "BCG", "Bain & Co.", "Roland Berger", "OC&M", "A.T. Kearney", "Strategy&", "L.E.K. Consulting", "Accenture Strategy", "Oliver Wyman", "Monitor Deloitte", "ZS Associates", "Arthur D. Little", "Kearney", "Simon-Kucher"],
   finance:    ["Goldman Sachs", "Morgan Stanley", "JP Morgan", "Citi", "Barclays", "Deutsche Bank", "HSBC", "UBS", "Bank of America", "Kotak IB", "ICICI Securities", "Motilal Oswal", "Edelweiss", "Axis Capital", "Avendus Capital"],
   marketing:  ["HUL", "P&G", "Nestlé", "Coca-Cola", "PepsiCo", "ITC", "Samsung India", "Marico", "Dabur", "Colgate-Palmolive", "L'Oréal India", "Amazon India", "Flipkart", "Reliance Retail", "Myntra"],
@@ -26,7 +46,6 @@ const FIRMS = {
 };
 
 const DOMAINS = {
-  disha:      ["General Management", "Strategy Consulting", "Finance", "Marketing", "Operations", "Analytics", "Human Resources", "Technology", "Investment Banking", "Product Management", "Entrepreneurship", "FMCG", "Fintech", "E-Commerce", "Sustainability"],
   consulting: ["Strategy Consulting", "Management Consulting", "Digital Transformation", "Operations Consulting", "Financial Advisory", "Risk Consulting", "HR Consulting", "IT Consulting", "Healthcare Consulting", "Consumer & Retail", "Private Equity Advisory", "Public Sector", "Infrastructure", "Energy Consulting", "Pricing Strategy"],
   finance:    ["Investment Banking", "Private Equity", "Equity Research", "Corporate Finance", "Asset Management", "Risk Management", "Wealth Management", "Structured Finance", "Fixed Income", "M&A Advisory", "Debt Capital Markets", "ECM", "Sales & Trading", "Quantitative Finance", "Credit Research"],
   marketing:  ["Brand Management", "Digital Marketing", "Category Management", "Consumer Insights", "Trade Marketing", "Product Marketing", "Growth Marketing", "Content Strategy", "Retail Marketing", "B2B Marketing", "Performance Marketing", "CRM", "Shopper Marketing", "Media Planning", "Marketing Analytics"],
@@ -66,7 +85,7 @@ async function main() {
       create: { slug: def.slug, name: def.name, type: def.type },
     });
   }
-  // Re-seat the disha AIGs admin whitelist entry
+  // Disha AIG admin whitelist
   await prisma.accessWhitelist.upsert({
     where:  { email: "disha-admin@iiml.ac.in" },
     update: { aigId: aigs.disha.id },
@@ -88,12 +107,11 @@ async function main() {
     });
   }
   for (const cfg of [
-    { key: "cv_freeze_deadline",       value: "2026-07-05T23:59:00.000Z" },
-    { key: "booking_open",             value: "true"                      },
-    // Penalty thresholds (minutes before slot start)
-    { key: "penalty_warning_minutes",  value: "60" }, // ≥ this → no penalty
-    { key: "penalty_strike_minutes",   value: "30" }, // < this → STRIKE; between → WARNING
-    { key: "penalty_warning_to_strike",value: "3"  }, // N warnings auto-convert to 1 strike
+    { key: "cv_freeze_deadline",        value: "2026-07-05T23:59:00.000Z" },
+    { key: "booking_open",              value: "true"                      },
+    { key: "penalty_warning_minutes",   value: "60" },
+    { key: "penalty_strike_minutes",    value: "30" },
+    { key: "penalty_warning_to_strike", value: "3"  },
   ]) {
     await prisma.systemConfig.upsert({
       where:  { key: cfg.key },
@@ -103,28 +121,38 @@ async function main() {
   }
   console.log("         ✓ done");
 
-  // ── Phase 4: Disha cohorts (15) ───────────────────────────────────────────
-  console.log("\nPhase 4  Disha cohorts (15)...");
-  const COHORT_COUNT  = 15;
-  const STUDENTS_PER_COHORT = 20; // 15 × 20 = 300
+  // ── Phase 4: Disha cohorts Q1–Q17 ────────────────────────────────────────
+  console.log("\nPhase 4  Disha cohorts (Q1–Q17)...");
+  const DISHA_COHORT_COUNT    = DISHA_MENTORS.length; // 17
+  const STUDENTS_PER_COHORT   = 20;                   // 17 × 20 = 340 students
 
-  const dishaCohorts = [];
-  for (let i = 1; i <= COHORT_COUNT; i++) {
+  const dishaCohorts = {}; // label → cohort record
+  for (const mentor of DISHA_MENTORS) {
     const c = await prisma.cohort.create({
-      data: { label: `Cohort ${String(i).padStart(2, "0")}`, aigId: aigs.disha.id },
+      data: { label: mentor.cohortLabel, aigId: aigs.disha.id },
     });
-    dishaCohorts.push(c);
+    dishaCohorts[mentor.cohortLabel] = c;
   }
-  console.log(`         ✓ ${COHORT_COUNT} cohorts`);
+  const dishaCohortList = DISHA_MENTORS.map((m) => dishaCohorts[m.cohortLabel]);
+  console.log(`         ✓ ${DISHA_COHORT_COUNT} cohorts (${DISHA_MENTORS.map((m) => m.cohortLabel).join(", ")})`);
 
-  // ── Phase 5: Mentors (15 per AIG × 7 = 105) ──────────────────────────────
-  console.log("\nPhase 5  Mentors (105 total)...");
+  // ── Phase 5: Mentors ──────────────────────────────────────────────────────
+  console.log("\nPhase 5  Mentors...");
 
   const wlMentors  = [];
   const usrMentors = [];
-  const profMeta   = []; // {email, slug, firm, domain, aigId, cohortId?}
+  const profMeta   = [];
 
-  for (const def of AIG_DEFS) {
+  // Real Disha mentors (17)
+  for (const m of DISHA_MENTORS) {
+    const cohort = dishaCohorts[m.cohortLabel];
+    wlMentors.push({ email: m.email, role: "MENTOR", aigId: aigs.disha.id, addedBy: "seed" });
+    usrMentors.push({ email: m.email, name: m.name, role: "MENTOR" });
+    profMeta.push({ email: m.email, slug: m.slug, firm: m.firm, domain: m.domain, aigId: aigs.disha.id, cohortId: cohort.id });
+  }
+
+  // Dummy mentors for non-Disha AIGs (6 × 15 = 90)
+  for (const def of AIG_DEFS.filter((d) => d.slug !== "disha")) {
     const aig = aigs[def.slug];
     for (let i = 1; i <= 15; i++) {
       const n      = String(i).padStart(2, "0");
@@ -132,14 +160,9 @@ async function main() {
       const email  = `${def.slug}.mentor.${n}@iiml.ac.in`;
       const name   = `${label} Mentor ${n}`;
       const slug   = `${def.slug}-mentor-${n}`;
-      const firm   = FIRMS[def.slug][i - 1];
-      const domain = DOMAINS[def.slug][i - 1];
-      // Only Disha mentors get cohort assignments
-      const cohortId = def.hasCohort ? dishaCohorts[i - 1].id : null;
-
       wlMentors.push({ email, role: "MENTOR", aigId: aig.id, addedBy: "seed" });
       usrMentors.push({ email, name, role: "MENTOR" });
-      profMeta.push({ email, slug, firm, domain, aigId: aig.id, cohortId });
+      profMeta.push({ email, slug, firm: FIRMS[def.slug][i - 1], domain: DOMAINS[def.slug][i - 1], aigId: aig.id, cohortId: null });
     }
   }
 
@@ -161,27 +184,27 @@ async function main() {
       aigId:    m.aigId,
       cohortId: m.cohortId,
     })),
-      });
-  console.log("         ✓ 105 mentors");
+  });
+  console.log(`         ✓ ${DISHA_MENTORS.length} Disha (real) + 90 domain AIG (dummy) = ${DISHA_MENTORS.length + 90} total`);
 
-  // ── Phase 6: Students (300 total, 20 per Disha cohort) ───────────────────
-  console.log("\nPhase 6  Students (300 total)...");
+  // ── Phase 6: Students (17 × 20 = 340) ────────────────────────────────────
+  console.log("\nPhase 6  Students (340 total, 20 per Disha cohort)...");
 
-  const STUDENT_COUNT = COHORT_COUNT * STUDENTS_PER_COHORT; // 300
-  const wlStudents    = [];
-  const usrStudents   = [];
-  const profStudents  = []; // {email, pgpId, cohortId}
+  const STUDENT_COUNT = DISHA_COHORT_COUNT * STUDENTS_PER_COHORT;
+  const wlStudents   = [];
+  const usrStudents  = [];
+  const profStudents = [];
 
   for (let i = 1; i <= STUDENT_COUNT; i++) {
     const n        = String(i).padStart(3, "0");
     const email    = `student.${n}@iiml.ac.in`;
     const name     = `Student ${n}`;
-    const pgpId    = `25${n}`;                                         // 25001–25300
-    const cohortId = dishaCohorts[Math.floor((i - 1) / STUDENTS_PER_COHORT)].id;
+    const pgpId    = `25${n}`;
+    const cohort   = dishaCohortList[Math.floor((i - 1) / STUDENTS_PER_COHORT)];
 
-    wlStudents.push({ email, role: "STUDENT", cohortId, addedBy: "seed" });
+    wlStudents.push({ email, role: "STUDENT", cohortId: cohort.id, addedBy: "seed" });
     usrStudents.push({ email, name, role: "STUDENT" });
-    profStudents.push({ email, pgpId, cohortId });
+    profStudents.push({ email, pgpId, cohortId: cohort.id });
   }
 
   await prisma.accessWhitelist.createMany({ data: wlStudents });
@@ -199,25 +222,25 @@ async function main() {
       pgpId:    s.pgpId,
       cohortId: s.cohortId,
     })),
-      });
+  });
   console.log(`         ✓ ${STUDENT_COUNT} students (${STUDENTS_PER_COHORT} per cohort)`);
 
-  // ── Phase 7: Hrishikesh test accounts ─────────────────────────────────────
-  console.log("\nPhase 7  Hrishikesh test accounts...");
+  // ── Phase 7: Dev/test accounts ────────────────────────────────────────────
+  console.log("\nPhase 7  Dev test accounts...");
 
-  // SuperADMIN (pgp41137 was never deleted — just fix the name)
+  // SuperADMIN — never deleted, just ensure name is set
   await prisma.user.upsert({
     where:  { email: "pgp41137@iiml.ac.in" },
     update: { name: "Hrishikesh Kumar" },
     create: { email: "pgp41137@iiml.ac.in", name: "Hrishikesh Kumar", role: "SuperADMIN" },
   });
 
-  // STUDENT alias  — placed in Cohort 01 alongside Student 001–020
-  const testCohort = dishaCohorts[0];
+  // STUDENT test alias — placed in Q1 cohort (alongside Student 001–020)
+  const q1Cohort = dishaCohorts["Q1"];
   await prisma.accessWhitelist.upsert({
     where:  { email: "hrishikesh.student@iiml.ac.in" },
-    update: { cohortId: testCohort.id },
-    create: { email: "hrishikesh.student@iiml.ac.in", role: "STUDENT", cohortId: testCohort.id, addedBy: "seed" },
+    update: { cohortId: q1Cohort.id },
+    create: { email: "hrishikesh.student@iiml.ac.in", role: "STUDENT", cohortId: q1Cohort.id, addedBy: "seed" },
   });
   const hriStu = await prisma.user.upsert({
     where:  { email: "hrishikesh.student@iiml.ac.in" },
@@ -226,13 +249,12 @@ async function main() {
   });
   const existingStuProfile = await prisma.studentProfile.findUnique({ where: { userId: hriStu.id } });
   if (!existingStuProfile) {
-    // pgpId 41137 is deliberately outside the 25001–25300 batch range
     await prisma.studentProfile.create({
-      data: { userId: hriStu.id, pgpId: "41137", cohortId: testCohort.id },
+      data: { userId: hriStu.id, pgpId: "41137", cohortId: q1Cohort.id },
     });
   }
 
-  // MENTOR alias  — Disha, Cohort 01 (same as the test student)
+  // MENTOR test alias — Disha, Q1 cohort
   await prisma.accessWhitelist.upsert({
     where:  { email: "hrishikesh.mentor@iiml.ac.in" },
     update: { aigId: aigs.disha.id },
@@ -245,18 +267,18 @@ async function main() {
   });
   await prisma.mentorProfile.upsert({
     where:  { userId: hriMen.id },
-    update: { cohortId: testCohort.id },
+    update: { cohortId: q1Cohort.id },
     create: {
       userId:   hriMen.id,
       slug:     "hrishikesh-kumar",
       firm:     "— Test Account —",
       domain:   "All Domains",
       aigId:    aigs.disha.id,
-      cohortId: testCohort.id,
+      cohortId: q1Cohort.id,
     },
   });
 
-  // AIGs/disha alias
+  // AIGs/disha test alias
   await prisma.accessWhitelist.upsert({
     where:  { email: "hrishikesh.aig@iiml.ac.in" },
     update: { aigId: aigs.disha.id },
@@ -268,7 +290,7 @@ async function main() {
     create: { email: "hrishikesh.aig@iiml.ac.in", name: "Hrishikesh Kumar", role: "AIGs" },
   });
 
-  console.log("         ✓ 4 accounts ready");
+  console.log("         ✓ 4 dev accounts ready");
 
   // ── Summary ───────────────────────────────────────────────────────────────
   const [users, mentors, students, whitelist, cohorts] = await Promise.all([
@@ -280,21 +302,25 @@ async function main() {
   ]);
 
   console.log("\n── Summary ─────────────────────────────────────────────────────");
-  console.log(`  AIGs             ${AIG_DEFS.length}   (7 total)`);
-  console.log(`  Cohorts          ${cohorts}  (Disha only)`);
-  console.log(`  MentorProfiles   ${mentors}`);
+  console.log(`  AIGs             ${AIG_DEFS.length}`);
+  console.log(`  Cohorts          ${cohorts}  (Disha: Q1–Q17)`);
+  console.log(`  MentorProfiles   ${mentors}  (17 real Disha + 90 dummy + 1 test)`);
   console.log(`  StudentProfiles  ${students}`);
   console.log(`  Users            ${users}`);
   console.log(`  Whitelist        ${whitelist}`);
 
+  console.log("\n── Disha mentor roster ──────────────────────────────────────────");
+  for (const m of DISHA_MENTORS) {
+    console.log(`  ${m.cohortLabel.padEnd(4)} ${m.name.padEnd(14)} ${m.email}`);
+  }
+
   console.log("\n── Dev login reference ──────────────────────────────────────────");
   console.log("  pgp41137@iiml.ac.in           SuperADMIN   /admin/placements");
-  console.log("  hrishikesh.student@iiml.ac.in STUDENT      /student");
-  console.log("  hrishikesh.mentor@iiml.ac.in  MENTOR       /mentor");
+  console.log("  hrishikesh.student@iiml.ac.in STUDENT      /student  (Q1 cohort)");
+  console.log("  hrishikesh.mentor@iiml.ac.in  MENTOR       /mentor   (Q1 cohort)");
   console.log("  hrishikesh.aig@iiml.ac.in     AIGs/disha   /admin/disha");
-  console.log("  disha-admin@iiml.ac.in         AIGs/disha   /admin/disha");
-  console.log("  student.001@iiml.ac.in         STUDENT      /student");
-  console.log("  disha.mentor.01@iiml.ac.in     MENTOR       /mentor");
+  console.log("  disha-admin@iiml.ac.in        AIGs/disha   /admin/disha");
+  console.log("  student.001@iiml.ac.in        STUDENT      /student  (Q1 cohort)");
   console.log("\nSeed complete.");
 }
 
