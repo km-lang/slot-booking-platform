@@ -74,6 +74,11 @@ router.get(
   requireAigScope("aigSlug"),
   adminController.getAigOverview,
 );
+router.get(
+  "/admin/mentor/:mentorSlug",
+  requireRole("AIGs", "SuperADMIN"),
+  adminController.getMentorSessionDetail,
+);
 
 // ── Placement Admin (SuperADMIN only) ─────────────────────────────────────
 router.get(

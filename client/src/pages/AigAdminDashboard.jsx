@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { useParams } from "react-router-dom";
-import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell } from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
+import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight } from "lucide-react";
 import { useAigOverview } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 
@@ -15,6 +15,7 @@ const getCountdown = (deadline) => {
 
 export default function AigAdminDashboard() {
   const { aigSlug } = useParams();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const interventionRef = React.useRef(null);
 
@@ -178,29 +179,39 @@ export default function AigAdminDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {filteredCohorts.map((cohort) => (
-                  <div key={cohort.id} className="bg-white border border-emerald-900/10 rounded-2xl p-4 shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center font-black text-emerald-800 border border-emerald-200 text-xs">
-                          {cohort.label.replace("Cohort ", "")}
+                {filteredCohorts.map((cohort) => {
+                  const canDrill = !!cohort.mentorSlug;
+                  return (
+                    <div
+                      key={cohort.id}
+                      className={`bg-white border border-emerald-900/10 rounded-2xl p-4 shadow-sm transition-shadow ${canDrill ? "cursor-pointer hover:shadow-md hover:border-emerald-400/40" : ""}`}
+                      onClick={() => canDrill && navigate(`/admin/${aigSlug}/mentor/${cohort.mentorSlug}`)}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center font-black text-emerald-800 border border-emerald-200 text-xs">
+                            {cohort.label.replace("Cohort ", "")}
+                          </div>
+                          <div>
+                            <div className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">{cohort.mentorName}</div>
+                            <div className="font-bold text-sm text-emerald-950">{cohort.reviewed} / {cohort.total} Cleared</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">{cohort.mentorName}</div>
-                          <div className="font-bold text-sm text-emerald-950">{cohort.reviewed} / {cohort.total} Cleared</div>
+                        <div className="flex items-center gap-1.5">
+                          {cohort.status === "Completed" && <CheckCircle size={18} className="text-emerald-500" />}
+                          {cohort.status === "Critical"  && <AlertTriangle size={18} className="text-red-500" />}
+                          {canDrill && <ChevronRight size={16} className="text-emerald-400" />}
                         </div>
                       </div>
-                      {cohort.status === "Completed" && <CheckCircle size={18} className="text-emerald-500" />}
-                      {cohort.status === "Critical"  && <AlertTriangle size={18} className="text-red-500" />}
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${cohort.status === "Critical" ? "bg-amber-500" : "bg-emerald-500"}`}
+                          style={{ width: `${cohort.total > 0 ? Math.round((cohort.reviewed / cohort.total) * 100) : 0}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${cohort.status === "Critical" ? "bg-amber-500" : "bg-emerald-500"}`}
-                        style={{ width: `${cohort.total > 0 ? Math.round((cohort.reviewed / cohort.total) * 100) : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>

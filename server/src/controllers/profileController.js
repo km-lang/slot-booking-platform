@@ -36,7 +36,17 @@ const updateProfile = async (req, res, next) => {
       }
     }
 
-    res.json({ name: user.name, email: user.email, role: user.role });
+    // Re-fetch mentor fields so the response matches GET /profile shape
+    let mentorFields = null;
+    if (user.role === "MENTOR") {
+      const mp = await prisma.mentorProfile.findUnique({
+        where:  { userId: req.user.sub },
+        select: { firm: true, domain: true, slug: true },
+      });
+      mentorFields = mp;
+    }
+
+    res.json({ name: user.name, email: user.email, role: user.role, ...(mentorFields ?? {}) });
   } catch (err) {
     next(err);
   }

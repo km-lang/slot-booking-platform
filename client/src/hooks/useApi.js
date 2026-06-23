@@ -14,6 +14,7 @@ export const QK = {
   mentorDashboard: ()        => ["mentorDashboard"],
   mentorCohort:    ()        => ["mentorCohort"],
   aigOverview:     (slug)    => ["aigOverview", slug],
+  mentorDetail:    (slug)    => ["mentorDetail", slug],
   adminBatch:      ()        => ["adminBatch"],
   whitelist:       ()        => ["whitelist"],
   config:          ()        => ["config"],
@@ -101,6 +102,14 @@ export const useAigOverview = (aigSlug) =>
     queryKey: QK.aigOverview(aigSlug),
     queryFn:  () => apiFetch(`/admin/aig/${aigSlug}`),
     enabled:  !!aigSlug,
+  });
+
+export const useMentorDetail = (mentorSlug) =>
+  useQuery({
+    queryKey: QK.mentorDetail(mentorSlug),
+    queryFn:  () => apiFetch(`/admin/mentor/${mentorSlug}`),
+    enabled:  !!mentorSlug,
+    staleTime: 30_000,
   });
 
 export const useAdminBatch = () =>

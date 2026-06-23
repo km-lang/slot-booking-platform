@@ -7,6 +7,7 @@ import MentorBookingView from "./pages/MentorBookingView";
 import MentorDashboard from "./pages/MentorDashboard";
 import MentorCohortDetails from "./pages/MentorCohortDetails";
 import AigAdminDashboard from "./pages/AigAdminDashboard";
+import AigMentorDetail from "./pages/AigMentorDetail";
 import PlacementAdminDashboard from "./pages/PlacementAdminDashboard";
 import ProfileSettings from "./pages/ProfileSettings";
 import LoginPage from "./pages/LoginPage";
@@ -48,6 +49,7 @@ function App() {
 
       <Route element={<RequireRole role="AIGs" />}>
         <Route path="/admin/:aigSlug" element={<AigAdminDashboard />} />
+        <Route path="/admin/:aigSlug/mentor/:mentorSlug" element={<AigMentorDetail />} />
       </Route>
     </Routes>
   );

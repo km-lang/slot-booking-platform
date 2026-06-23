@@ -21,7 +21,7 @@ const getAigOverview = async (req, res, next) => {
     const cohorts = await prisma.cohort.findMany({
       where: { aigId: aig.id },
       include: {
-        mentorProfiles: { include: { user: { select: { name: true } } } },
+        mentorProfiles: { select: { id: true, slug: true, user: { select: { name: true } } } },
         studentProfiles: {
           include: {
             user: {
@@ -59,6 +59,7 @@ const getAigOverview = async (req, res, next) => {
         id: c.id,
         label: c.label,
         mentorName: c.mentorProfiles[0]?.user?.name ?? "Unassigned",
+        mentorSlug: c.mentorProfiles[0]?.slug ?? null,
         total,
         reviewed,
         pending: total - reviewed,
@@ -344,8 +345,116 @@ const liftBan = async (req, res, next) => {
   }
 };
 
+// ─── Mentor Session Detail (AIG admin view) ───────────────────────────────────
+
+const getMentorSessionDetail = async (req, res, next) => {
+  try {
+    const { mentorSlug } = req.params;
+
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { slug: mentorSlug },
+      include: {
+        user:   { select: { name: true, email: true } },
+        aig:    { select: { slug: true, name: true } },
+        cohort: {
+          include: {
+            studentProfiles: {
+              include: {
+                user: {
+                  select: {
+                    name:     true,
+                    email:    true,
+                    bookings: {
+                      where:  { status: { in: ["CONFIRMED", "ATTENDED", "NO_SHOW"] } },
+                      select: { id: true, status: true },
+                    },
+                  },
+                },
+              },
+              orderBy: { pgpId: "asc" },
+            },
+          },
+        },
+      },
+    });
+
+    if (!mentorProfile) return res.status(404).json({ error: "Mentor not found" });
+
+    // AIG scope check for AIGs role
+    if (req.user.role === "AIGs" && mentorProfile.aig?.slug !== req.user.aigSlug) {
+      return res.status(403).json({ error: "Forbidden — outside your AIG scope" });
+    }
+
+    // All bookings for this mentor's slots
+    const bookings = await prisma.booking.findMany({
+      where:   { slot: { mentorProfileId: mentorProfile.id } },
+      include: {
+        slot:    { select: { startTime: true, endTime: true, venue: true } },
+        student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    const totalSlots  = await prisma.slot.count({ where: { mentorProfileId: mentorProfile.id } });
+    const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    const stats = {
+      totalSlots,
+      confirmed: bookings.filter((b) => b.status === "CONFIRMED").length,
+      attended:  bookings.filter((b) => b.status === "ATTENDED").length,
+      noShow:    bookings.filter((b) => b.status === "NO_SHOW").length,
+      cancelled: bookings.filter((b) => b.status === "CANCELLED").length,
+    };
+
+    // Cohort student list with their cleared status
+    const students = (mentorProfile.cohort?.studentProfiles ?? []).map((sp) => {
+      const attended = sp.user.bookings.some((b) => b.status === "ATTENDED");
+      const booked   = sp.user.bookings.length > 0;
+      return {
+        name:     sp.user.name ?? sp.user.email,
+        email:    sp.user.email,
+        pgpId:    sp.pgpId,
+        status:   attended ? "Attended" : booked ? "Booked" : "Pending",
+      };
+    });
+
+    const sessionHistory = bookings.map((b) => ({
+      id:          b.id,
+      status:      b.status,
+      focus:       FOCUS_DISPLAY[b.focus] ?? b.focus,
+      date:        fmtDate(b.slot.startTime),
+      time:        fmtTime(b.slot.startTime),
+      venue:       b.slot.venue,
+      studentName: b.student?.name ?? "—",
+      studentPgp:  b.student?.studentProfile?.pgpId ?? "—",
+      studentEmail:b.student?.email ?? "—",
+      createdAt:   b.createdAt,
+    }));
+
+    res.json({
+      mentor: {
+        name:   mentorProfile.user.name,
+        email:  mentorProfile.user.email,
+        firm:   mentorProfile.firm,
+        domain: mentorProfile.domain,
+        slug:   mentorProfile.slug,
+      },
+      aig:          { slug: mentorProfile.aig?.slug, name: mentorProfile.aig?.name },
+      cohortLabel:  mentorProfile.cohort?.label ?? null,
+      stats,
+      students,
+      sessionHistory,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAigOverview,
+  getMentorSessionDetail,
   getBatchOverview,
   listWhitelist,
   addToWhitelist,
