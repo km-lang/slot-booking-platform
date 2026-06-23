@@ -83,4 +83,40 @@ const googleSignIn = async (req, res, next) => {
   }
 };
 
-module.exports = { googleSignIn };
+// Silently re-issues a fresh JWT for an already-authenticated user.
+// Called by the client when the token is within 60 minutes of expiry.
+// Validates the current token (verifySession runs first), re-checks the
+// whitelist (catches revoked access), then signs a new token with reset expiry.
+const refreshToken = async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where:  { id: req.user.sub },
+      select: { id: true, email: true, role: true, name: true },
+    });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const whitelistEntry = await prisma.accessWhitelist.findUnique({
+      where:   { email: user.email },
+      include: { aig: true },
+    });
+    if (!whitelistEntry) return res.status(403).json({ error: "Access has been revoked" });
+
+    const sessionPayload = {
+      sub:   user.id,
+      email: user.email,
+      role:  user.role,
+      ...(whitelistEntry.aigId       && { aigId:   whitelistEntry.aigId }),
+      ...(whitelistEntry.aig?.slug   && { aigSlug: whitelistEntry.aig.slug }),
+    };
+
+    const token = jwt.sign(sessionPayload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+    });
+
+    res.json({ token });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { googleSignIn, refreshToken };
