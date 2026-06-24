@@ -5,6 +5,7 @@ import {
   XCircle, AlertCircle, Hourglass, AlertTriangle,
 } from "lucide-react";
 import { useMyBookings, useCancelBooking } from "../hooks/useApi";
+import AppFooter from "../components/AppFooter";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -75,7 +76,7 @@ function BookingCard({ booking, onCancel, isCancelling }) {
         </div>
       )}
 
-      <div className="bg-[#F8FAF7] rounded-xl p-3 space-y-1.5 mb-3 border border-emerald-900/5">
+      <div className="bg-[#F8F8F8] rounded-xl p-3 space-y-1.5 mb-3 border border-emerald-900/5">
         <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
           <Clock size={13} className="text-emerald-600 shrink-0" />
           {booking.slotLabel}
@@ -119,8 +120,8 @@ export default function StudentMyBookings() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans sm:bg-slate-100">
-      <div className="max-w-md mx-auto min-h-screen bg-[#F8FAF7] shadow-2xl flex flex-col">
+    <div className="min-h-screen app-bg text-emerald-950 font-sans">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl flex flex-col">
 
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
           <button
@@ -204,6 +205,7 @@ export default function StudentMyBookings() {
             )}
           </section>
         </main>
+        <AppFooter />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, User, Save, CheckCircle } from "lucide-react";
 import { useProfile, useUpdateProfile } from "../hooks/useApi";
 import { useAuth } from "../context/useAuth";
+import AppFooter from "../components/AppFooter";
 
 export default function ProfileSettings() {
   const navigate    = useNavigate();
@@ -48,8 +49,8 @@ export default function ProfileSettings() {
     : "/student";
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans sm:bg-slate-100">
-      <div className="max-w-md mx-auto min-h-screen bg-[#F8FAF7] shadow-2xl flex flex-col">
+    <div className="min-h-screen app-bg text-emerald-950 font-sans">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl flex flex-col">
 
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
           <button
@@ -97,7 +98,7 @@ export default function ProfileSettings() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your full name"
                   required
-                  className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                  className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
                 />
               </div>
 
@@ -131,7 +132,7 @@ export default function ProfileSettings() {
                     value={firm}
                     onChange={(e) => setFirm(e.target.value)}
                     placeholder="e.g. McKinsey & Co."
-                    className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                    className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
@@ -143,7 +144,7 @@ export default function ProfileSettings() {
                     value={domain}
                     onChange={(e) => setDomain(e.target.value)}
                     placeholder="e.g. Strategy Consulting"
-                    className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                    className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
@@ -174,6 +175,7 @@ export default function ProfileSettings() {
             </button>
           </form>
         </main>
+        <AppFooter />
       </div>
     </div>
   );

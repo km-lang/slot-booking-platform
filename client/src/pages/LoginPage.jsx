@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield } from "lucide-react";
+import { Shield, Heart } from "lucide-react";
 import { useAuth } from "../context/useAuth";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -79,7 +79,7 @@ export default function LoginPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] flex items-center justify-center px-4">
+    <div className="min-h-screen app-bg flex items-center justify-center px-4">
       <div className="text-center w-full max-w-xs">
         <div className="w-16 h-16 rounded-2xl bg-emerald-900 flex items-center justify-center text-emerald-400 mx-auto mb-6">
           <Shield size={32} />
@@ -101,7 +101,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 transition-colors"
+                className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 transition-colors"
               />
               {error && (
                 <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -130,6 +130,16 @@ export default function LoginPage() {
               </p>
             </>
           )}
+        </div>
+
+        <div className="mt-8 flex flex-col items-center gap-1.5">
+          <p className="text-xs font-semibold text-emerald-700/50 flex items-center gap-1">
+            Made with <Heart size={12} className="text-emerald-500 fill-emerald-500" /> by
+          </p>
+          <p className="text-sm font-black text-emerald-950 tracking-tight">Team Synapse</p>
+          <span className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-widest border border-emerald-900/15 rounded px-2 py-0.5">
+            IIM Lucknow
+          </span>
         </div>
       </div>
     </div>

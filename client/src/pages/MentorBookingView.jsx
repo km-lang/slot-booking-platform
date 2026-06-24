@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMentor, useSlots, useBookSlot, useCancelBooking, QK } from "../hooks/useApi";
+import AppFooter from "../components/AppFooter";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -118,10 +119,10 @@ export default function MentorBookingView() {
       {/* Profile Header */}
       <div className="flex flex-col items-center text-center py-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="relative mb-4">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center font-black text-3xl text-emerald-800 border-4 border-[#F8FAF7] shadow-lg">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center font-black text-3xl text-emerald-800 border-4 border-[#F8F8F8] shadow-lg">
             {displayName.split(" ").map((n) => n[0]).join("").substring(0, 2)}
           </div>
-          <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-[#F8FAF7] flex items-center justify-center animate-pulse" />
+          <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-[#F8F8F8] flex items-center justify-center animate-pulse" />
         </div>
         <h2 className="text-2xl font-black text-emerald-950 leading-tight">{displayName}</h2>
         {mentor?.firm && (
@@ -216,6 +217,8 @@ export default function MentorBookingView() {
         </div>
       </div>
 
+      <AppFooter />
+
       {/* Bottom Sheet Backdrop */}
       <div
         className={`absolute inset-0 bg-emerald-950/40 backdrop-blur-sm z-40 transition-opacity duration-300 rounded-lg
@@ -242,7 +245,7 @@ export default function MentorBookingView() {
               </h3>
               <p className="text-sm font-semibold text-emerald-700/70 mb-6">with {displayName}</p>
 
-              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F8FAF7] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
+              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F8F8F8] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
                 <div className={`flex items-center gap-3 mb-3 pb-3 border-b ${sheetMode === "BOOK" ? "border-emerald-900/5" : "border-red-900/5"}`}>
                   <Clock className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
                   <span className="font-bold text-emerald-950">{slotTime}</span>
@@ -310,7 +313,7 @@ export default function MentorBookingView() {
                   ${isProcessing || (sheetMode === "BOOK" && !purpose)
                     ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                     : sheetMode === "BOOK"
-                    ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(6,45,28,0.2)] active:scale-95"
+                    ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95"
                     : "bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:scale-95"}`}
               >
                 {isProcessing ? (

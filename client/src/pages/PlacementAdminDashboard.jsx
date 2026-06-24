@@ -11,9 +11,10 @@ import {
   useAddWhitelist, useRemoveWhitelist, useSaveConfig, useLiftBan,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
+import AppFooter from "../components/AppFooter";
 import { getToken } from "../lib/apiClient";
 
-const COLORS = ["#064E3B", "#047857", "#10B981", "#6EE7B7"];
+const COLORS = ["#000000", "#515151", "#b13b35", "#dfcac8"];
 
 const downloadCsv = async (url, filename) => {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -151,7 +152,7 @@ function OverviewTab() {
                     <Pie data={purposeDistribution} innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
                       {purposeDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#02120A", fontWeight: "bold" }} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#000000", fontWeight: "bold" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -178,11 +179,11 @@ function OverviewTab() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={mentorUtilization} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#064E3B", fontSize: 12, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#064E3B", fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: "rgba(16,185,129,0.05)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
-                  <Bar dataKey="offered" name="Slots Offered" fill="#A7F3D0" radius={[4, 4, 0, 0]} barSize={24} />
-                  <Bar dataKey="completed" name="Completed" fill="#047857" radius={[4, 4, 0, 0]} barSize={24} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#000000", fontSize: 12, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#000000", fontSize: 12 }} />
+                  <Tooltip cursor={{ fill: "rgba(177,59,53,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
+                  <Bar dataKey="offered" name="Slots Offered" fill="#dfcac8" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Bar dataKey="completed" name="Completed" fill="#b13b35" radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -294,11 +295,11 @@ function WhitelistTab() {
           <input
             type="email" placeholder="email@iiml.ac.in" value={addEmail}
             onChange={(e) => setAddEmail(e.target.value)} required
-            className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
+            className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
           />
           <div className="flex gap-3">
             <select value={addRole} onChange={(e) => { setAddRole(e.target.value); setAddAigSlug(""); }}
-              className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+              className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
               <option value="STUDENT">STUDENT</option>
               <option value="MENTOR">MENTOR</option>
               <option value="AIGs">AIGs</option>
@@ -306,7 +307,7 @@ function WhitelistTab() {
             </select>
             {addRole === "AIGs" && (
               <select value={addAigSlug} onChange={(e) => setAddAigSlug(e.target.value)} required
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
                 <option value="">Select AIG…</option>
                 {aigs.map((a) => <option key={a.id} value={a.slug}>{a.name}</option>)}
               </select>
@@ -337,7 +338,7 @@ function WhitelistTab() {
               placeholder="Search email or role…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
+              className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
             />
           </div>
         </div>
@@ -442,7 +443,7 @@ function ConfigTab() {
         <input
           type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)}
           disabled={isLoading}
-          className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
+          className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
         />
         <button
           onClick={() => saveMutation.mutate({ key: "cv_freeze_deadline", value: new Date(deadline).toISOString() })}
@@ -474,7 +475,7 @@ function ConfigTab() {
                 onChange={(e) => setWarnAt(e.target.value)}
                 disabled={isLoading}
                 placeholder="60"
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_warning_minutes", value: warnAt })}
@@ -499,7 +500,7 @@ function ConfigTab() {
                 onChange={(e) => setStrikeAt(e.target.value)}
                 disabled={isLoading}
                 placeholder="30"
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_strike_minutes", value: strikeAt })}
@@ -524,7 +525,7 @@ function ConfigTab() {
                 onChange={(e) => setWarnToStrike(e.target.value)}
                 disabled={isLoading}
                 placeholder="3"
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_warning_to_strike", value: warnToStrike })}
@@ -620,7 +621,7 @@ export default function PlacementAdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans pb-12">
+    <div className="min-h-screen app-bg text-emerald-950 font-sans pb-12">
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-3 font-bold text-lg text-emerald-950">
           <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400">
@@ -672,6 +673,7 @@ export default function PlacementAdminDashboard() {
         {activeTab === "whitelist" && <WhitelistTab />}
         {activeTab === "config"    && <ConfigTab />}
         {activeTab === "bans"      && <BansTab />}
+        <AppFooter />
       </main>
     </div>
   );

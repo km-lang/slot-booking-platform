@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight } from "lucide-react";
 import { useAigOverview } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
+import AppFooter from "../components/AppFooter";
 
 const getCountdown = (deadline) => {
   if (!deadline) return null;
@@ -37,8 +38,8 @@ export default function AigAdminDashboard() {
   const atRisk = data?.atRiskStudents ?? [];
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans pb-24 sm:bg-slate-100">
-      <div className="max-w-md md:max-w-4xl mx-auto min-h-screen bg-[#F8FAF7] shadow-2xl relative">
+    <div className="min-h-screen app-bg text-emerald-950 font-sans pb-24">
+      <div className="max-w-md md:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl relative">
 
         {/* Sticky Header */}
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-4">
@@ -215,6 +216,7 @@ export default function AigAdminDashboard() {
               </div>
             )}
           </section>
+          <AppFooter />
         </main>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
 import { useMentorCohort } from "../hooks/useApi";
 import { getToken } from "../lib/apiClient";
+import AppFooter from "../components/AppFooter";
 
 const downloadCsv = async (url, filename) => {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -39,8 +40,8 @@ export default function MentorCohortDetails() {
     : "Cohort Tracker";
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans sm:bg-slate-100">
-      <div className="max-w-md mx-auto min-h-screen bg-[#F8FAF7] shadow-2xl relative flex flex-col">
+    <div className="min-h-screen app-bg text-emerald-950 font-sans">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl relative flex flex-col">
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -118,7 +119,7 @@ export default function MentorCohortDetails() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mb-3 bg-[#F8FAF7] rounded-xl p-3 border border-emerald-900/5">
+                    <div className="grid grid-cols-2 gap-2 mb-3 bg-[#F8F8F8] rounded-xl p-3 border border-emerald-900/5">
                       <div>
                         <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">Slots Taken</div>
                         <div className="font-black text-sm text-emerald-950">
@@ -147,6 +148,7 @@ export default function MentorCohortDetails() {
               })
             )}
           </div>
+          <AppFooter />
         </main>
       </div>
     </div>
