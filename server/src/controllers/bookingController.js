@@ -49,7 +49,12 @@ const createBooking = async (req, res, next) => {
     }
 
     const existing = await prisma.booking.findUnique({ where: { idempotencyKey } });
-    if (existing) return res.status(200).json(existing);
+    if (existing) {
+      if (existing.studentUserId !== req.user.sub) {
+        return res.status(409).json({ error: "Idempotency key already in use" });
+      }
+      return res.status(200).json(existing);
+    }
 
     const activeBan = await prisma.ban.findFirst({
       where: {
@@ -139,7 +144,7 @@ const createBooking = async (req, res, next) => {
     } catch (err) {
       if (err.code === "P2002") {
         const replay = await prisma.booking.findUnique({ where: { idempotencyKey } });
-        if (replay) return res.status(200).json(replay);
+        if (replay && replay.studentUserId === req.user.sub) return res.status(200).json(replay);
       }
       throw err;
     }

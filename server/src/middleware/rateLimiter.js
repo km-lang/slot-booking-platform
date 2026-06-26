@@ -17,4 +17,26 @@ const bookingRateLimiter = rateLimit({
   message: { error: "Too many booking requests — please wait a moment and try again." },
 });
 
-module.exports = bookingRateLimiter;
+// Applied to POST /api/auth/google — the only fully public, unauthenticated endpoint.
+// Keyed by IP (no req.user exists pre-login). Generous enough for a real user retrying
+// a dropped Google popup, tight enough to blunt brute-force/credential-stuffing and DoS.
+const authRateLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts — please wait a few minutes and try again." },
+});
+
+// Applied to POST /api/auth/refresh — authenticated (verifySession runs first), so this
+// is keyed per user rather than per IP.
+const refreshRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? "anonymous",
+  message: { error: "Too many refresh attempts — please wait a moment and try again." },
+});
+
+module.exports = { bookingRateLimiter, authRateLimiter, refreshRateLimiter };

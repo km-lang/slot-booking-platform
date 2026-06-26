@@ -13,7 +13,12 @@ const googleSignIn = async (req, res, next) => {
   try {
     let email, name;
 
-    if (process.env.AUTH_MODE === "dev") {
+    // Defense-in-depth: even if AUTH_MODE=dev is left set, never honor the
+    // credential-less email-only path on a production deploy — it would let
+    // anyone log in as any whitelisted email with zero verification.
+    const devModeAllowed = process.env.AUTH_MODE === "dev" && process.env.NODE_ENV !== "production";
+
+    if (devModeAllowed) {
       email = req.body.email?.trim().toLowerCase();
       if (!email) return res.status(400).json({ error: "email is required in dev mode" });
       name = email.split("@")[0];
@@ -46,14 +51,13 @@ const googleSignIn = async (req, res, next) => {
       });
     }
 
-    const isDevMode = process.env.AUTH_MODE === "dev";
     const user = await prisma.user.upsert({
       where: { email },
       create: { email, role: whitelistEntry.role, name },
       // In dev mode the name is derived from the email prefix — never overwrite a
       // seeded display name with that garbage value. In production the name comes
       // from Google and is always worth keeping fresh.
-      update: { role: whitelistEntry.role, ...(!isDevMode && name ? { name } : {}) },
+      update: { role: whitelistEntry.role, ...(!devModeAllowed && name ? { name } : {}) },
     });
 
     const sessionPayload = {
@@ -65,6 +69,7 @@ const googleSignIn = async (req, res, next) => {
     };
 
     const token = jwt.sign(sessionPayload, process.env.JWT_SECRET, {
+      algorithm: "HS256",
       expiresIn: process.env.JWT_EXPIRES_IN || "8h",
     });
 
@@ -110,6 +115,7 @@ const refreshToken = async (req, res, next) => {
     };
 
     const token = jwt.sign(sessionPayload, process.env.JWT_SECRET, {
+      algorithm: "HS256",
       expiresIn: process.env.JWT_EXPIRES_IN || "8h",
     });
 
