@@ -2,10 +2,23 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, CalendarCheck, Clock, MapPin, CheckCircle2,
-  XCircle, AlertCircle, Hourglass, AlertTriangle,
+  XCircle, AlertCircle, Hourglass, AlertTriangle, Download,
 } from "lucide-react";
 import { useMyBookings, useCancelBooking } from "../hooks/useApi";
+import { getToken, API_BASE } from "../lib/apiClient";
 import AppFooter from "../components/AppFooter";
+
+const downloadCsv = async (url, filename) => {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), { href, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+};
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -76,7 +89,7 @@ function BookingCard({ booking, onCancel, isCancelling }) {
         </div>
       )}
 
-      <div className="bg-[#F8F8F8] rounded-xl p-3 space-y-1.5 mb-3 border border-emerald-900/5">
+      <div className="bg-[#F5F7FA] rounded-xl p-3 space-y-1.5 mb-3 border border-emerald-900/5">
         <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
           <Clock size={13} className="text-emerald-600 shrink-0" />
           {booking.slotLabel}
@@ -121,23 +134,33 @@ export default function StudentMyBookings() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl flex flex-col">
 
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate("/student")}
-            className="p-2 -ml-2 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="font-black text-lg leading-tight text-emerald-950">My Sessions</h1>
-            <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
-              {isLoading
-                ? "Loading…"
-                : `${upcoming.length} upcoming · ${past.length} past`}
-            </p>
+        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/student")}
+              className="p-2 -ml-2 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="font-black text-lg leading-tight text-emerald-950">My Sessions</h1>
+              <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
+                {isLoading
+                  ? "Loading…"
+                  : `${upcoming.length} upcoming · ${past.length} past`}
+              </p>
+            </div>
           </div>
+          <button
+            onClick={() => downloadCsv(`${API_BASE}/bookings/export`, "my-bookings.csv")}
+            disabled={isLoading || (upcoming.length === 0 && past.length === 0)}
+            className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
+            title="Export my booking history (CSV)"
+          >
+            <Download size={16} />
+          </button>
         </header>
 
         <main className="flex-1 px-4 py-6 space-y-8">
