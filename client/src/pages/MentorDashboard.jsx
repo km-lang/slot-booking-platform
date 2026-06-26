@@ -60,7 +60,7 @@ function RunningLateSheet({ session, onClose }) {
               className={`py-2.5 rounded-xl text-sm font-bold border transition-colors
                 ${!useCustom && delayMins === m
                   ? "bg-amber-100 border-amber-400 text-amber-800"
-                  : "bg-[#F8F8F8] border-emerald-900/10 text-emerald-800 hover:bg-amber-50"}`}
+                  : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-800 hover:bg-amber-50"}`}
             >
               {m}m
             </button>
@@ -76,7 +76,7 @@ function RunningLateSheet({ session, onClose }) {
             value={custom}
             onChange={(e) => { setCustom(e.target.value); setUseCustom(true); }}
             onFocus={() => setUseCustom(true)}
-            className={`flex-1 bg-[#F8F8F8] border rounded-xl px-4 py-2.5 text-sm font-bold outline-none
+            className={`flex-1 bg-[#F5F7FA] border rounded-xl px-4 py-2.5 text-sm font-bold outline-none
               ${useCustom ? "border-amber-400" : "border-emerald-900/10"}`}
           />
           <span className="text-xs font-bold text-emerald-700/60">minutes</span>
@@ -252,7 +252,7 @@ export default function MentorDashboard() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans pb-24">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl relative flex flex-col overflow-hidden">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative flex flex-col overflow-hidden">
 
         {/* Header */}
         <header className="bg-emerald-900 px-5 pt-4 pb-6 rounded-b-3xl shadow-lg relative z-10">
@@ -261,7 +261,7 @@ export default function MentorDashboard() {
               <Shield size={18} className="text-emerald-400" /> Mentor Console
             </div>
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/mentor")}
               className="bg-emerald-950 text-white text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-inner border border-emerald-800 active:scale-95 transition-all flex items-center gap-1.5"
             >
               <Shield size={12} className="text-emerald-400" /> Shukracharya
@@ -401,19 +401,19 @@ export default function MentorDashboard() {
             <div>
               <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Date</label>
               <input type="date" value={slotDate} onChange={(e) => setSlotDate(e.target.value)}
-                className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Start Time</label>
                 <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                  className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">End Time</label>
                 <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                  className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
               </div>
             </div>
 
@@ -436,7 +436,7 @@ export default function MentorDashboard() {
               <div className="grid grid-cols-4 gap-2">
                 {[15, 20, 30, 45].map((d) => (
                   <button key={d} type="button" onClick={() => setSlotDuration(d)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${slotDuration === d ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F8F8F8] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${slotDuration === d ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
                     {d}m
                   </button>
                 ))}
@@ -446,7 +446,7 @@ export default function MentorDashboard() {
             <div>
               <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Venue</label>
               <select value={selectedVenue} onChange={(e) => setSelectedVenue(e.target.value)}
-                className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none appearance-none">
+                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none appearance-none">
                 <option>Library (In-Person)</option>
                 <option>Online (Google Meet)</option>
               </select>

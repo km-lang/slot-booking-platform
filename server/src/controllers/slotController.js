@@ -36,12 +36,25 @@ const listMentors = async (req, res, next) => {
   try {
     const { aigSlug } = req.query;
     const now = new Date();
+
+    // Only students booking for themselves need cohort eligibility factored into the count —
+    // without this, a student could see "5 Slots" on a mentor and find most are cohort-only
+    // slots they're not actually eligible to book.
+    let studentCohortId = null;
+    if (req.user.role === "STUDENT") {
+      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
+      studentCohortId = sp?.cohortId ?? null;
+    }
+
     const mentors = await prisma.mentorProfile.findMany({
       where: aigSlug ? { aig: { slug: aigSlug } } : undefined,
       include: {
         user: true,
         aig: true,
-        slots: { where: { startTime: { gt: now } }, include: { capacity: true } },
+        slots: {
+          where: { startTime: { gt: now } },
+          include: { capacity: true, release: { select: { cohortOnly: true } } },
+        },
       },
     });
 
@@ -52,7 +65,12 @@ const listMentors = async (req, res, next) => {
         name: m.user.name,
         firm: m.firm,
         domain: m.domain,
-        liveSlots: m.slots.filter((s) => !s.capacity || s.capacity.current < s.capacity.max).length,
+        liveSlots: m.slots.filter((s) => {
+          const open = !s.capacity || s.capacity.current < s.capacity.max;
+          if (!open) return false;
+          const restricted = s.release?.cohortOnly && (studentCohortId === null || studentCohortId !== m.cohortId);
+          return !restricted;
+        }).length,
       })),
     );
   } catch (err) {
@@ -88,6 +106,16 @@ const listSlots = async (req, res, next) => {
     const mentor = await prisma.mentorProfile.findUnique({ where: { slug: mentorSlug } });
     if (!mentor) return res.status(404).json({ error: "Mentor not found" });
 
+    // Eligibility for cohort-only slots — surfaced as a distinct status below so the UI can
+    // show ineligible slots as restricted up front, instead of inviting a "Book" tap that
+    // would only fail with a 403 once the student reaches the confirm step.
+    let studentCohortId = null;
+    if (req.user.role === "STUDENT") {
+      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
+      studentCohortId = sp?.cohortId ?? null;
+    }
+    const isCohortMember = studentCohortId !== null && studentCohortId === mentor.cohortId;
+
     const now = new Date();
     const slots = await prisma.slot.findMany({
       where: { mentorProfileId: mentor.id, startTime: { gt: now } },
@@ -102,17 +130,20 @@ const listSlots = async (req, res, next) => {
     res.json(
       slots.map((slot) => {
         const myBooking = slot.bookings.find((b) => b.studentUserId === req.user.sub);
+        const cohortOnly = slot.release?.cohortOnly ?? false;
         let status = "AVAILABLE";
         if (myBooking) status = "BOOKED_BY_ME";
         else if (slot.capacity && slot.capacity.current >= slot.capacity.max) status = "BOOKED_BY_OTHER";
+        else if (cohortOnly && !isCohortMember) status = "COHORT_RESTRICTED";
 
         return {
           id: slot.id,
           startTime: slot.startTime,
           endTime: slot.endTime,
           venue: slot.venue,
-          cohortOnly: slot.release?.cohortOnly ?? false,
+          cohortOnly,
           status,
+          delayMinutes: slot.delayMinutes ?? 0,
           ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus }),
         };
       }),
@@ -274,7 +305,7 @@ const getMentorCohort = async (req, res, next) => {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       const isBanned = sp.user.bans.length > 0;
       const isReady = attended.length > 0;
-      const status = isBanned ? "Action Needed" : isReady ? "Ready" : "In Progress";
+      const status = isBanned ? "Action Needed" : isReady ? "Reviewed" : "In Progress";
       return {
         id: sp.id,
         name: sp.user.name,

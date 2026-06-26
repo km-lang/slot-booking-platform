@@ -13,7 +13,7 @@ const STATUS_BADGE = {
 };
 
 const STUDENT_STATUS = {
-  Attended: { label: "Cleared",  cls: "bg-emerald-100 text-emerald-700" },
+  Attended: { label: "Reviewed", cls: "bg-emerald-100 text-emerald-700" },
   Booked:   { label: "Booked",   cls: "bg-blue-100 text-blue-700" },
   Pending:  { label: "Pending",  cls: "bg-slate-100 text-slate-500" },
 };

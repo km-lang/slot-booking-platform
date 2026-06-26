@@ -79,7 +79,7 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
       </button>
 
       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="bg-[#F8F8F8] border-t border-emerald-900/5 divide-y divide-emerald-900/5">
+        <div className="bg-[#F5F7FA] border-t border-emerald-900/5 divide-y divide-emerald-900/5">
           {isLoading ? (
             <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading mentors…</div>
           ) : mentors.length > 0 ? (
@@ -120,7 +120,7 @@ export default function StudentDashboard() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl relative flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative flex flex-col">
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
           <div className="flex-1">
             <h1 className="font-black text-lg leading-tight">Book your Slot</h1>
@@ -128,7 +128,7 @@ export default function StudentDashboard() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/student")}
               className="bg-emerald-900 hover:bg-emerald-800 text-white text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.15)] active:scale-95 transition-all"
             >
               Shukracharya

@@ -112,10 +112,12 @@ export const useMentorDetail = (mentorSlug) =>
     staleTime: 30_000,
   });
 
+// Polls so the "Live" activity feed on the Placement Admin dashboard is actually live.
 export const useAdminBatch = () =>
   useQuery({
     queryKey: QK.adminBatch(),
     queryFn:  () => apiFetch("/admin/batch"),
+    refetchInterval: 15_000,
   });
 
 export const useWhitelist = () =>

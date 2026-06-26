@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
 import { useMentorCohort } from "../hooks/useApi";
-import { getToken } from "../lib/apiClient";
+import { getToken, API_BASE } from "../lib/apiClient";
 import AppFooter from "../components/AppFooter";
 
 const downloadCsv = async (url, filename) => {
@@ -41,7 +41,7 @@ export default function MentorCohortDetails() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl relative flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative flex flex-col">
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -56,7 +56,7 @@ export default function MentorCohortDetails() {
             </div>
           </div>
           <button
-            onClick={() => downloadCsv("/api/cohort/export", `cohort-${cohort?.label ?? "export"}.csv`)}
+            onClick={() => downloadCsv(`${API_BASE}/cohort/export`, `cohort-${cohort?.label ?? "export"}.csv`)}
             disabled={isLoading || !cohort}
             className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
             title="Download cohort CSV"
@@ -93,7 +93,7 @@ export default function MentorCohortDetails() {
             ) : (
               filteredMembers.map((mentee) => {
                 const isWarning = mentee.status === "Action Needed";
-                const isReady   = mentee.status === "Ready";
+                const isReady   = mentee.status === "Reviewed";
 
                 return (
                   <div key={mentee.id} className="p-4">
@@ -119,7 +119,7 @@ export default function MentorCohortDetails() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mb-3 bg-[#F8F8F8] rounded-xl p-3 border border-emerald-900/5">
+                    <div className="grid grid-cols-2 gap-2 mb-3 bg-[#F5F7FA] rounded-xl p-3 border border-emerald-900/5">
                       <div>
                         <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">Slots Taken</div>
                         <div className="font-black text-sm text-emerald-950">

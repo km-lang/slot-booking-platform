@@ -12,9 +12,9 @@ import {
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
-import { getToken } from "../lib/apiClient";
+import { getToken, API_BASE } from "../lib/apiClient";
 
-const COLORS = ["#000000", "#515151", "#b13b35", "#dfcac8"];
+const COLORS = ["#2E3A46", "#5B7C99", "#8FB0C2", "#A8C3D1"];
 
 const downloadCsv = async (url, filename) => {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -152,7 +152,7 @@ function OverviewTab() {
                     <Pie data={purposeDistribution} innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
                       {purposeDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#000000", fontWeight: "bold" }} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#2E3A46", fontWeight: "bold" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -179,11 +179,11 @@ function OverviewTab() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={mentorUtilization} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#000000", fontSize: 12, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#000000", fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: "rgba(177,59,53,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
-                  <Bar dataKey="offered" name="Slots Offered" fill="#dfcac8" radius={[4, 4, 0, 0]} barSize={24} />
-                  <Bar dataKey="completed" name="Completed" fill="#b13b35" radius={[4, 4, 0, 0]} barSize={24} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 12, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 12 }} />
+                  <Tooltip cursor={{ fill: "rgba(91,124,153,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
+                  <Bar dataKey="offered" name="Slots Offered" fill="#A8C3D1" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Bar dataKey="completed" name="Completed" fill="#5B7C99" radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -197,8 +197,11 @@ function OverviewTab() {
           <h3 className="font-bold text-emerald-950 flex items-center gap-2">
             <ActivitySquare size={18} className="text-emerald-600" /> Recent Activity
           </h3>
-          <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+          <span
+            title="Auto-refreshes every 15 seconds"
+            className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Auto-Refresh
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -295,11 +298,11 @@ function WhitelistTab() {
           <input
             type="email" placeholder="email@iiml.ac.in" value={addEmail}
             onChange={(e) => setAddEmail(e.target.value)} required
-            className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
+            className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
           />
           <div className="flex gap-3">
             <select value={addRole} onChange={(e) => { setAddRole(e.target.value); setAddAigSlug(""); }}
-              className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+              className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
               <option value="STUDENT">STUDENT</option>
               <option value="MENTOR">MENTOR</option>
               <option value="AIGs">AIGs</option>
@@ -307,7 +310,7 @@ function WhitelistTab() {
             </select>
             {addRole === "AIGs" && (
               <select value={addAigSlug} onChange={(e) => setAddAigSlug(e.target.value)} required
-                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
                 <option value="">Select AIG…</option>
                 {aigs.map((a) => <option key={a.id} value={a.slug}>{a.name}</option>)}
               </select>
@@ -338,7 +341,7 @@ function WhitelistTab() {
               placeholder="Search email or role…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
+              className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
             />
           </div>
         </div>
@@ -443,7 +446,7 @@ function ConfigTab() {
         <input
           type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)}
           disabled={isLoading}
-          className="w-full bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
+          className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
         />
         <button
           onClick={() => saveMutation.mutate({ key: "cv_freeze_deadline", value: new Date(deadline).toISOString() })}
@@ -475,7 +478,7 @@ function ConfigTab() {
                 onChange={(e) => setWarnAt(e.target.value)}
                 disabled={isLoading}
                 placeholder="60"
-                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_warning_minutes", value: warnAt })}
@@ -500,7 +503,7 @@ function ConfigTab() {
                 onChange={(e) => setStrikeAt(e.target.value)}
                 disabled={isLoading}
                 placeholder="30"
-                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_strike_minutes", value: strikeAt })}
@@ -525,7 +528,7 @@ function ConfigTab() {
                 onChange={(e) => setWarnToStrike(e.target.value)}
                 disabled={isLoading}
                 placeholder="3"
-                className="flex-1 bg-[#F8F8F8] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_warning_to_strike", value: warnToStrike })}
@@ -615,6 +618,39 @@ function BansTab() {
   );
 }
 
+// ── Sync Badge ────────────────────────────────────────────────────────────────
+// Honest replacement for a hardcoded "Live" label — shows real elapsed time since the
+// last successful fetch, ticking every second, backed by useAdminBatch's 15s poll.
+
+function SyncBadge() {
+  const { dataUpdatedAt, isFetching } = useAdminBatch();
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const label = (() => {
+    if (isFetching) return "Syncing…";
+    if (!dataUpdatedAt) return "Not synced yet";
+    const secs = Math.max(0, Math.round((Date.now() - dataUpdatedAt) / 1000));
+    if (secs < 5) return "Synced just now";
+    if (secs < 60) return `Synced ${secs}s ago`;
+    return `Synced ${Math.round(secs / 60)}m ago`;
+  })();
+
+  return (
+    <span
+      title="Auto-refreshes every 15 seconds"
+      className="flex items-center gap-1.5 text-xs font-bold text-emerald-700/60 bg-emerald-900/5 px-3 py-1.5 rounded-full border border-emerald-900/10"
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${isFetching ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+      {label}
+    </span>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function PlacementAdminDashboard() {
@@ -630,9 +666,7 @@ export default function PlacementAdminDashboard() {
           <div>Placements <span className="text-emerald-700 text-sm font-semibold ml-1">Admin Console</span></div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-emerald-700/60 bg-emerald-900/5 px-3 py-1.5 rounded-full border border-emerald-900/10">
-            Last Sync: Live
-          </span>
+          <SyncBadge />
           <AvatarMenu />
         </div>
       </nav>
@@ -643,7 +677,7 @@ export default function PlacementAdminDashboard() {
           <p className="text-sm font-semibold text-emerald-700/70">PGP &amp; ABM Cohorts · Academic Year 2026</p>
         </div>
         <button
-          onClick={() => downloadCsv("/api/admin/export/roster", "batch-roster.csv")}
+          onClick={() => downloadCsv(`${API_BASE}/admin/export/roster`, "batch-roster.csv")}
           className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-2.5 px-5 rounded-xl transition-colors shadow-md flex items-center gap-2 text-sm"
         >
           <Download size={16} /> Export Full Roster CSV
