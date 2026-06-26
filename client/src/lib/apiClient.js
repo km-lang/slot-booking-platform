@@ -1,6 +1,10 @@
 const TOKEN_KEY = "parthsaarthi_token";
 const USER_KEY  = "parthsaarthi_user";
 
+// import.meta.env.BASE_URL is Vite's configured `base` (e.g. "/" or "/parthsaarthi/"),
+// always with a trailing slash — so API paths stay correct under any mount point.
+export const API_BASE = `${import.meta.env.BASE_URL}api`;
+
 // localStorage so the session survives tab close and browser restart.
 // The JWT itself expires in 8h and is silently refreshed before that point.
 export function getToken()       { return localStorage.getItem(TOKEN_KEY); }
@@ -31,7 +35,7 @@ let _refreshPromise = null;
 async function silentRefresh(token) {
   if (_refreshPromise) return _refreshPromise;
 
-  _refreshPromise = fetch("/api/auth/refresh", {
+  _refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
     method:  "POST",
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -69,7 +73,7 @@ export async function apiFetch(path, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (res.status === 401) {
     clearSession();
