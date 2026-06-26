@@ -11,7 +11,7 @@ export default function StudentLayout() {
 
   return (
     <div className="min-h-screen app-bg font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F8F8F8] shadow-2xl relative flex flex-col overflow-hidden">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative flex flex-col overflow-hidden">
         {/* PERMANENT HEADER: Never unmounts, preventing the "flash" */}
         <header className="absolute top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-emerald-900/5 px-4 py-3 flex items-center gap-3 transition-all duration-300">
           {!isRoot ? (

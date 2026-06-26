@@ -13,13 +13,13 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "system-ui", color: "#000000", gap: 16 }}>
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "system-ui", color: "#2E3A46", background: "#F5F7FA", gap: 16 }}>
           <div style={{ fontSize: 32 }}>⚠️</div>
           <h2 style={{ margin: 0, fontSize: 18 }}>Something went wrong</h2>
           <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>{this.state.error?.message}</p>
           <button
             onClick={() => window.location.reload()}
-            style={{ marginTop: 8, background: "#515151", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}
+            style={{ marginTop: 8, background: "#5B7C99", color: "#fff", border: "none", borderRadius: 8, padding: "10px 24px", fontWeight: 700, cursor: "pointer", fontSize: 14 }}
           >
             Reload
           </button>

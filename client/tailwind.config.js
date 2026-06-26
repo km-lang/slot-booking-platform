@@ -4,27 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Etrigan-style re-skin: light neutral tints -> brand red -> near-black chrome.
-        // 500 and below 900/950 are sampled directly from the Etrigan reference screenshots.
+        // "Soft Sky & Slate" theme: light cool-toned neutrals -> muted slate blue -> slate charcoal.
         emerald: {
-          50: "#f7f5f5",
-          100: "#efe6e5",
-          200: "#dfcac8",
-          300: "#c99e9a",
-          400: "#bd6a63",
-          500: "#b13b35", // brand red (sampled from "Etrigan 3.0" wordmark)
-          600: "#96322c",
-          700: "#7a2824",
-          800: "#5c2622",
-          900: "#515151", // chrome gray (sampled from LOGIN button)
-          950: "#000000", // headings (sampled, pure black)
+          50: "#eff3f6",
+          100: "#dce6ec",
+          200: "#a8c3d1", // powder blue accent
+          300: "#8fb0c2",
+          400: "#739cb3",
+          500: "#5b7c99", // primary (muted slate blue)
+          600: "#4d6883",
+          700: "#3f5469",
+          800: "#34465a",
+          900: "#2e3a46", // slate charcoal (headings)
+          950: "#1c242c", // deepest slate (near-black, never pure black)
         },
         gem: {
-          950: "#000000",
-          900: "#515151",
-          800: "#5c2622",
-          accent: "#b13b35",
-          light: "#c99e9a",
+          950: "#1c242c",
+          900: "#2e3a46",
+          800: "#34465a",
+          accent: "#5b7c99",
+          light: "#a8c3d1",
         },
       },
       animation: {

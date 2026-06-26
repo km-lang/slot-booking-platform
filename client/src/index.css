@@ -4,27 +4,21 @@
 
 @layer utilities {
   .glass-panel {
-    @apply bg-[#F8F8F8]/80 backdrop-blur-xl border border-emerald-900/10 shadow-sm;
+    @apply bg-[#F5F7FA]/80 backdrop-blur-xl border border-emerald-900/10 shadow-sm;
   }
 
   .glass-card {
     @apply bg-white/70 backdrop-blur-md border border-emerald-900/10 hover:bg-white hover:shadow-md transition-all;
   }
 
-  /* Page-level shell background: faint IIM Lucknow campus photo behind a near-opaque
-     light overlay, so it reads as a subtle texture and never reduces text contrast. */
+  /* Page-level shell background: flat theme color, no image. */
   .app-bg {
-    background-color: #F8F8F8;
-    background-image: linear-gradient(rgba(248, 248, 248, 0.94), rgba(248, 248, 248, 0.94)),
-      url("./assets/lucknow-bg.jpg");
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
+    background-color: #F5F7FA;
   }
 }
 
 body {
-  @apply bg-[#F8F8F8] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
+  @apply bg-[#F5F7FA] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
 }
 
 ::-webkit-scrollbar {
@@ -32,10 +26,10 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-[#F8F8F8];
+  @apply bg-[#F5F7FA];
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-emerald-200 rounded-full border-2 border-[#F8F8F8];
+  @apply bg-emerald-200 rounded-full border-2 border-[#F5F7FA];
 }
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gem-accent;
