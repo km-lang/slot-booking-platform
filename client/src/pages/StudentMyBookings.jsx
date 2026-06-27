@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, CalendarCheck, Clock, MapPin, CheckCircle2,
-  XCircle, AlertCircle, Hourglass, AlertTriangle, Download,
+  XCircle, AlertCircle, Hourglass, AlertTriangle, Download, Video,
 } from "lucide-react";
 import { useMyBookings, useCancelBooking } from "../hooks/useApi";
 import { getToken, API_BASE } from "../lib/apiClient";
@@ -103,6 +103,17 @@ function BookingCard({ booking, onCancel, isCancelling }) {
           {FOCUS_LABELS[booking.focus] ?? booking.focus}
         </div>
       </div>
+
+      {booking.status === "CONFIRMED" && booking.meetingLink && (
+        <a
+          href={booking.meetingLink}
+          target="_blank"
+          rel="noreferrer"
+          className="w-full mb-3 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 text-xs font-bold transition-colors flex items-center justify-center gap-2"
+        >
+          <Video size={13} /> Join Google Meet
+        </a>
+      )}
 
       {canCancel && (
         <button

@@ -247,6 +247,18 @@ export const useSetSlotDelay = () => {
   });
 };
 
+export const useSetSlotMeetingLink = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, meetingLink }) =>
+      apiFetch(`/slots/${slotId}/meeting-link`, {
+        method: "PATCH",
+        body: JSON.stringify({ meetingLink }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
 export const useAddWhitelist = () => {
   const qc = useQueryClient();
   return useMutation({

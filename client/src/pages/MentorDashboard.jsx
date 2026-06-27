@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
-  Clock, Mail, ChevronDown,
+  Clock, Mail, ChevronDown, Link as LinkIcon, Pencil, X,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance, useCreateSlots,
-  useDeleteSlot, useSetSlotDelay,
+  useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -102,6 +102,67 @@ function RunningLateSheet({ session, onClose }) {
   );
 }
 
+// ── Meeting Link Row ───────────────────────────────────────────────────────────
+// Lets a mentor add or edit a slot's Google Meet (or other) link at any time —
+// at creation, or "later somewhere" once the batch already exists.
+function MeetingLinkRow({ slotId, currentLink }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(currentLink ?? "");
+  const setLink = useSetSlotMeetingLink();
+
+  useEffect(() => { setValue(currentLink ?? ""); }, [currentLink]);
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5 mt-1.5">
+        <input
+          type="url"
+          placeholder="https://meet.google.com/xxx-xxxx-xxx"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoFocus
+          className="flex-1 bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold outline-none min-w-0"
+        />
+        <button
+          type="button"
+          disabled={setLink.isPending}
+          onClick={() => setLink.mutate({ slotId, meetingLink: value.trim() }, { onSuccess: () => setEditing(false) })}
+          className="text-[10px] font-bold text-white bg-emerald-700 hover:bg-emerald-800 px-2.5 py-1.5 rounded-lg shrink-0 disabled:opacity-50"
+        >
+          {setLink.isPending ? "…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setEditing(false)} className="text-emerald-700/50 hover:text-emerald-900 shrink-0">
+          <X size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  return currentLink ? (
+    <div className="flex items-center gap-1.5 mt-1.5">
+      <a
+        href={currentLink}
+        target="_blank"
+        rel="noreferrer"
+        className="text-[10px] font-bold text-emerald-700 underline truncate"
+      >
+        {currentLink}
+      </a>
+      <button type="button" onClick={() => setEditing(true)} className="text-emerald-700/50 hover:text-emerald-900 shrink-0">
+        <Pencil size={11} />
+      </button>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="mt-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200 flex items-center gap-1"
+    >
+      <LinkIcon size={10} /> Add Meet Link
+    </button>
+  );
+}
+
 // ── Session Card ──────────────────────────────────────────────────────────────
 function SessionCard({ session, onAttendance, pendingBookingId }) {
   const [lateSheetOpen, setLateSheetOpen] = useState(false);
@@ -139,6 +200,10 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
             <span className="text-[10px] font-semibold text-emerald-700/50">{session.venue}</span>
           </div>
         </div>
+
+        {session.venue?.toLowerCase().includes("online") && (
+          <MeetingLinkRow slotId={session.id} currentLink={session.meetingLink} />
+        )}
 
         {/* Actions */}
         <div className="flex gap-2">
@@ -205,7 +270,9 @@ export default function MentorDashboard() {
   const [startTime, setStartTime]     = useState("14:00");
   const [endTime, setEndTime]         = useState("16:00");
   const [slotDuration, setSlotDuration] = useState(30);
+  const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState("Library (In-Person)");
+  const [meetingLink, setMeetingLink] = useState("");
   const [cohortOnly, setCohortOnly]   = useState(false);
 
   useEffect(() => {
@@ -213,12 +280,16 @@ export default function MentorDashboard() {
     return () => { document.body.style.overflow = "unset"; };
   }, [isCreateSheetOpen]);
 
-  // Live slot count calculation
+  // Live slot count calculation — guard against 0/blank custom duration (would
+  // otherwise divide by zero and show an "Infinity slots" preview)
   const toMins = (t) => {
     const [h, m] = t.split(":").map(Number);
     return h * 60 + m;
   };
-  const slotCount = Math.max(0, Math.floor((toMins(endTime) - toMins(startTime)) / slotDuration));
+  const slotCount = slotDuration > 0
+    ? Math.max(0, Math.floor((toMins(endTime) - toMins(startTime)) / slotDuration))
+    : 0;
+  const isOnlineVenue = selectedVenue.toLowerCase().includes("online");
 
   const handleAttendance = (bookingId, status) => {
     setPendingBookingId(bookingId);
@@ -242,8 +313,15 @@ export default function MentorDashboard() {
     const startDateTime = new Date(`${slotDate}T${startTime}:00`).toISOString();
     const endDateTime   = new Date(`${slotDate}T${endTime}:00`).toISOString();
     createSlotsMutation.mutate(
-      { startTime: startDateTime, endTime: endDateTime, slotDuration, venue: selectedVenue, cohortOnly },
-      { onSuccess: () => setIsCreateSheetOpen(false) },
+      {
+        startTime: startDateTime,
+        endTime: endDateTime,
+        slotDuration,
+        venue: selectedVenue,
+        cohortOnly,
+        ...(isOnlineVenue && meetingLink.trim() && { meetingLink: meetingLink.trim() }),
+      },
+      { onSuccess: () => { setIsCreateSheetOpen(false); setMeetingLink(""); } },
     );
   };
 
@@ -349,8 +427,8 @@ export default function MentorDashboard() {
               </div>
             ) : (
               availableSlots.map((slot) => (
-                <div key={slot.id} className="p-4 flex items-center justify-between">
-                  <div>
+                <div key={slot.id} className="p-4 flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
                     <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
                       <span className="text-emerald-700/60">{slot.venue}</span>
@@ -358,11 +436,14 @@ export default function MentorDashboard() {
                         <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
                       )}
                     </div>
+                    {slot.venue?.toLowerCase().includes("online") && (
+                      <MeetingLinkRow slotId={slot.id} currentLink={slot.meetingLink} />
+                    )}
                   </div>
                   <button
                     onClick={() => handleDeleteSlot(slot.id)}
                     disabled={deleteSlotMutation.isPending}
-                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -434,13 +515,28 @@ export default function MentorDashboard() {
             <div>
               <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Duration Per Slot</label>
               <div className="grid grid-cols-4 gap-2">
-                {[15, 20, 30, 45].map((d) => (
-                  <button key={d} type="button" onClick={() => setSlotDuration(d)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${slotDuration === d ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                {[15, 20, 30].map((d) => (
+                  <button key={d} type="button" onClick={() => { setIsCustomDuration(false); setSlotDuration(d); }}
+                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${!isCustomDuration && slotDuration === d ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
                     {d}m
                   </button>
                 ))}
+                <button type="button" onClick={() => setIsCustomDuration(true)}
+                  className={`py-2 rounded-xl text-xs font-bold border transition-colors ${isCustomDuration ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                  Custom
+                </button>
               </div>
+              {isCustomDuration && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number" min="1" max="180" placeholder="Minutes per slot…"
+                    value={slotDuration || ""}
+                    onChange={(e) => setSlotDuration(Number(e.target.value))}
+                    className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none"
+                  />
+                  <span className="text-xs font-bold text-emerald-700/60">minutes</span>
+                </div>
+              )}
             </div>
 
             <div>
@@ -451,6 +547,19 @@ export default function MentorDashboard() {
                 <option>Online (Google Meet)</option>
               </select>
             </div>
+
+            {isOnlineVenue && (
+              <div>
+                <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">
+                  Google Meet Link <span className="text-emerald-700/40 font-semibold normal-case">(optional — can add later)</span>
+                </label>
+                <input
+                  type="url" placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)}
+                  className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+                />
+              </div>
+            )}
 
             <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
               <div>

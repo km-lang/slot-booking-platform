@@ -180,6 +180,17 @@ export default function MentorBookingView() {
                         </span>
                       )}
                     </div>
+                    {isMine && slot.meetingLink && (
+                      <a
+                        href={slot.meetingLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+                      >
+                        <Video size={10} /> Join Google Meet
+                      </a>
+                    )}
                   </div>
 
                   <div className="shrink-0">
