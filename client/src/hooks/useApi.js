@@ -16,6 +16,10 @@ export const QK = {
   aigOverview:     (slug)    => ["aigOverview", slug],
   mentorDetail:    (slug)    => ["mentorDetail", slug],
   adminBatch:      ()        => ["adminBatch"],
+  orgStats:        ()        => ["orgStats"],
+  mentorStats:     ()        => ["mentorStats"],
+  studentSearch:   (q)       => ["studentSearch", q],
+  studentDetail:   (pgpId)   => ["studentDetail", pgpId],
   whitelist:       ()        => ["whitelist"],
   config:          ()        => ["config"],
   bans:            ()        => ["bans"],
@@ -118,6 +122,33 @@ export const useAdminBatch = () =>
     queryKey: QK.adminBatch(),
     queryFn:  () => apiFetch("/admin/batch"),
     refetchInterval: 15_000,
+  });
+
+export const useOrgStats = () =>
+  useQuery({
+    queryKey: QK.orgStats(),
+    queryFn:  () => apiFetch("/admin/org-stats"),
+  });
+
+export const useMentorStats = () =>
+  useQuery({
+    queryKey: QK.mentorStats(),
+    queryFn:  () => apiFetch("/admin/mentors"),
+  });
+
+// Lazily enabled — only fires once the SuperAdmin types something in the search box.
+export const useStudentSearch = (q) =>
+  useQuery({
+    queryKey: QK.studentSearch(q),
+    queryFn:  () => apiFetch(`/admin/students?q=${encodeURIComponent(q)}`),
+    enabled:  !!q && q.trim().length > 0,
+  });
+
+export const useStudentDetail = (pgpId) =>
+  useQuery({
+    queryKey: QK.studentDetail(pgpId),
+    queryFn:  () => apiFetch(`/admin/student/${pgpId}`),
+    enabled:  !!pgpId,
   });
 
 export const useWhitelist = () =>

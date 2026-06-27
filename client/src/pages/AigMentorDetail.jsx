@@ -65,7 +65,7 @@ export default function AigMentorDetail() {
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(`/admin/${aigSlug}`)}
+            onClick={() => navigate(aigSlug ? `/admin/${aigSlug}` : "/admin/placements")}
             className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors"
           >
             <ArrowLeft size={18} className="text-emerald-800" />
@@ -73,7 +73,7 @@ export default function AigMentorDetail() {
           <div>
             <div className="font-black text-emerald-950 text-sm leading-tight">{mentor.name}</div>
             <div className="text-[11px] text-emerald-700/60 font-semibold">
-              {aig?.name ?? aigSlug} · {cohortLabel ?? "No Cohort"}
+              {aig?.name ?? "Independent (No AIG)"} · {cohortLabel ?? "No Cohort"}
             </div>
           </div>
         </div>

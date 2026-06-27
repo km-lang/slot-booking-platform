@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Activity, Users, CalendarCheck, Ban, Download, Shield, AlertTriangle,
   ActivitySquare, Lock, List, Settings, Plus, Trash2, Save, ShieldOff, Search,
+  Building2, History as HistoryIcon, GraduationCap, ChevronDown, ChevronRight,
 } from "lucide-react";
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import {
   useAdminBatch, useWhitelist, useAigs, useConfig, useBans,
   useAddWhitelist, useRemoveWhitelist, useSaveConfig, useLiftBan,
+  useOrgStats, useMentorStats, useStudentSearch, useStudentDetail,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -67,10 +70,12 @@ const parseMeta = (action, metaStr) => {
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "overview",  label: "Overview",  icon: <ActivitySquare size={14} /> },
-  { id: "whitelist", label: "Whitelist", icon: <List size={14} /> },
-  { id: "config",    label: "Config",    icon: <Settings size={14} /> },
-  { id: "bans",      label: "Bans",      icon: <ShieldOff size={14} /> },
+  { id: "overview",   label: "Overview",         icon: <ActivitySquare size={14} /> },
+  { id: "orgmentors", label: "Org & Mentor Stats", icon: <Building2 size={14} /> },
+  { id: "history",    label: "History",          icon: <HistoryIcon size={14} /> },
+  { id: "whitelist",  label: "Whitelist",        icon: <List size={14} /> },
+  { id: "config",     label: "Config",           icon: <Settings size={14} /> },
+  { id: "bans",       label: "Bans",             icon: <ShieldOff size={14} /> },
 ];
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
@@ -191,6 +196,70 @@ function OverviewTab() {
         </div>
       </div>
 
+      {/* 30-day trend */}
+      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+        <h3 className="font-bold text-emerald-950 mb-1">30-Day Trend</h3>
+        <p className="text-xs font-semibold text-emerald-700/60 mb-6">Bookings created vs. attended vs. no-show, by day</p>
+        {!data?.trends || data.trends.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-xs font-bold text-emerald-800/30">
+            {isLoading ? "Loading…" : "No data yet"}
+          </div>
+        ) : (
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data.trends} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#A8C3D1" opacity={0.3} />
+                <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 11 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
+                <Line type="monotone" dataKey="created" name="Created" stroke="#5B7C99" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="attended" name="Attended" stroke="#2E3A46" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="noShow" name="No-Show" stroke="#A8C3D1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Cohort breakdown */}
+      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm overflow-hidden">
+        <h3 className="font-bold text-emerald-950 mb-1">Cohort Breakdown</h3>
+        <p className="text-xs font-semibold text-emerald-700/60 mb-4">Coverage by cohort, across every org unit</p>
+        <div className="overflow-x-auto max-h-72 overflow-y-auto">
+          <table className="w-full text-left border-collapse min-w-[480px]">
+            <thead>
+              <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
+                <th className="py-2 px-3">Cohort</th>
+                <th className="py-2 px-3">Org Unit</th>
+                <th className="py-2 px-3">Coverage</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {isLoading ? (
+                <tr><td colSpan={3} className="py-8 text-center text-xs font-bold text-emerald-800/30">Loading…</td></tr>
+              ) : (data?.cohortBreakdown ?? []).length === 0 ? (
+                <tr><td colSpan={3} className="py-8 text-center text-xs font-bold text-emerald-800/30">No cohorts yet</td></tr>
+              ) : (
+                data.cohortBreakdown.map((c, i) => (
+                  <tr key={i} className="border-b border-emerald-900/5 hover:bg-emerald-50/50 transition-colors">
+                    <td className="py-2.5 px-3 font-semibold text-emerald-950">{c.label}</td>
+                    <td className="py-2.5 px-3 text-emerald-700/70">{c.orgName}</td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
+                          <div className="h-full bg-emerald-500" style={{ width: `${c.pct}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700/70">{c.covered}/{c.total} ({c.pct}%)</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Audit log */}
       <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between mb-4">
@@ -246,6 +315,261 @@ function OverviewTab() {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Org & Mentor Stats Tab ─────────────────────────────────────────────────────
+
+function OrgCard({ title, stats, loading, accent }) {
+  const accentCls = {
+    emerald: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    slate:   "text-slate-700 bg-slate-50 border-slate-200",
+    amber:   "text-amber-700 bg-amber-50 border-amber-200",
+  }[accent] ?? "text-emerald-700 bg-emerald-50 border-emerald-200";
+
+  return (
+    <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+      <div className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded mb-3 border ${accentCls}`}>
+        {title}
+      </div>
+      {loading ? (
+        <div className="text-xs font-bold text-emerald-800/30">Loading…</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-2xl font-black text-emerald-950">{stats?.mentorCount ?? 0}</div>
+            <div className="text-[10px] font-bold text-emerald-700/50 uppercase">Mentors</div>
+          </div>
+          <div>
+            <div className="text-2xl font-black text-emerald-950">{stats?.utilizationPct ?? 0}%</div>
+            <div className="text-[10px] font-bold text-emerald-700/50 uppercase">Utilization</div>
+          </div>
+          <div className="col-span-2 text-xs font-semibold text-emerald-700/70">
+            {stats?.completed ?? 0} completed / {stats?.slotsOffered ?? 0} slots offered
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
+  return (
+    <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden">
+      <button
+        onClick={onToggle}
+        className={`w-full p-4 flex items-center gap-3 transition-colors ${isExpanded ? "bg-emerald-50/50" : "hover:bg-emerald-50/30"}`}
+      >
+        {icon}
+        <span className="font-bold text-sm text-emerald-950 flex-1 text-left">{title}</span>
+        <span className="text-xs font-bold text-emerald-700/50">{mentors.length} mentor{mentors.length !== 1 ? "s" : ""}</span>
+        <ChevronDown size={16} className={`text-emerald-900/40 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+      </button>
+      {isExpanded && (
+        <div className="border-t border-emerald-900/5 overflow-x-auto">
+          {loading ? (
+            <div className="p-6 text-center text-xs font-bold text-emerald-800/30">Loading…</div>
+          ) : mentors.length === 0 ? (
+            <div className="p-6 text-center text-xs font-bold text-emerald-800/30">No mentors in this group</div>
+          ) : (
+            <table className="w-full text-left border-collapse min-w-[640px]">
+              <thead>
+                <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
+                  <th className="py-2 px-4">Name</th>
+                  <th className="py-2 px-4">Firm / Domain</th>
+                  <th className="py-2 px-4">Offered</th>
+                  <th className="py-2 px-4">Completed</th>
+                  <th className="py-2 px-4">No-Show</th>
+                  <th className="py-2 px-4">Util %</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {mentors.map((m) => (
+                  <tr key={m.slug} className="border-b border-emerald-900/5 hover:bg-emerald-50/30">
+                    <td className="py-2.5 px-4 font-semibold text-emerald-950">{m.name}</td>
+                    <td className="py-2.5 px-4 text-emerald-700/70 text-xs">{m.firm} · {m.domain}</td>
+                    <td className="py-2.5 px-4">{m.slotsOffered}</td>
+                    <td className="py-2.5 px-4">{m.completed}</td>
+                    <td className="py-2.5 px-4">{m.noShow}</td>
+                    <td className="py-2.5 px-4 font-bold">{m.utilizationPct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrgMentorStatsTab() {
+  const { data: org, isLoading: orgLoading } = useOrgStats();
+  const { data: mentors = [], isLoading: mentorsLoading } = useMentorStats();
+  const [expanded, setExpanded] = useState(null); // null | "disha" | "non-aig" | <aig-slug>
+
+  const grouped = useMemo(() => {
+    const disha = mentors.filter((m) => m.category === "disha");
+    const nonAig = mentors.filter((m) => m.category === "non-aig");
+    const byAig = {};
+    for (const m of mentors) {
+      if (m.category !== "disha" && m.category !== "non-aig") {
+        if (!byAig[m.category]) byAig[m.category] = { name: m.orgName, mentors: [] };
+        byAig[m.category].mentors.push(m);
+      }
+    }
+    return { disha, nonAig, byAig };
+  }, [mentors]);
+
+  const aigsCombined = useMemo(() => {
+    const agg = (org?.aigs ?? []).reduce(
+      (acc, a) => ({
+        mentorCount: acc.mentorCount + a.mentorCount,
+        slotsOffered: acc.slotsOffered + a.slotsOffered,
+        completed: acc.completed + a.completed,
+      }),
+      { mentorCount: 0, slotsOffered: 0, completed: 0 },
+    );
+    return { ...agg, utilizationPct: agg.slotsOffered > 0 ? Math.round((agg.completed / agg.slotsOffered) * 100) : 0 };
+  }, [org]);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <OrgCard title="Disha (Committee)" stats={org?.disha} loading={orgLoading} accent="emerald" />
+        <OrgCard title={`AIGs (${org?.aigs?.length ?? 0} groups, combined)`} stats={aigsCombined} loading={orgLoading} accent="slate" />
+        <OrgCard title="Non-AIG (PGP2 Mentors)" stats={org?.nonAig} loading={orgLoading} accent="amber" />
+      </div>
+
+      <div className="space-y-3">
+        <MentorGroup
+          title="Disha Mentors"
+          icon={<Shield size={16} className="text-emerald-700" />}
+          mentors={grouped.disha}
+          isExpanded={expanded === "disha"}
+          onToggle={() => setExpanded((e) => (e === "disha" ? null : "disha"))}
+          loading={mentorsLoading}
+        />
+
+        <div>
+          <h3 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-2 px-1">AIGs</h3>
+          <div className="space-y-2">
+            {Object.entries(grouped.byAig).map(([slug, group]) => (
+              <MentorGroup
+                key={slug}
+                title={group.name}
+                icon={<Building2 size={16} className="text-emerald-700" />}
+                mentors={group.mentors}
+                isExpanded={expanded === slug}
+                onToggle={() => setExpanded((e) => (e === slug ? null : slug))}
+                loading={mentorsLoading}
+              />
+            ))}
+          </div>
+        </div>
+
+        <MentorGroup
+          title="Non-AIG Mentors (PGP2 Students)"
+          icon={<GraduationCap size={16} className="text-amber-700" />}
+          mentors={grouped.nonAig}
+          isExpanded={expanded === "non-aig"}
+          onToggle={() => setExpanded((e) => (e === "non-aig" ? null : "non-aig"))}
+          loading={mentorsLoading}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── History Tab ────────────────────────────────────────────────────────────────
+
+function HistoryTab() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState("mentor"); // "mentor" | "student"
+  const [query, setQuery] = useState("");
+
+  const { data: allMentors = [] } = useMentorStats();
+  const { data: studentResults = [], isLoading: studentsLoading } = useStudentSearch(mode === "student" ? query : "");
+
+  const mentorResults =
+    mode === "mentor" && query.trim()
+      ? allMentors.filter(
+          (m) =>
+            m.name.toLowerCase().includes(query.toLowerCase()) ||
+            m.email.toLowerCase().includes(query.toLowerCase()),
+        )
+      : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 bg-emerald-900/5 border border-emerald-900/10 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => { setMode("mentor"); setQuery(""); }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${mode === "mentor" ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10" : "text-emerald-800/60"}`}
+        >
+          Mentor History
+        </button>
+        <button
+          onClick={() => { setMode("student"); setQuery(""); }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${mode === "student" ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10" : "text-emerald-800/60"}`}
+        >
+          Student History
+        </button>
+      </div>
+
+      <div className="relative max-w-md">
+        <Search size={16} className="absolute left-3 top-3 text-emerald-900/40" />
+        <input
+          type="text"
+          placeholder={mode === "mentor" ? "Search mentor by name or email…" : "Search student by name, PGP ID, or email…"}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full bg-white border border-emerald-900/10 rounded-xl pl-9 pr-4 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
+        />
+      </div>
+
+      <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+        {!query.trim() ? (
+          <div className="p-8 text-center text-xs font-bold text-emerald-800/30">Start typing to search</div>
+        ) : mode === "mentor" ? (
+          mentorResults.length === 0 ? (
+            <div className="p-8 text-center text-xs font-bold text-emerald-800/30">No mentors found</div>
+          ) : (
+            mentorResults.map((m) => (
+              <button
+                key={m.slug}
+                onClick={() => navigate(`/admin/placements/mentor/${m.slug}`)}
+                className="w-full p-4 flex items-center justify-between hover:bg-emerald-50/50 transition-colors text-left"
+              >
+                <div>
+                  <div className="font-bold text-sm text-emerald-950">{m.name}</div>
+                  <div className="text-xs font-semibold text-emerald-700/60">{m.orgName} · {m.firm}</div>
+                </div>
+                <ChevronRight size={16} className="text-emerald-400" />
+              </button>
+            ))
+          )
+        ) : studentsLoading ? (
+          <div className="p-8 text-center text-xs font-bold text-emerald-800/30">Searching…</div>
+        ) : studentResults.length === 0 ? (
+          <div className="p-8 text-center text-xs font-bold text-emerald-800/30">No students found</div>
+        ) : (
+          studentResults.map((s) => (
+            <button
+              key={s.pgpId}
+              onClick={() => navigate(`/admin/placements/student/${s.pgpId}`)}
+              className="w-full p-4 flex items-center justify-between hover:bg-emerald-50/50 transition-colors text-left"
+            >
+              <div>
+                <div className="font-bold text-sm text-emerald-950">{s.name}</div>
+                <div className="text-xs font-semibold text-emerald-700/60">PGP-{s.pgpId} {s.cohortLabel ? `· ${s.cohortLabel}` : ""}</div>
+              </div>
+              <ChevronRight size={16} className="text-emerald-400" />
+            </button>
+          ))
+        )}
       </div>
     </div>
   );
@@ -703,10 +1027,12 @@ export default function PlacementAdminDashboard() {
       </div>
 
       <main className="max-w-7xl mx-auto px-4 pb-8">
-        {activeTab === "overview"  && <OverviewTab />}
-        {activeTab === "whitelist" && <WhitelistTab />}
-        {activeTab === "config"    && <ConfigTab />}
-        {activeTab === "bans"      && <BansTab />}
+        {activeTab === "overview"   && <OverviewTab />}
+        {activeTab === "orgmentors" && <OrgMentorStatsTab />}
+        {activeTab === "history"    && <HistoryTab />}
+        {activeTab === "whitelist"  && <WhitelistTab />}
+        {activeTab === "config"     && <ConfigTab />}
+        {activeTab === "bans"       && <BansTab />}
         <AppFooter />
       </main>
     </div>

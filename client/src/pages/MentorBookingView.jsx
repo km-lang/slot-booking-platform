@@ -4,8 +4,7 @@ import {
   Clock, MapPin, Video, AlertTriangle, ShieldCheck,
   ChevronDown, XCircle, Timer,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMentor, useSlots, useBookSlot, useCancelBooking, QK } from "../hooks/useApi";
+import { useMentor, useSlots, useBookSlot, useCancelBooking } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 
 const FOCUS_LABELS = {
@@ -26,7 +25,6 @@ const penaltyTier = (minsUntilSlot) => {
 export default function MentorBookingView() {
   const { group, mentorId } = useParams();
   const navigate = useNavigate();
-  const qc = useQueryClient();
 
   const { data: mentor, isLoading: mentorLoading, error: mentorError } = useMentor(mentorId);
   const { data: slots = [], isLoading: slotsLoading, error: slotsError } = useSlots(mentorId);

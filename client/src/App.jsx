@@ -8,6 +8,7 @@ import MentorDashboard from "./pages/MentorDashboard";
 import MentorCohortDetails from "./pages/MentorCohortDetails";
 import AigAdminDashboard from "./pages/AigAdminDashboard";
 import AigMentorDetail from "./pages/AigMentorDetail";
+import AdminStudentDetail from "./pages/AdminStudentDetail";
 import PlacementAdminDashboard from "./pages/PlacementAdminDashboard";
 import ProfileSettings from "./pages/ProfileSettings";
 import LoginPage from "./pages/LoginPage";
@@ -39,12 +40,14 @@ function App() {
         <Route path="/mentor/cohort" element={<MentorCohortDetails />} />
       </Route>
 
-      {/* Static /admin/placements must be declared before dynamic /admin/:aigSlug */}
+      {/* Static /admin/placements* must be declared before dynamic /admin/:aigSlug */}
       <Route element={<RequireRole role="SuperADMIN" />}>
         <Route
           path="/admin/placements"
           element={<PlacementAdminDashboard />}
         />
+        <Route path="/admin/placements/mentor/:mentorSlug" element={<AigMentorDetail />} />
+        <Route path="/admin/placements/student/:pgpId" element={<AdminStudentDetail />} />
       </Route>
 
       <Route element={<RequireRole role="AIGs" />}>
