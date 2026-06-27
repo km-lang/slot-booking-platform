@@ -97,6 +97,26 @@ router.get(
   adminController.getBatchOverview,
 );
 router.get(
+  "/admin/org-stats",
+  requireRole("SuperADMIN"),
+  adminController.getOrgStats,
+);
+router.get(
+  "/admin/mentors",
+  requireRole("SuperADMIN"),
+  adminController.listMentorStats,
+);
+router.get(
+  "/admin/students",
+  requireRole("SuperADMIN"),
+  adminController.searchStudents,
+);
+router.get(
+  "/admin/student/:pgpId",
+  requireRole("SuperADMIN"),
+  adminController.getStudentDetail,
+);
+router.get(
   "/admin/whitelist",
   requireRole("SuperADMIN"),
   adminController.listWhitelist,

@@ -103,6 +103,7 @@ const getAigOverview = async (req, res, next) => {
 const getBatchOverview = async (_req, res, next) => {
   try {
     const now = new Date();
+    const trendSince = new Date(now.getTime() - 30 * 86400000);
 
     const [
       totalStudents,
@@ -114,6 +115,8 @@ const getBatchOverview = async (_req, res, next) => {
       purposeDist,
       mentors,
       recentAudit,
+      recentBookings,
+      cohorts,
     ] = await Promise.all([
       prisma.studentProfile.count(),
       prisma.studentProfile.count({
@@ -136,7 +139,52 @@ const getBatchOverview = async (_req, res, next) => {
         orderBy: { createdAt: "desc" },
         include: { user: { select: { email: true, role: true } } },
       }),
+      // Trend chart source — bucketed by day in JS below (avoids DB-specific date trunc SQL)
+      prisma.booking.findMany({
+        where: { createdAt: { gte: trendSince } },
+        select: { createdAt: true, status: true },
+      }),
+      // Cohort breakdown — every cohort across every org unit, not just one AIG
+      prisma.cohort.findMany({
+        include: {
+          aig: { select: { name: true, slug: true } },
+          studentProfiles: {
+            select: { user: { select: { bookings: { select: { status: true } } } } },
+          },
+        },
+        orderBy: [{ aig: { name: "asc" } }, { label: "asc" }],
+      }),
     ]);
+
+    const dayKey = (d) => d.toISOString().split("T")[0];
+    const trendMap = {};
+    for (let i = 0; i < 30; i++) {
+      const key = dayKey(new Date(trendSince.getTime() + i * 86400000));
+      trendMap[key] = { date: key, created: 0, attended: 0, noShow: 0 };
+    }
+    for (const b of recentBookings) {
+      const key = dayKey(b.createdAt);
+      if (!trendMap[key]) continue;
+      trendMap[key].created += 1;
+      if (b.status === "ATTENDED") trendMap[key].attended += 1;
+      if (b.status === "NO_SHOW") trendMap[key].noShow += 1;
+    }
+    const trends = Object.values(trendMap).sort((a, b) => a.date.localeCompare(b.date));
+
+    const cohortBreakdown = cohorts.map((c) => {
+      const total = c.studentProfiles.length;
+      const covered = c.studentProfiles.filter((sp) =>
+        sp.user.bookings.some((b) => b.status === "ATTENDED"),
+      ).length;
+      return {
+        label: c.label,
+        orgName: c.aig?.name ?? "—",
+        orgSlug: c.aig?.slug ?? null,
+        total,
+        covered,
+        pct: total > 0 ? Math.round((covered / total) * 100) : 0,
+      };
+    });
 
     const coveragePct =
       totalStudents > 0 ? Math.round((coveredStudents / totalStudents) * 100) : 0;
@@ -180,6 +228,8 @@ const getBatchOverview = async (_req, res, next) => {
         createdAt: e.createdAt,
         userEmail: e.user?.email ?? "system",
       })),
+      trends,
+      cohortBreakdown,
     });
   } catch (err) {
     next(err);
@@ -441,11 +491,235 @@ const getMentorSessionDetail = async (req, res, next) => {
         domain: mentorProfile.domain,
         slug:   mentorProfile.slug,
       },
-      aig:          { slug: mentorProfile.aig?.slug, name: mentorProfile.aig?.name },
+      aig:          mentorProfile.aig ? { slug: mentorProfile.aig.slug, name: mentorProfile.aig.name } : null,
       cohortLabel:  mentorProfile.cohort?.label ?? null,
       stats,
       students,
       sessionHistory,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Org & Mentor Stats (SuperADMIN) ──────────────────────────────────────────
+
+const getOrgStats = async (_req, res, next) => {
+  try {
+    const orgUnits = await prisma.aIG.findMany({
+      include: { mentorProfiles: { include: { _count: { select: { slots: true } } } } },
+      orderBy: { name: "asc" },
+    });
+
+    const statsFor = async (mentorProfiles) => {
+      const mentorIds = mentorProfiles.map((m) => m.id);
+      const slotsOffered = mentorProfiles.reduce((sum, m) => sum + m._count.slots, 0);
+      const completed = mentorIds.length
+        ? await prisma.booking.count({
+            where: { slot: { mentorProfileId: { in: mentorIds } }, status: { in: ["CONFIRMED", "ATTENDED"] } },
+          })
+        : 0;
+      return {
+        mentorCount: mentorProfiles.length,
+        slotsOffered,
+        completed,
+        utilizationPct: slotsOffered > 0 ? Math.round((completed / slotsOffered) * 100) : 0,
+      };
+    };
+
+    let disha = null;
+    const aigs = [];
+    const committeeAgg = [];
+    const clubAgg = [];
+    const aigAgg = [];
+
+    for (const org of orgUnits) {
+      const stats = await statsFor(org.mentorProfiles);
+      const row = { slug: org.slug, name: org.name, category: org.category, ...stats };
+      if (org.slug === "disha") disha = row;
+      if (org.category === "AIG") aigs.push(row);
+      if (org.category === "COMMITTEE") committeeAgg.push(stats);
+      if (org.category === "CLUB") clubAgg.push(stats);
+      if (org.category === "AIG") aigAgg.push(stats);
+    }
+
+    const nonAigMentors = await prisma.mentorProfile.findMany({
+      where: { aigId: null },
+      include: { _count: { select: { slots: true } } },
+    });
+    const nonAig = await statsFor(nonAigMentors);
+
+    const sumAgg = (rows) =>
+      rows.reduce(
+        (acc, r) => ({
+          mentorCount: acc.mentorCount + r.mentorCount,
+          slotsOffered: acc.slotsOffered + r.slotsOffered,
+          completed: acc.completed + r.completed,
+        }),
+        { mentorCount: 0, slotsOffered: 0, completed: 0 },
+      );
+    const withPct = (agg) => ({
+      ...agg,
+      utilizationPct: agg.slotsOffered > 0 ? Math.round((agg.completed / agg.slotsOffered) * 100) : 0,
+    });
+
+    res.json({
+      disha,
+      aigs,
+      nonAig,
+      rollup: {
+        committee: withPct(sumAgg(committeeAgg)),
+        club: withPct(sumAgg(clubAgg)),
+        aig: withPct(sumAgg(aigAgg)),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const listMentorStats = async (_req, res, next) => {
+  try {
+    const [mentors, allBookings] = await Promise.all([
+      prisma.mentorProfile.findMany({
+        include: {
+          user: { select: { name: true, email: true } },
+          aig: { select: { slug: true, name: true } },
+          _count: { select: { slots: true } },
+        },
+        orderBy: { user: { name: "asc" } },
+      }),
+      // One query for every mentor's booking counts instead of N+1 per-mentor queries.
+      prisma.booking.findMany({
+        select: { status: true, slot: { select: { mentorProfileId: true } } },
+      }),
+    ]);
+
+    const statsByMentor = {};
+    for (const b of allBookings) {
+      const mid = b.slot.mentorProfileId;
+      const s = statsByMentor[mid] ?? (statsByMentor[mid] = { completed: 0, attended: 0, noShow: 0, cancelled: 0 });
+      if (b.status === "CONFIRMED" || b.status === "ATTENDED") s.completed += 1;
+      if (b.status === "ATTENDED") s.attended += 1;
+      if (b.status === "NO_SHOW") s.noShow += 1;
+      if (b.status === "CANCELLED") s.cancelled += 1;
+    }
+
+    const rows = mentors.map((m) => {
+      const s = statsByMentor[m.id] ?? { completed: 0, attended: 0, noShow: 0, cancelled: 0 };
+      const slotsOffered = m._count.slots;
+      const category = !m.aig ? "non-aig" : m.aig.slug === "disha" ? "disha" : m.aig.slug;
+      return {
+        slug: m.slug,
+        name: m.user.name ?? m.user.email,
+        email: m.user.email,
+        firm: m.firm,
+        domain: m.domain,
+        mentorType: m.mentorType,
+        category,
+        orgName: m.aig?.name ?? "Independent (No AIG)",
+        slotsOffered,
+        ...s,
+        utilizationPct: slotsOffered > 0 ? Math.round((s.completed / slotsOffered) * 100) : 0,
+      };
+    });
+
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Student/Mentee History (SuperADMIN) ──────────────────────────────────────
+
+const searchStudents = async (req, res, next) => {
+  try {
+    const q = (req.query.q ?? "").trim();
+    if (!q) return res.json([]);
+
+    const students = await prisma.studentProfile.findMany({
+      where: {
+        OR: [
+          { pgpId: { contains: q, mode: "insensitive" } },
+          { user: { name: { contains: q, mode: "insensitive" } } },
+          { user: { email: { contains: q, mode: "insensitive" } } },
+        ],
+      },
+      include: { user: { select: { name: true, email: true } }, cohort: { select: { label: true } } },
+      take: 20,
+    });
+
+    res.json(
+      students.map((sp) => ({
+        pgpId: sp.pgpId,
+        name: sp.user.name ?? sp.user.email,
+        email: sp.user.email,
+        cohortLabel: sp.cohort?.label ?? null,
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getStudentDetail = async (req, res, next) => {
+  try {
+    const studentProfile = await prisma.studentProfile.findUnique({
+      where: { pgpId: req.params.pgpId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        cohort: { select: { label: true, aig: { select: { name: true, slug: true } } } },
+      },
+    });
+    if (!studentProfile) return res.status(404).json({ error: "Student not found" });
+
+    const [bookings, bans] = await Promise.all([
+      prisma.booking.findMany({
+        where: { studentUserId: studentProfile.user.id },
+        include: {
+          slot: { include: { mentorProfile: { include: { user: { select: { name: true } } } } } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.ban.findMany({
+        where: { userId: studentProfile.user.id },
+        orderBy: { startsAt: "desc" },
+      }),
+    ]);
+
+    const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    res.json({
+      student: {
+        name: studentProfile.user.name ?? studentProfile.user.email,
+        email: studentProfile.user.email,
+        pgpId: studentProfile.pgpId,
+        cohortLabel: studentProfile.cohort?.label ?? null,
+        orgName: studentProfile.cohort?.aig?.name ?? null,
+      },
+      stats: {
+        totalBookings: bookings.length,
+        confirmed: bookings.filter((b) => b.status === "CONFIRMED").length,
+        attended: bookings.filter((b) => b.status === "ATTENDED").length,
+        noShow: bookings.filter((b) => b.status === "NO_SHOW").length,
+        cancelled: bookings.filter((b) => b.status === "CANCELLED").length,
+      },
+      bookingHistory: bookings.map((b) => ({
+        id: b.id,
+        status: b.status,
+        focus: FOCUS_DISPLAY[b.focus] ?? b.focus,
+        date: fmtDate(b.slot.startTime),
+        time: fmtTime(b.slot.startTime),
+        venue: b.slot.venue,
+        mentorName: b.slot.mentorProfile?.user?.name ?? "—",
+      })),
+      bans: bans.map((b) => ({
+        reason: b.reason,
+        startsAt: b.startsAt,
+        endsAt: b.endsAt,
+        liftedAt: b.liftedAt,
+      })),
     });
   } catch (err) {
     next(err);
@@ -463,4 +737,8 @@ module.exports = {
   setConfig,
   listBans,
   liftBan,
+  getOrgStats,
+  listMentorStats,
+  searchStudents,
+  getStudentDetail,
 };
