@@ -143,6 +143,7 @@ const createBooking = async (req, res, next) => {
           summary: `CV Review: ${studentName} × ${mentorName}`,
           description: `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`,
           location: claimedSlot.venue,
+          meetingLink: claimedSlot.meetingLink ?? null,
           organizerEmail: CALENDAR_ORGANIZER_EMAIL,
           organizerName: "Parthsaarthi",
           attendees: [
@@ -160,6 +161,7 @@ const createBooking = async (req, res, next) => {
             date:         fmtDate(claimedSlot.startTime),
             time:         fmtTime(claimedSlot.startTime),
             venue:        claimedSlot.venue,
+            meetingLink:  claimedSlot.meetingLink ?? null,
             focus,
             icsContent,
           }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
@@ -173,6 +175,7 @@ const createBooking = async (req, res, next) => {
             date:        fmtDate(claimedSlot.startTime),
             time:        fmtTime(claimedSlot.startTime),
             venue:       claimedSlot.venue,
+            meetingLink: claimedSlot.meetingLink ?? null,
             focus,
             icsContent,
           }).catch((e) => console.error("[mailer] booking confirmation to mentor:", e.message));
@@ -396,6 +399,7 @@ const getMyBookings = async (req, res, next) => {
       venue:        b.slot.venue,
       cohortOnly:   b.slot.release?.cohortOnly ?? false,
       delayMinutes: b.slot.delayMinutes ?? 0,
+      meetingLink:  b.slot.meetingLink ?? null,
       mentorName:   b.slot.mentorProfile?.user?.name ?? "—",
       mentorSlug:   b.slot.mentorProfile?.slug ?? null,
       firm:         b.slot.mentorProfile?.firm ?? null,

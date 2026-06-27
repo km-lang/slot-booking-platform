@@ -68,12 +68,12 @@ const btn = (href, label) =>
 /**
  * Sent to a student immediately after a successful booking.
  */
-const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, icsContent }) => {
+const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, meetingLink, icsContent }) => {
   const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
   return send({
     to:      studentEmail,
     subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
-    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}. A calendar invite is attached. To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
+    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached. To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Booking Confirmed</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -83,7 +83,8 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
         <span style="font-size:13px;color:#064E3B;margin-top:6px;display:block">${date} · ${time}</span>
         <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
       </div>
-      <p style="font-size:13px;color:#064E3B99;margin:0">
+      ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
+      <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">
         A calendar invite is attached to this email.<br>
         You will receive a reminder 30 minutes before the session.<br>
         If you need to cancel, do so <b>at least 60 minutes in advance</b> to avoid a penalty.
@@ -96,12 +97,12 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
 /**
  * Sent to a mentor immediately after a student books one of their slots.
  */
-const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus, icsContent }) => {
+const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus, meetingLink, icsContent }) => {
   const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
   return send({
     to:      mentorEmail,
     subject: `New booking: ${studentName} on ${date} at ${time}`,
-    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) booked a ${focusLabel} session with you on ${date} at ${time}, ${venue}. A calendar invite is attached.`,
+    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) booked a ${focusLabel} session with you on ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">New Booking</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -111,7 +112,8 @@ const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName,
         <span style="font-size:13px;color:#064E3B;margin-top:6px;display:block">${date} · ${time}</span>
         <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
       </div>
-      <p style="font-size:13px;color:#064E3B99;margin:0">A calendar invite is attached to this email.</p>
+      ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
+      <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">A calendar invite is attached to this email.</p>
     `),
     ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
   });

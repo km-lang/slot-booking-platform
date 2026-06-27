@@ -144,7 +144,8 @@ const listSlots = async (req, res, next) => {
           cohortOnly,
           status,
           delayMinutes: slot.delayMinutes ?? 0,
-          ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus }),
+          // Only reveal the meeting link once the student has actually booked it.
+          ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus, meetingLink: slot.meetingLink ?? null }),
         };
       }),
     );
@@ -155,9 +156,12 @@ const listSlots = async (req, res, next) => {
 
 const releaseSlots = async (req, res, next) => {
   try {
-    const { startTime, endTime, slotDuration, venue, cohortOnly } = req.body;
+    const { startTime, endTime, slotDuration, venue, cohortOnly, meetingLink } = req.body;
     if (!startTime || !endTime || !slotDuration || !venue) {
       return res.status(400).json({ error: "startTime, endTime, slotDuration, and venue are required" });
+    }
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
     }
 
     const start = new Date(startTime);
@@ -192,6 +196,7 @@ const releaseSlots = async (req, res, next) => {
           slotDuration: duration,
           venue,
           cohortOnly: Boolean(cohortOnly),
+          meetingLink: meetingLink || null,
         },
       });
 
@@ -203,6 +208,7 @@ const releaseSlots = async (req, res, next) => {
             startTime: interval.startTime,
             endTime: interval.endTime,
             venue,
+            meetingLink: meetingLink || null,
           },
         });
         await tx.slotCapacity.create({ data: { slotId: slot.id, max: 1, current: 0 } });
@@ -369,6 +375,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       time:         fmtTime(s.startTime),
       venue:        s.venue,
       delayMinutes: s.delayMinutes,
+      meetingLink:  s.meetingLink ?? null,
       student: {
         name:    s.bookings[0].student?.name ?? "—",
         email:   s.bookings[0].student?.email ?? null,
@@ -395,6 +402,7 @@ const listMentorOwnSlots = async (req, res, next) => {
         time: fmtSlotTime(s.startTime, s.endTime),
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
+        meetingLink: s.meetingLink ?? null,
       }));
 
     // Cohort aggregate stats
@@ -475,6 +483,34 @@ const setSlotDelay = async (req, res, next) => {
   }
 };
 
+// Lets a mentor add/edit a slot's meeting link after the slot was already created
+// ("or later somewhere", per the original ask) — e.g. filling it in right before
+// a session if it wasn't set at release time.
+const setSlotMeetingLink = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const meetingLink = (req.body.meetingLink ?? "").trim();
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
+    }
+
+    const slot = await prisma.slot.findUnique({ where: { id: req.params.id } });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your slot" });
+
+    const updated = await prisma.slot.update({
+      where: { id: slot.id },
+      data:  { meetingLink: meetingLink || null },
+    });
+
+    res.json({ id: updated.id, meetingLink: updated.meetingLink });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listAigs,
   getAig,
@@ -485,5 +521,6 @@ module.exports = {
   releaseSlots,
   deleteSlot,
   setSlotDelay,
+  setSlotMeetingLink,
   getMentorCohort,
 };

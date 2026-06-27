@@ -148,6 +148,7 @@ model BookingRelease {
   slotDuration    Int      // minutes per slot
   venue           String
   cohortOnly      Boolean  @default(false)
+  meetingLink     String?  // default Google Meet (or other) link applied to every slot created in this batch
   createdAt       DateTime @default(now())
 
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
@@ -163,6 +164,7 @@ model Slot {
   venue           String
   version         Int      @default(0)
   delayMinutes    Int      @default(0)
+  meetingLink     String?  // editable independently per-slot, e.g. added after the batch was created
 
   release       BookingRelease @relation(fields: [releaseId], references: [id])
   mentorProfile MentorProfile  @relation(fields: [mentorProfileId], references: [id])

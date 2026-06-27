@@ -51,6 +51,11 @@ router.patch(
   requireRole("MENTOR"),
   slotController.setSlotDelay,
 );
+router.patch(
+  "/slots/:id/meeting-link",
+  requireRole("MENTOR"),
+  slotController.setSlotMeetingLink,
+);
 
 // ── Bookings ───────────────────────────────────────────────────────────────
 // GET    /api/bookings/mine         student: own booking history (upcoming + past)

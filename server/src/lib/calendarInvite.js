@@ -20,9 +20,15 @@ const escapeICS = (s) =>
 // of the same event rather than a new one.
 const buildSessionEvent = ({
   uid, sequence = 0, method = "REQUEST", status = "CONFIRMED",
-  startTime, endTime, summary, description, location,
+  startTime, endTime, summary, description, location, meetingLink,
   organizerEmail, organizerName, attendees,
 }) => {
+  // When there's a meeting link, fold it into LOCATION too — some calendar
+  // clients (notably mobile Gmail/Calendar) surface LOCATION more prominently
+  // than the URL property, so it shouldn't be the only place the link lives.
+  const fullLocation = meetingLink ? `${location} — ${meetingLink}` : location;
+  const fullDescription = meetingLink ? `${description}\n\nJoin: ${meetingLink}` : description;
+
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -36,8 +42,9 @@ const buildSessionEvent = ({
     `DTSTART:${fmtICSDate(startTime)}`,
     `DTEND:${fmtICSDate(endTime)}`,
     `SUMMARY:${escapeICS(summary)}`,
-    `DESCRIPTION:${escapeICS(description)}`,
-    `LOCATION:${escapeICS(location)}`,
+    `DESCRIPTION:${escapeICS(fullDescription)}`,
+    `LOCATION:${escapeICS(fullLocation)}`,
+    ...(meetingLink ? [`URL:${meetingLink}`] : []),
     `ORGANIZER;CN=${escapeICS(organizerName)}:mailto:${organizerEmail}`,
     ...attendees.map(
       (a) => `ATTENDEE;CN=${escapeICS(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`,
