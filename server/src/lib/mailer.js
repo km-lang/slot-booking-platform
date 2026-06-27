@@ -30,17 +30,21 @@ const FROM = process.env.SMTP_FROM ?? "Parthsaarthi <noreply@iiml.ac.in>";
 // Useful for local testing so real SMTP traffic goes only to the developer.
 const DEV_TO = process.env.DEV_EMAIL_OVERRIDE ?? null;
 
-const send = async ({ to, subject, html, text }) => {
+// icalEvent: { method: "REQUEST" | "CANCEL", content: <ics string> } — passed straight
+// through to nodemailer, which renders it as a real calendar invite with native
+// Accept/Decline UI in Gmail/Outlook/Apple Calendar (not just a generic attachment).
+const send = async ({ to, subject, html, text, icalEvent }) => {
   const effectiveTo = DEV_TO ?? to;
   const t = getTransport();
   if (!t) {
     // No SMTP configured — log to console
     console.log(`\n[EMAIL] To: ${effectiveTo}${DEV_TO && DEV_TO !== to ? ` (override; original: ${to})` : ""}`);
     console.log(`[EMAIL] Subject: ${subject}`);
-    console.log(`[EMAIL] Body: ${text ?? html}\n`);
+    console.log(`[EMAIL] Body: ${text ?? html}`);
+    console.log(icalEvent ? `[EMAIL] Calendar invite (${icalEvent.method}) attached\n` : "");
     return;
   }
-  await t.sendMail({ from: FROM, to: effectiveTo, subject, html, text });
+  await t.sendMail({ from: FROM, to: effectiveTo, subject, html, text, ...(icalEvent && { icalEvent }) });
 };
 
 // ── Templates ──────────────────────────────────────────────────────────────────
@@ -64,12 +68,12 @@ const btn = (href, label) =>
 /**
  * Sent to a student immediately after a successful booking.
  */
-const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus }) => {
+const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, icsContent }) => {
   const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
   return send({
     to:      studentEmail,
     subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
-    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}. To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
+    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}. A calendar invite is attached. To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Booking Confirmed</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -80,17 +84,43 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
         <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
       </div>
       <p style="font-size:13px;color:#064E3B99;margin:0">
+        A calendar invite is attached to this email.<br>
         You will receive a reminder 30 minutes before the session.<br>
         If you need to cancel, do so <b>at least 60 minutes in advance</b> to avoid a penalty.
       </p>
     `),
+    ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
+  });
+};
+
+/**
+ * Sent to a mentor immediately after a student books one of their slots.
+ */
+const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus, icsContent }) => {
+  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
+  return send({
+    to:      mentorEmail,
+    subject: `New booking: ${studentName} on ${date} at ${time}`,
+    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) booked a ${focusLabel} session with you on ${date} at ${time}, ${venue}. A calendar invite is attached.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">New Booking</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
+      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b style="font-size:15px">${studentName}</b>
+        <span style="font-size:13px;color:#064E3B99;margin-left:6px">PGP-${pgpId}</span><br>
+        <span style="font-size:13px;color:#064E3B;margin-top:6px;display:block">${date} · ${time}</span>
+        <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
+      </div>
+      <p style="font-size:13px;color:#064E3B99;margin:0">A calendar invite is attached to this email.</p>
+    `),
+    ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
   });
 };
 
 /**
  * Sent to a student when they cancel a booking (always, regardless of penalty).
  */
-const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName, date, time, penalty }) => {
+const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName, date, time, penalty, icsContent }) => {
   const penaltyNote = penalty === "STRIKE"
     ? "⚠️ A <b>strike</b> has been added to your account for last-minute cancellation."
     : penalty === "WARNING"
@@ -109,10 +139,34 @@ const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName
         <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
       </div>
       <p style="font-size:14px;color:#064E3B">${penaltyNote}</p>
-      <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time.</p>
+      <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time. The calendar event has been cancelled.</p>
     `),
+    ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
   });
 };
+
+/**
+ * Sent to a mentor whenever a student cancels a booking, regardless of penalty —
+ * keeps the mentor's calendar in sync. Separate from sendLateCancelToMentor, which
+ * is the additional penalty-detail email sent only for late cancellations.
+ */
+const sendBookingCancelledToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, icsContent }) =>
+  send({
+    to:      mentorEmail,
+    subject: `Booking cancelled: ${studentName} on ${date} at ${time}`,
+    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) cancelled their ${time} session on ${date}. It has been removed from your calendar.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Booking Cancelled</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">This slot is now free</p>
+      <div style="background:#FEF9F0;border:1px solid #FDE68A;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b>${studentName}</b>
+        <span style="font-size:13px;color:#064E3B99;margin-left:6px">PGP-${pgpId}</span><br>
+        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
+      </div>
+      <p style="font-size:13px;color:#064E3B99;margin:0">The calendar event has been cancelled.</p>
+    `),
+    ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
+  });
 
 /**
  * Sent to a student when their mentor marks a slot as running late.
@@ -233,7 +287,9 @@ const sendAigDigest = ({ adminEmail, adminName, aigName, atRiskCount, deadline, 
 
 module.exports = {
   sendBookingConfirmation,
+  sendBookingConfirmationToMentor,
   sendCancelConfirmationToStudent,
+  sendBookingCancelledToMentor,
   sendDelayNotification,
   sendLateCancelToMentor,
   sendStudentReminder,

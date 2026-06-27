@@ -2,6 +2,9 @@
 
 const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
+const { buildSessionEvent } = require("../lib/calendarInvite");
+
+const CALENDAR_ORGANIZER_EMAIL = process.env.SMTP_FROM?.match(/<(.+)>/)?.[1] ?? "noreply@iiml.ac.in";
 
 // Read penalty thresholds from SystemConfig; fall back to built-in defaults.
 const getPenaltyThresholds = async () => {
@@ -113,10 +116,10 @@ const createBooking = async (req, res, next) => {
         return created;
       });
 
-      // Send booking confirmation email (non-blocking)
+      // Send booking confirmation email + calendar invite (non-blocking)
       prisma.user.findUnique({
         where: { id: req.user.sub },
-        select: { name: true, email: true },
+        select: { name: true, email: true, studentProfile: { select: { pgpId: true } } },
       }).then(async (student) => {
         const fmtDate = (d) =>
           new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
@@ -124,19 +127,55 @@ const createBooking = async (req, res, next) => {
           new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
         const mentorUser = await prisma.mentorProfile.findUnique({
           where: { id: claimedSlot.mentorProfileId },
-          include: { user: { select: { name: true } } },
+          include: { user: { select: { name: true, email: true } } },
         }).catch(() => null);
+
+        const mentorName = mentorUser?.user?.name ?? "your mentor";
+        const studentName = student?.name ?? student?.email ?? "your mentee";
+
+        const icsContent = buildSessionEvent({
+          uid: booking.id,
+          sequence: 0,
+          method: "REQUEST",
+          status: "CONFIRMED",
+          startTime: claimedSlot.startTime,
+          endTime: claimedSlot.endTime,
+          summary: `CV Review: ${studentName} × ${mentorName}`,
+          description: `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`,
+          location: claimedSlot.venue,
+          organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+          organizerName: "Parthsaarthi",
+          attendees: [
+            ...(student?.email ? [{ email: student.email, name: studentName }] : []),
+            ...(mentorUser?.user?.email ? [{ email: mentorUser.user.email, name: mentorName }] : []),
+          ],
+        });
+
         if (student?.email) {
           mailer.sendBookingConfirmation({
             studentEmail: student.email,
-            studentName:  student.name ?? student.email,
-            mentorName:   mentorUser?.user?.name ?? "your mentor",
+            studentName,
+            mentorName,
             firm:         mentorUser?.firm ?? "IIM Lucknow",
             date:         fmtDate(claimedSlot.startTime),
             time:         fmtTime(claimedSlot.startTime),
             venue:        claimedSlot.venue,
             focus,
+            icsContent,
           }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
+        }
+        if (mentorUser?.user?.email) {
+          mailer.sendBookingConfirmationToMentor({
+            mentorEmail: mentorUser.user.email,
+            mentorName,
+            studentName,
+            pgpId:       student?.studentProfile?.pgpId ?? "N/A",
+            date:        fmtDate(claimedSlot.startTime),
+            time:        fmtTime(claimedSlot.startTime),
+            venue:       claimedSlot.venue,
+            focus,
+            icsContent,
+          }).catch((e) => console.error("[mailer] booking confirmation to mentor:", e.message));
         }
       }).catch((e) => console.error("[mailer] student lookup:", e.message));
 
@@ -212,6 +251,26 @@ const cancelBooking = async (req, res, next) => {
     const mentor  = booking.slot.mentorProfile?.user;
     const student = booking.student;
 
+    const studentName = student?.name ?? student?.email ?? "the student";
+    const mentorName  = mentor?.name ?? mentor?.email ?? "the mentor";
+    const cancelIcsContent = buildSessionEvent({
+      uid: booking.id,
+      sequence: 1,
+      method: "CANCEL",
+      status: "CANCELLED",
+      startTime: booking.slot.startTime,
+      endTime: booking.slot.endTime,
+      summary: `CV Review: ${studentName} × ${mentorName}`,
+      description: "This session was cancelled via Parthsaarthi.",
+      location: booking.slot.venue,
+      organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+      organizerName: "Parthsaarthi",
+      attendees: [
+        ...(student?.email ? [{ email: student.email, name: studentName }] : []),
+        ...(mentor?.email ? [{ email: mentor.email, name: mentorName }] : []),
+      ],
+    });
+
     // Always notify the student of their cancellation
     if (student?.email) {
       mailer.sendCancelConfirmationToStudent({
@@ -221,7 +280,21 @@ const cancelBooking = async (req, res, next) => {
         date:         fmtDate(booking.slot.startTime),
         time:         fmtTime(booking.slot.startTime),
         penalty,
+        icsContent: cancelIcsContent,
       }).catch((e) => console.error("[mailer] cancel confirmation:", e.message));
+    }
+
+    // Always keep the mentor's calendar in sync, regardless of penalty
+    if (mentor?.email) {
+      mailer.sendBookingCancelledToMentor({
+        mentorEmail: mentor.email,
+        mentorName:  mentor.name ?? mentor.email,
+        studentName,
+        pgpId:       student?.studentProfile?.pgpId ?? "N/A",
+        date:        fmtDate(booking.slot.startTime),
+        time:        fmtTime(booking.slot.startTime),
+        icsContent:  cancelIcsContent,
+      }).catch((e) => console.error("[mailer] booking cancelled to mentor:", e.message));
     }
 
     // Notify mentor only for penalised cancellations
