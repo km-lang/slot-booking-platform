@@ -4,6 +4,16 @@ const prisma = require("../lib/prisma");
 
 const FOCUS_DISPLAY = { overall: "Overall CV", workex: "Work Experience", por: "POR / ECA" };
 
+// Cohort labels are "Q1".."Q17" — plain string sort puts Q10-Q17 before Q2-Q9.
+// Sort by the embedded number first, falling back to a string compare for ties
+// or non-numeric labels.
+const byCohortLabel = (a, b) => {
+  const numA = parseInt(a.label?.match(/\d+/)?.[0] ?? "", 10);
+  const numB = parseInt(b.label?.match(/\d+/)?.[0] ?? "", 10);
+  if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) return numA - numB;
+  return (a.label ?? "").localeCompare(b.label ?? "");
+};
+
 // ─── AIG Admin ───────────────────────────────────────────────────────────────
 
 const getAigOverview = async (req, res, next) => {
@@ -65,7 +75,7 @@ const getAigOverview = async (req, res, next) => {
         pending: total - reviewed,
         status,
       };
-    });
+    }).sort(byCohortLabel);
 
     // At-risk: zero bookings OR active ban
     const atRisk = [];
@@ -152,7 +162,7 @@ const getBatchOverview = async (_req, res, next) => {
             select: { user: { select: { bookings: { select: { status: true } } } } },
           },
         },
-        orderBy: [{ aig: { name: "asc" } }, { label: "asc" }],
+        orderBy: { aig: { name: "asc" } },
       }),
     ]);
 
@@ -184,7 +194,7 @@ const getBatchOverview = async (_req, res, next) => {
         covered,
         pct: total > 0 ? Math.round((covered / total) * 100) : 0,
       };
-    });
+    }).sort((a, b) => a.orgName.localeCompare(b.orgName) || byCohortLabel(a, b));
 
     const coveragePct =
       totalStudents > 0 ? Math.round((coveredStudents / totalStudents) * 100) : 0;
