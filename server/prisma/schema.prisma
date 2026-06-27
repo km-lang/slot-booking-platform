@@ -34,6 +34,23 @@ enum WarnType {
   STRIKE  // directly feeds ban evaluation
 }
 
+// Structural categorization of an AIG row — Disha is a Committee, not an AIG,
+// despite sharing the same table/role/route plumbing. Display/grouping only;
+// does not affect RBAC (role "AIGs", /admin/:aigSlug, requireAigScope all key
+// off the row's slug/id, never this field).
+enum OrgCategory {
+  COMMITTEE
+  CLUB
+  AIG
+}
+
+// Distinguishes alumni mentors from current PGP2 students mentoring without
+// any org affiliation (mentorType=PGP2_STUDENT implies aigId is null).
+enum MentorType {
+  ALUMNI
+  PGP2_STUDENT
+}
+
 // ─── Access Control ───────────────────────────────────────────────────────────
 
 // The sole gate to the platform. No email outside this table can log in,
@@ -80,16 +97,17 @@ model StudentProfile {
 }
 
 model MentorProfile {
-  id       String  @id @default(cuid())
-  userId   String  @unique
-  slug     String  @unique // e.g. "evelyn-vance" — server-generated at profile creation
-  firm     String
-  domain   String
-  aigId    String
-  cohortId String?
+  id         String     @id @default(cuid())
+  userId     String     @unique
+  slug       String     @unique // e.g. "evelyn-vance" — server-generated at profile creation
+  firm       String
+  domain     String
+  aigId      String?    // null = no org affiliation (e.g. a PGP2-student mentor)
+  cohortId   String?
+  mentorType MentorType @default(ALUMNI)
 
   user            User            @relation(fields: [userId], references: [id])
-  aig             AIG             @relation(fields: [aigId], references: [id])
+  aig             AIG?            @relation(fields: [aigId], references: [id])
   cohort          Cohort?         @relation(fields: [cohortId], references: [id])
   bookingReleases BookingRelease[]
   slots           Slot[]
@@ -98,10 +116,11 @@ model MentorProfile {
 // ─── Organisation ─────────────────────────────────────────────────────────────
 
 model AIG {
-  id   String @id @default(cuid())
-  slug String @unique // e.g. "disha" — used in /admin/:aigSlug routes
-  name String          // e.g. "Team Disha" — display name fetched by AigAdminDashboard
-  type String          // e.g. "Core Preparation" | "Domain AIG"
+  id       String      @id @default(cuid())
+  slug     String      @unique // e.g. "disha" — used in /admin/:aigSlug routes
+  name     String              // e.g. "Team Disha" — display name fetched by AigAdminDashboard
+  type     String              // e.g. "Core Preparation" | "Domain AIG" — free-text display label
+  category OrgCategory @default(AIG) // structural bucket: Disha is COMMITTEE, the rest are AIG
 
   cohorts          Cohort[]
   mentorProfiles   MentorProfile[]

@@ -5,15 +5,25 @@ const prisma = new PrismaClient();
 
 // ── Static data ────────────────────────────────────────────────────────────────
 
+// Corrected against the real IIML org chart: Disha is a Committee, not an AIG.
+// The previous 6 non-Disha entries used made-up names that matched nothing real
+// (e.g. "Credence Capital" is actually a Club, not an AIG). Slugs are kept as-is
+// (internal identifiers only, never shown to users) to avoid touching every
+// FIRMS/DOMAINS lookup key and existing FK — only `name`/`category` change.
 const AIG_DEFS = [
-  { slug: "disha",      name: "Team Disha",                           type: "Core Preparation", hasCohort: true  },
-  { slug: "consulting", name: "Consulting & Strategy Club",           type: "Domain AIG",       hasCohort: false },
-  { slug: "finance",    name: "Credence Capital",                     type: "Domain AIG",       hasCohort: false },
-  { slug: "marketing",  name: "Marketing & Sales Club",               type: "Domain AIG",       hasCohort: false },
-  { slug: "ops",        name: "Operations & Supply Chain Club",       type: "Domain AIG",       hasCohort: false },
-  { slug: "analytics",  name: "Analytics & Data Science Club",        type: "Domain AIG",       hasCohort: false },
-  { slug: "hr",         name: "HR & Organisational Behaviour Club",   type: "Domain AIG",       hasCohort: false },
+  { slug: "disha",      name: "Team Disha",                                       type: "Core Preparation", category: "COMMITTEE", hasCohort: true  },
+  { slug: "consulting", name: "Consulting & Strategy Club",                       type: "Domain AIG",       category: "AIG",       hasCohort: false },
+  { slug: "finance",    name: "SIGFI",                                            type: "Domain AIG",       category: "AIG",       hasCohort: false },
+  { slug: "marketing",  name: "PRiSM – The Marketing Cell",                       type: "Domain AIG",       category: "AIG",       hasCohort: false },
+  { slug: "ops",        name: "Operations Interest Group",                        type: "Domain AIG",       category: "AIG",       hasCohort: false },
+  { slug: "analytics",  name: "Biztech",                                          type: "Domain AIG",       category: "AIG",       hasCohort: false },
+  { slug: "hr",         name: "HELICS – The HR Club",                             type: "Domain AIG",       category: "AIG",       hasCohort: false },
+  { slug: "igfab",      name: "Interest Group in Food and Agri-Business (IGFAB)", type: "Domain AIG",       category: "AIG",       hasCohort: false },
 ];
+
+// Mentors with no AIG affiliation at all — current PGP2 students mentoring
+// independently of any Committee/Club/AIG structure.
+const NON_AIG_MENTOR_COUNT = 5;
 
 // Real Disha mentors — cohortLabel maps to the Q1–Q17 cohorts created in Phase 4
 const DISHA_MENTORS = [
@@ -43,6 +53,7 @@ const FIRMS = {
   ops:        ["Amazon", "Flipkart", "Meesho", "Zomato", "Swiggy", "Ola", "Uber", "TCS", "Infosys", "Wipro", "Delhivery", "Blue Dart", "DHL", "Mahindra Logistics", "Container Corp of India"],
   analytics:  ["Google", "Meta", "Amazon", "Microsoft", "Mu Sigma", "Fractal Analytics", "Absolutdata", "WNS Analytics", "LatentView", "Tiger Analytics", "EXL Analytics", "Genpact", "Accenture Analytics", "Deloitte Insights", "KPMG Data"],
   hr:         ["Deloitte", "EY", "KPMG", "PwC", "Aon Hewitt", "Mercer", "Willis Towers Watson", "Hewitt Associates", "ManpowerGroup", "Randstad", "McKinsey People & Org", "Accenture HR", "IBM Kenexa", "SAP SuccessFactors", "Workday"],
+  igfab:      ["ITC Agro", "Cargill India", "Nestlé", "ADM", "Olam Agri", "PepsiCo Foods", "Britannia", "Godrej Agrovet", "AGCO", "Mahindra Agri", "Bayer CropScience", "Syngenta", "UPL", "Rallis India", "Jain Irrigation"],
 };
 
 const DOMAINS = {
@@ -52,6 +63,7 @@ const DOMAINS = {
   ops:        ["Supply Chain Management", "Logistics & Distribution", "Procurement", "Manufacturing Operations", "Project Management", "Quality Management", "Warehousing", "Last-Mile Delivery", "Demand Planning", "Inventory Management", "Vendor Management", "Process Excellence", "Lean / Six Sigma", "Fleet Management", "Capacity Planning"],
   analytics:  ["Data Science", "Business Analytics", "Machine Learning", "Business Intelligence", "Statistical Modeling", "Product Analytics", "Marketing Analytics", "Risk Analytics", "NLP / AI", "Data Engineering", "Customer Analytics", "Pricing Analytics", "Forecasting", "A/B Testing", "GenAI Applications"],
   hr:         ["Talent Acquisition", "HR Business Partner", "Learning & Development", "Compensation & Benefits", "Organisational Development", "Employee Relations", "HR Analytics", "Diversity & Inclusion", "Change Management", "Performance Management", "Succession Planning", "Employer Branding", "HRIS Implementation", "Culture & Engagement", "Executive Coaching"],
+  igfab:      ["Agribusiness Strategy", "Food Supply Chain", "Agri-Commodity Trading", "Sustainable Agriculture", "Food Processing", "Agri-Fintech", "Rural Distribution", "Crop Science", "Agri-Exports", "Farm-to-Fork Operations", "Agri Risk Management", "Cold Chain Logistics", "Agri-Tech", "Seed & Input Sales", "Agri Policy"],
 };
 
 // ── Seed ──────────────────────────────────────────────────────────────────────
@@ -81,8 +93,8 @@ async function main() {
   for (const def of AIG_DEFS) {
     aigs[def.slug] = await prisma.aIG.upsert({
       where:  { slug: def.slug },
-      update: { name: def.name, type: def.type },
-      create: { slug: def.slug, name: def.name, type: def.type },
+      update: { name: def.name, type: def.type, category: def.category },
+      create: { slug: def.slug, name: def.name, type: def.type, category: def.category },
     });
   }
   // Disha AIG admin whitelist
@@ -166,6 +178,21 @@ async function main() {
     }
   }
 
+  // Non-AIG mentors — PGP2 students mentoring with no Committee/Club/AIG affiliation
+  for (let i = 1; i <= NON_AIG_MENTOR_COUNT; i++) {
+    const n     = String(i).padStart(2, "0");
+    const email = `independent.mentor.${n}@iiml.ac.in`;
+    const name  = `Independent Mentor ${n}`;
+    const slug  = `independent-mentor-${n}`;
+    wlMentors.push({ email, role: "MENTOR", aigId: null, addedBy: "seed" });
+    usrMentors.push({ email, name, role: "MENTOR" });
+    profMeta.push({
+      email, slug,
+      firm: "PGP2 Peer Mentor", domain: "General CV Review",
+      aigId: null, cohortId: null, mentorType: "PGP2_STUDENT",
+    });
+  }
+
   await prisma.accessWhitelist.createMany({ data: wlMentors });
   await prisma.user.createMany({ data: usrMentors });
 
@@ -177,15 +204,17 @@ async function main() {
 
   await prisma.mentorProfile.createMany({
     data: profMeta.map((m) => ({
-      userId:   mEmail2Id[m.email],
-      slug:     m.slug,
-      firm:     m.firm,
-      domain:   m.domain,
-      aigId:    m.aigId,
-      cohortId: m.cohortId,
+      userId:     mEmail2Id[m.email],
+      slug:       m.slug,
+      firm:       m.firm,
+      domain:     m.domain,
+      aigId:      m.aigId,
+      cohortId:   m.cohortId,
+      mentorType: m.mentorType ?? "ALUMNI",
     })),
   });
-  console.log(`         ✓ ${DISHA_MENTORS.length} Disha (real) + 90 domain AIG (dummy) = ${DISHA_MENTORS.length + 90} total`);
+  const AIG_DUMMY_COUNT = (AIG_DEFS.length - 1) * 15; // all non-Disha AIGs × 15 each
+  console.log(`         ✓ ${DISHA_MENTORS.length} Disha (real) + ${AIG_DUMMY_COUNT} AIG (dummy) + ${NON_AIG_MENTOR_COUNT} non-AIG (dummy) = ${DISHA_MENTORS.length + AIG_DUMMY_COUNT + NON_AIG_MENTOR_COUNT} total`);
 
   // ── Phase 6: Students (17 × 20 = 340) ────────────────────────────────────
   console.log("\nPhase 6  Students (340 total, 20 per Disha cohort)...");
@@ -302,9 +331,9 @@ async function main() {
   ]);
 
   console.log("\n── Summary ─────────────────────────────────────────────────────");
-  console.log(`  AIGs             ${AIG_DEFS.length}`);
+  console.log(`  Org units        ${AIG_DEFS.length}  (1 Committee: Disha, ${AIG_DEFS.length - 1} AIGs)`);
   console.log(`  Cohorts          ${cohorts}  (Disha: Q1–Q17)`);
-  console.log(`  MentorProfiles   ${mentors}  (17 real Disha + 90 dummy + 1 test)`);
+  console.log(`  MentorProfiles   ${mentors}  (17 real Disha + ${AIG_DUMMY_COUNT} AIG dummy + ${NON_AIG_MENTOR_COUNT} non-AIG dummy + 1 test)`);
   console.log(`  StudentProfiles  ${students}`);
   console.log(`  Users            ${users}`);
   console.log(`  Whitelist        ${whitelist}`);
