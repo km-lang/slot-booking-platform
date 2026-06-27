@@ -56,19 +56,19 @@ export default function AigAdminDashboard() {
 
         {/* Sticky Header */}
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-4">
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2 font-bold text-emerald-950">
-              <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400">
+          <div className="flex justify-between items-center gap-3 mb-4">
+            <div className="flex items-center gap-2 font-bold text-emerald-950 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400 shrink-0">
                 <Shield size={18} />
               </div>
-              <div>
-                {aigName}
+              <div className="min-w-0">
+                <span className="block leading-tight">{aigName}</span>
                 <span className="text-[10px] uppercase tracking-widest text-emerald-600 block leading-none mt-0.5">
                   Cohort Control
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => downloadCsv(`${API_BASE}/admin/aig/${aigSlug}/export`, `aig-${aigSlug}-roster.csv`)}
                 disabled={isLoading}

@@ -56,17 +56,17 @@ export default function AdminStudentDetail() {
 
   return (
     <div className="min-h-screen app-bg">
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate("/admin/placements")}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors shrink-0"
           >
             <ArrowLeft size={18} className="text-emerald-800" />
           </button>
-          <div>
-            <div className="font-black text-emerald-950 text-sm leading-tight">{student.name}</div>
-            <div className="text-[11px] text-emerald-700/60 font-semibold">
+          <div className="min-w-0">
+            <div className="font-black text-emerald-950 text-sm leading-tight truncate">{student.name}</div>
+            <div className="text-[11px] text-emerald-700/60 font-semibold truncate">
               PGP-{student.pgpId} · {student.cohortLabel ?? "No Cohort"} {student.orgName ? `· ${student.orgName}` : ""}
             </div>
           </div>

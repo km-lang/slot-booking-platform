@@ -624,7 +624,7 @@ function WhitelistTab() {
             onChange={(e) => setAddEmail(e.target.value)} required
             className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
           />
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <select value={addRole} onChange={(e) => { setAddRole(e.target.value); setAddAigSlug(""); }}
               className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
               <option value="STUDENT">STUDENT</option>
@@ -967,10 +967,10 @@ function SyncBadge() {
   return (
     <span
       title="Auto-refreshes every 15 seconds"
-      className="flex items-center gap-1.5 text-xs font-bold text-emerald-700/60 bg-emerald-900/5 px-3 py-1.5 rounded-full border border-emerald-900/10"
+      className="flex items-center gap-1.5 text-xs font-bold text-emerald-700/60 bg-emerald-900/5 px-2.5 sm:px-3 py-1.5 rounded-full border border-emerald-900/10"
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${isFetching ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
-      {label}
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFetching ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+      <span className="hidden sm:inline">{label}</span>
     </span>
   );
 }
@@ -982,14 +982,14 @@ export default function PlacementAdminDashboard() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans pb-12">
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-3 font-bold text-lg text-emerald-950">
-          <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400">
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center gap-3 shadow-sm">
+        <div className="flex items-center gap-3 font-bold text-lg text-emerald-950 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400 shrink-0">
             <Shield size={18} />
           </div>
-          <div>Placements <span className="text-emerald-700 text-sm font-semibold ml-1">Admin Console</span></div>
+          <div className="truncate">Placements <span className="hidden sm:inline text-emerald-700 text-sm font-semibold ml-1">Admin Console</span></div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <SyncBadge />
           <AvatarMenu />
         </div>
@@ -1009,20 +1009,22 @@ export default function PlacementAdminDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 pt-6">
-        <div className="flex gap-1 bg-emerald-900/5 border border-emerald-900/10 rounded-xl p-1 w-fit mb-6">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === tab.id
-                  ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10"
-                  : "text-emerald-800/60 hover:text-emerald-950"
-              }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+        <div className="overflow-x-auto -mx-4 px-4 sm:overflow-visible sm:mx-0 sm:px-0 mb-6">
+          <div className="flex gap-1 bg-emerald-900/5 border border-emerald-900/10 rounded-xl p-1 w-fit">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10"
+                    : "text-emerald-800/60 hover:text-emerald-950"
+                }`}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
