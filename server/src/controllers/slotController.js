@@ -62,7 +62,7 @@ const listMentors = async (req, res, next) => {
     res.json(
       mentors.map((m) => ({
         id: m.slug,
-        aigId: m.aig.slug,
+        aigId: m.aig?.slug ?? null,
         name: m.user.name,
         firm: m.firm,
         domain: m.domain,
@@ -92,7 +92,7 @@ const getMentor = async (req, res, next) => {
       firm: mentor.firm,
       domain: mentor.domain,
       cohortId: mentor.cohortId,
-      aig: { id: mentor.aig.slug, name: mentor.aig.name },
+      aig: mentor.aig ? { id: mentor.aig.slug, name: mentor.aig.name } : null,
     });
   } catch (err) {
     next(err);
