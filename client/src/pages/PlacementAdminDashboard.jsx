@@ -4,6 +4,7 @@ import {
   Activity, Users, CalendarCheck, Ban, Download, Shield, AlertTriangle,
   ActivitySquare, Lock, List, Settings, Plus, Trash2, Save, ShieldOff, Search,
   Building2, History as HistoryIcon, GraduationCap, ChevronDown, ChevronRight,
+  CalendarDays, ChevronLeft,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -11,7 +12,7 @@ import {
 import {
   useAdminBatch, useWhitelist, useAigs, useConfig, useBans,
   useAddWhitelist, useRemoveWhitelist, useSaveConfig, useLiftBan,
-  useOrgStats, useMentorStats, useStudentSearch, useStudentDetail,
+  useOrgStats, useMentorStats, useStudentSearch, useStudentDetail, useAdminCalendar,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -73,6 +74,7 @@ const TABS = [
   { id: "overview",   label: "Overview",         icon: <ActivitySquare size={14} /> },
   { id: "orgmentors", label: "Org & Mentor Stats", icon: <Building2 size={14} /> },
   { id: "history",    label: "History",          icon: <HistoryIcon size={14} /> },
+  { id: "calendar",   label: "Calendar",         icon: <CalendarDays size={14} /> },
   { id: "whitelist",  label: "Whitelist",        icon: <List size={14} /> },
   { id: "config",     label: "Config",           icon: <Settings size={14} /> },
   { id: "bans",       label: "Bans",             icon: <ShieldOff size={14} /> },
@@ -575,6 +577,114 @@ function HistoryTab() {
   );
 }
 
+// ── Calendar Tab ───────────────────────────────────────────────────────────────
+// A real per-day grid instead of another table — sessions listed chronologically
+// within each day column, color-coded by status.
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const STATUS_DOT = { CONFIRMED: "bg-blue-500", ATTENDED: "bg-emerald-500", NO_SHOW: "bg-red-500" };
+
+const startOfWeek = (d) => {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - date.getDay());
+  return date;
+};
+const toYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function CalendarTab() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekStart = useMemo(() => {
+    const base = startOfWeek(new Date());
+    base.setDate(base.getDate() + weekOffset * 7);
+    return base;
+  }, [weekOffset]);
+
+  const { data, isLoading } = useAdminCalendar(toYMD(weekStart));
+
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    }),
+    [weekStart],
+  );
+
+  const sessionsByDay = useMemo(() => {
+    const map = {};
+    for (const day of days) map[toYMD(day)] = [];
+    for (const s of (data?.sessions ?? [])) {
+      const key = toYMD(new Date(s.startTime));
+      if (map[key]) map[key].push(s);
+    }
+    return map;
+  }, [days, data]);
+
+  const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const todayKey = toYMD(new Date());
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-lg font-black text-emerald-950">
+          {weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {days[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+        </h2>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setWeekOffset((w) => w - 1)} className="p-2 rounded-lg bg-white border border-emerald-900/10 hover:bg-emerald-50">
+            <ChevronLeft size={16} />
+          </button>
+          <button onClick={() => setWeekOffset(0)} className="text-xs font-bold text-emerald-700 px-3 py-2 rounded-lg bg-white border border-emerald-900/10 hover:bg-emerald-50">
+            This Week
+          </button>
+          <button onClick={() => setWeekOffset((w) => w + 1)} className="p-2 rounded-lg bg-white border border-emerald-900/10 hover:bg-emerald-50">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Confirmed</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Attended</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> No-Show</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-7 gap-3">
+        {days.map((day, i) => {
+          const key = toYMD(day);
+          const daySessions = sessionsByDay[key] ?? [];
+          const isToday = key === todayKey;
+          return (
+            <div key={key} className={`bg-white border rounded-2xl p-3 min-h-[140px] ${isToday ? "border-emerald-400 ring-1 ring-emerald-200" : "border-emerald-900/10"}`}>
+              <div className="text-[10px] font-bold text-emerald-700/50 uppercase tracking-widest mb-0.5">{DAY_NAMES[i]}</div>
+              <div className={`text-sm font-black mb-2 ${isToday ? "text-emerald-700" : "text-emerald-950"}`}>{day.getDate()}</div>
+              {isLoading ? (
+                <div className="text-[10px] font-bold text-emerald-800/30">Loading…</div>
+              ) : daySessions.length === 0 ? (
+                <div className="text-[10px] font-semibold text-emerald-800/20">No sessions</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {daySessions.map((s) => (
+                    <div key={s.id} className="border-l-2 border-emerald-400 pl-2 py-0.5">
+                      <div className="flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[s.status] ?? "bg-slate-400"}`} />
+                        <span className="text-[10px] font-bold text-emerald-950">{fmtTime(s.startTime)}</span>
+                      </div>
+                      <div className="text-[10px] font-semibold text-emerald-700/70 truncate" title={`${s.mentorName} → ${s.studentName}`}>
+                        {s.mentorName} → {s.studentName}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Whitelist Tab ─────────────────────────────────────────────────────────────
 
 const ROLE_BADGE = {
@@ -1032,6 +1142,7 @@ export default function PlacementAdminDashboard() {
         {activeTab === "overview"   && <OverviewTab />}
         {activeTab === "orgmentors" && <OrgMentorStatsTab />}
         {activeTab === "history"    && <HistoryTab />}
+        {activeTab === "calendar"   && <CalendarTab />}
         {activeTab === "whitelist"  && <WhitelistTab />}
         {activeTab === "config"     && <ConfigTab />}
         {activeTab === "bans"       && <BansTab />}

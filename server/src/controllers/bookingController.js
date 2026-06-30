@@ -2,9 +2,7 @@
 
 const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
-const { buildSessionEvent } = require("../lib/calendarInvite");
-
-const CALENDAR_ORGANIZER_EMAIL = process.env.SMTP_FROM?.match(/<(.+)>/)?.[1] ?? "noreply@iiml.ac.in";
+const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } = require("../lib/calendarInvite");
 
 // Read penalty thresholds from SystemConfig; fall back to built-in defaults.
 const getPenaltyThresholds = async () => {
@@ -133,15 +131,17 @@ const createBooking = async (req, res, next) => {
         const mentorName = mentorUser?.user?.name ?? "your mentor";
         const studentName = student?.name ?? student?.email ?? "your mentee";
 
+        const focusDescription = `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`;
+
         const icsContent = buildSessionEvent({
           uid: booking.id,
-          sequence: 0,
+          sequence: claimedSlot.icsSequence,
           method: "REQUEST",
           status: "CONFIRMED",
           startTime: claimedSlot.startTime,
           endTime: claimedSlot.endTime,
           summary: `CV Review: ${studentName} × ${mentorName}`,
-          description: `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`,
+          description: focusDescription,
           location: claimedSlot.venue,
           meetingLink: claimedSlot.meetingLink ?? null,
           organizerEmail: CALENDAR_ORGANIZER_EMAIL,
@@ -150,6 +150,13 @@ const createBooking = async (req, res, next) => {
             ...(student?.email ? [{ email: student.email, name: studentName }] : []),
             ...(mentorUser?.user?.email ? [{ email: mentorUser.user.email, name: mentorName }] : []),
           ],
+        });
+        const calendarLink = buildGoogleCalendarLink({
+          summary: `CV Review: ${studentName} × ${mentorName}`,
+          description: focusDescription,
+          location: claimedSlot.venue,
+          startTime: claimedSlot.startTime,
+          endTime: claimedSlot.endTime,
         });
 
         if (student?.email) {
@@ -164,6 +171,7 @@ const createBooking = async (req, res, next) => {
             meetingLink:  claimedSlot.meetingLink ?? null,
             focus,
             icsContent,
+            calendarLink,
           }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
         }
         if (mentorUser?.user?.email) {
@@ -178,6 +186,7 @@ const createBooking = async (req, res, next) => {
             meetingLink: claimedSlot.meetingLink ?? null,
             focus,
             icsContent,
+            calendarLink,
           }).catch((e) => console.error("[mailer] booking confirmation to mentor:", e.message));
         }
       }).catch((e) => console.error("[mailer] student lookup:", e.message));
@@ -258,7 +267,7 @@ const cancelBooking = async (req, res, next) => {
     const mentorName  = mentor?.name ?? mentor?.email ?? "the mentor";
     const cancelIcsContent = buildSessionEvent({
       uid: booking.id,
-      sequence: 1,
+      sequence: booking.slot.icsSequence + 1, // must exceed any prior reschedule's sequence
       method: "CANCEL",
       status: "CANCELLED",
       startTime: booking.slot.startTime,
@@ -312,6 +321,29 @@ const cancelBooking = async (req, res, next) => {
         penalty,
       }).catch((e) => console.error("[mailer] late cancel to mentor:", e.message));
     }
+
+    // Notify the waitlist (if any) that this slot just freed up — one-shot, never
+    // auto-books anyone. First person to actually submit a real booking still wins,
+    // through the normal OCC-guarded createBooking flow above.
+    prisma.slotWaitlist.findMany({
+      where: { slotId: booking.slotId },
+      include: { student: { select: { name: true, email: true } } },
+    }).then(async (waitlisted) => {
+      if (waitlisted.length === 0) return;
+      for (const w of waitlisted) {
+        if (!w.student?.email) continue;
+        mailer.sendWaitlistSlotAvailable({
+          studentEmail: w.student.email,
+          studentName:  w.student.name ?? w.student.email,
+          mentorName,
+          firm:         booking.slot.mentorProfile?.firm ?? "IIM Lucknow",
+          date:         fmtDate(booking.slot.startTime),
+          time:         fmtTime(booking.slot.startTime),
+          venue:        booking.slot.venue,
+        }).catch((e) => console.error("[mailer] waitlist notify:", e.message));
+      }
+      await prisma.slotWaitlist.deleteMany({ where: { slotId: booking.slotId } });
+    }).catch((e) => console.error("[waitlist] notify lookup:", e.message));
 
     res.json({ id: booking.id, status: "CANCELLED", penalty });
   } catch (err) {

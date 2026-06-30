@@ -56,6 +56,31 @@ router.patch(
   requireRole("MENTOR"),
   slotController.setSlotMeetingLink,
 );
+router.patch(
+  "/slots/:id/reschedule",
+  requireRole("MENTOR"),
+  slotController.setSlotReschedule,
+);
+router.post(
+  "/slots/bulk-delete",
+  requireRole("MENTOR"),
+  slotController.bulkDeleteSlots,
+);
+router.patch(
+  "/slots/bulk-meeting-link",
+  requireRole("MENTOR"),
+  slotController.bulkSetMeetingLink,
+);
+router.post(
+  "/slots/:id/waitlist",
+  requireRole("STUDENT"),
+  slotController.joinWaitlist,
+);
+router.delete(
+  "/slots/:id/waitlist",
+  requireRole("STUDENT"),
+  slotController.leaveWaitlist,
+);
 
 // ── Bookings ───────────────────────────────────────────────────────────────
 // GET    /api/bookings/mine         student: own booking history (upcoming + past)
@@ -120,6 +145,11 @@ router.get(
   "/admin/student/:pgpId",
   requireRole("SuperADMIN"),
   adminController.getStudentDetail,
+);
+router.get(
+  "/admin/calendar",
+  requireRole("SuperADMIN"),
+  adminController.getCalendarWeek,
 );
 router.get(
   "/admin/whitelist",

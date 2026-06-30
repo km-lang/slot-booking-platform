@@ -4,7 +4,7 @@ import {
   Clock, MapPin, Video, AlertTriangle, ShieldCheck,
   ChevronDown, XCircle, Timer,
 } from "lucide-react";
-import { useMentor, useSlots, useBookSlot, useCancelBooking } from "../hooks/useApi";
+import { useMentor, useSlots, useBookSlot, useCancelBooking, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 
 const FOCUS_LABELS = {
@@ -21,6 +21,36 @@ const penaltyTier = (minsUntilSlot) => {
   if (minsUntilSlot >= 30) return "WARNING";
   return "STRIKE";
 };
+
+// Notification-only — never auto-books. Joining just means: get emailed once if
+// this exact slot frees up; still have to come back and book it like anyone else.
+function WaitlistButton({ slot, mentorId }) {
+  const join = useJoinWaitlist(mentorId);
+  const leave = useLeaveWaitlist(mentorId);
+  const isPending = join.isPending || leave.isPending;
+
+  if (slot.onWaitlist) {
+    return (
+      <button
+        onClick={() => leave.mutate(slot.id)}
+        disabled={isPending}
+        className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 disabled:opacity-50"
+        title="Tap to leave the waitlist"
+      >
+        {isPending ? "…" : "✓ On Waitlist"}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={() => join.mutate(slot.id)}
+      disabled={isPending}
+      className="text-[10px] font-bold text-emerald-900/50 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-emerald-200 transition-colors disabled:opacity-50"
+    >
+      {isPending ? "…" : "Booked — Join Waitlist"}
+    </button>
+  );
+}
 
 export default function MentorBookingView() {
   const { group, mentorId } = useParams();
@@ -215,9 +245,7 @@ export default function MentorBookingView() {
                       </button>
                     )}
                     {slot.status === "BOOKED_BY_OTHER" && (
-                      <div className="text-[10px] font-bold text-emerald-900/30 uppercase tracking-widest px-2">
-                        Booked
-                      </div>
+                      <WaitlistButton slot={slot} mentorId={mentorId} />
                     )}
                     {slot.status === "COHORT_RESTRICTED" && (
                       <div className="text-[10px] font-bold text-amber-700/70 uppercase tracking-widest px-2 text-right">

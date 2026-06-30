@@ -61,19 +61,22 @@ const wrap = (body) => `
 </div>`;
 
 const btn = (href, label) =>
-  `<a href="${href}" style="display:inline-block;background:#064E3B;color:#fff;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:16px">${label}</a>`;
+  `<a href="${href}" style="display:inline-block;background:#064E3B;color:#fff;font-weight:700;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:16px;margin-right:8px">${label}</a>`;
+
+const secondaryBtn = (href, label) =>
+  `<a href="${href}" style="display:inline-block;background:transparent;color:#064E3B;font-weight:700;padding:12px 24px;border-radius:8px;border:1.5px solid #064E3B;text-decoration:none;margin-top:16px">${label}</a>`;
 
 // ── Exported email senders ─────────────────────────────────────────────────────
 
 /**
  * Sent to a student immediately after a successful booking.
  */
-const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, meetingLink, icsContent }) => {
+const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, meetingLink, icsContent, calendarLink }) => {
   const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
   return send({
     to:      studentEmail,
     subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
-    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached. To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
+    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Booking Confirmed</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -84,6 +87,7 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
         <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
       </div>
       ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
+      ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
       <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">
         A calendar invite is attached to this email.<br>
         You will receive a reminder 30 minutes before the session.<br>
@@ -97,12 +101,12 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
 /**
  * Sent to a mentor immediately after a student books one of their slots.
  */
-const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus, meetingLink, icsContent }) => {
+const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus, meetingLink, icsContent, calendarLink }) => {
   const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
   return send({
     to:      mentorEmail,
     subject: `New booking: ${studentName} on ${date} at ${time}`,
-    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) booked a ${focusLabel} session with you on ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.`,
+    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) booked a ${focusLabel} session with you on ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""}`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">New Booking</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -113,6 +117,7 @@ const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName,
         <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
       </div>
       ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
+      ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
       <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">A calendar invite is attached to this email.</p>
     `),
     ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
@@ -168,6 +173,56 @@ const sendBookingCancelledToMentor = ({ mentorEmail, mentorName, studentName, pg
       <p style="font-size:13px;color:#064E3B99;margin:0">The calendar event has been cancelled.</p>
     `),
     ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
+  });
+
+/**
+ * Sent to both student and mentor when a mentor reschedules an already-booked
+ * session to a new time. No penalty either direction — this is a time change,
+ * not a cancellation.
+ */
+const sendRescheduleNotification = ({ to, recipientName, otherPartyName, oldDate, oldTime, newDate, newTime, venue, meetingLink, icsContent, calendarLink }) =>
+  send({
+    to,
+    subject: `Session rescheduled: now ${newDate} at ${newTime}`,
+    text:    `Hi ${recipientName}, your session with ${otherPartyName} has been moved from ${oldDate} ${oldTime} to ${newDate} ${newTime}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} Your calendar invite has been updated.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""}`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Session Rescheduled</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">with ${otherPartyName}</p>
+      <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:14px 18px;margin-bottom:12px">
+        <span style="font-size:12px;color:#92400E;text-decoration:line-through">${oldDate} · ${oldTime}</span>
+      </div>
+      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b style="font-size:15px;color:#064E3B">${newDate} · ${newTime}</b><br>
+        <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
+      </div>
+      ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
+      ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
+      <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">Your calendar invite has been updated automatically — no action needed.</p>
+    `),
+    ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
+  });
+
+/**
+ * Sent to every waitlisted student once, when a slot they wanted frees up.
+ * Notification only — booking still goes through the normal flow, first to
+ * actually submit wins (no auto-booking on anyone's behalf).
+ */
+const sendWaitlistSlotAvailable = ({ studentEmail, studentName, mentorName, firm, date, time, venue }) =>
+  send({
+    to:      studentEmail,
+    subject: `A slot with ${mentorName} just opened up`,
+    text:    `Hi ${studentName}, a slot with ${mentorName} (${firm}) on ${date} at ${time}, ${venue} just became available — you were on the waitlist. Open the app now to book it before someone else does.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">A Slot Just Opened Up 🎉</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">You were waitlisted for this session</p>
+      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b style="font-size:15px">${mentorName}</b>
+        <span style="font-size:13px;color:#064E3B99;margin-left:6px">${firm}</span><br>
+        <span style="font-size:13px;color:#064E3B;margin-top:6px;display:block">${date} · ${time}</span>
+        <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
+      </div>
+      <p style="font-size:13px;color:#064E3B99;margin:0"><b>Open the app and book it now</b> — it's first-come, first-served, so other waitlisted students got this same email.</p>
+    `),
   });
 
 /**
@@ -292,6 +347,8 @@ module.exports = {
   sendBookingConfirmationToMentor,
   sendCancelConfirmationToStudent,
   sendBookingCancelledToMentor,
+  sendRescheduleNotification,
+  sendWaitlistSlotAvailable,
   sendDelayNotification,
   sendLateCancelToMentor,
   sendStudentReminder,

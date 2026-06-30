@@ -20,6 +20,7 @@ export const QK = {
   mentorStats:     ()        => ["mentorStats"],
   studentSearch:   (q)       => ["studentSearch", q],
   studentDetail:   (pgpId)   => ["studentDetail", pgpId],
+  adminCalendar:   (weekStart) => ["adminCalendar", weekStart],
   whitelist:       ()        => ["whitelist"],
   config:          ()        => ["config"],
   bans:            ()        => ["bans"],
@@ -258,6 +259,58 @@ export const useSetSlotMeetingLink = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
   });
 };
+
+export const useRescheduleSlot = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, startTime, endTime }) =>
+      apiFetch(`/slots/${slotId}/reschedule`, {
+        method: "PATCH",
+        body: JSON.stringify({ startTime, endTime }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useBulkDeleteSlots = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotIds) =>
+      apiFetch("/slots/bulk-delete", { method: "POST", body: JSON.stringify({ slotIds }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useBulkSetMeetingLink = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotIds, meetingLink }) =>
+      apiFetch("/slots/bulk-meeting-link", { method: "PATCH", body: JSON.stringify({ slotIds, meetingLink }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useJoinWaitlist = (mentorSlug) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotId) => apiFetch(`/slots/${slotId}/waitlist`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.slots(mentorSlug) }),
+  });
+};
+
+export const useLeaveWaitlist = (mentorSlug) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotId) => apiFetch(`/slots/${slotId}/waitlist`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.slots(mentorSlug) }),
+  });
+};
+
+export const useAdminCalendar = (weekStart) =>
+  useQuery({
+    queryKey: QK.adminCalendar(weekStart),
+    queryFn:  () => apiFetch(`/admin/calendar?weekStart=${weekStart}`),
+  });
 
 export const useAddWhitelist = () => {
   const qc = useQueryClient();

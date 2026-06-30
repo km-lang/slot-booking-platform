@@ -8,6 +8,7 @@ import {
 import {
   useMentorDashboard, useMarkAttendance, useCreateSlots,
   useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
+  useRescheduleSlot, useBulkDeleteSlots, useBulkSetMeetingLink,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -102,6 +103,87 @@ function RunningLateSheet({ session, onClose }) {
   );
 }
 
+// ── Reschedule Sheet ─────────────────────────────────────────────────────────────
+// Mentor-initiated time shift of an already-booked session — same booking, same
+// student, no penalty either direction. Student (and mentor) get an updated
+// calendar invite automatically.
+const toLocalHHMM = (iso) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+const toLocalYYYYMMDD = (iso) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+function RescheduleSheet({ session, onClose }) {
+  const [date, setDate] = useState(toLocalYYYYMMDD(session.startTime));
+  const [start, setStart] = useState(toLocalHHMM(session.startTime));
+  const [end, setEnd] = useState(toLocalHHMM(session.endTime));
+  const reschedule = useRescheduleSlot();
+
+  const handleSubmit = () => {
+    if (!date || !start || !end) return;
+    const startDateTime = new Date(`${date}T${start}:00`).toISOString();
+    const endDateTime   = new Date(`${date}T${end}:00`).toISOString();
+    reschedule.mutate(
+      { slotId: session.id, startTime: startDateTime, endTime: endDateTime },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <>
+      <div className="absolute inset-0 bg-emerald-950/40 backdrop-blur-sm z-40" onClick={onClose} />
+      <div className="absolute bottom-0 left-0 w-full bg-white rounded-t-3xl z-50 p-6 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.12)]">
+        <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5" />
+        <h3 className="text-lg font-black text-emerald-950 mb-0.5">Reschedule Session</h3>
+        <p className="text-xs font-semibold text-emerald-700/60 mb-1">
+          with <span className="text-emerald-800 font-bold">{session.student.name}</span>
+        </p>
+        <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">Currently: {session.date} · {session.time}</p>
+
+        <div className="space-y-3 mb-5">
+          <div>
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">New Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">New Start</label>
+              <input type="time" value={start} onChange={(e) => setStart(e.target.value)}
+                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">New End</label>
+              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
+                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none" />
+            </div>
+          </div>
+        </div>
+
+        {reschedule.error && (
+          <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+            {reschedule.error.message}
+          </p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={reschedule.isPending || !date || !start || !end}
+          className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95"
+        >
+          {reschedule.isPending ? "Rescheduling…" : "Confirm New Time"}
+        </button>
+        <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
+          No penalty applies. {session.student.name} will get an updated calendar invite.
+        </p>
+      </div>
+    </>
+  );
+}
+
 // ── Meeting Link Row ───────────────────────────────────────────────────────────
 // Lets a mentor add or edit a slot's Google Meet (or other) link at any time —
 // at creation, or "later somewhere" once the batch already exists.
@@ -166,6 +248,7 @@ function MeetingLinkRow({ slotId, currentLink }) {
 // ── Session Card ──────────────────────────────────────────────────────────────
 function SessionCard({ session, onAttendance, pendingBookingId }) {
   const [lateSheetOpen, setLateSheetOpen] = useState(false);
+  const [rescheduleSheetOpen, setRescheduleSheetOpen] = useState(false);
   const isPending = pendingBookingId === session.bookingId;
 
   return (
@@ -230,6 +313,13 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
           >
             <Clock size={14} />
           </button>
+          <button
+            onClick={() => setRescheduleSheetOpen(true)}
+            className="px-3 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 transition-colors"
+            title="Reschedule"
+          >
+            <Calendar size={14} />
+          </button>
           {session.student.email && (
             <a
               href={`mailto:${session.student.email}`}
@@ -244,6 +334,9 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
 
       {lateSheetOpen && (
         <RunningLateSheet session={session} onClose={() => setLateSheetOpen(false)} />
+      )}
+      {rescheduleSheetOpen && (
+        <RescheduleSheet session={session} onClose={() => setRescheduleSheetOpen(false)} />
       )}
     </div>
   );
@@ -261,8 +354,15 @@ export default function MentorDashboard() {
   const attendanceMutation  = useMarkAttendance();
   const deleteSlotMutation  = useDeleteSlot();
   const createSlotsMutation = useCreateSlots();
+  const bulkDeleteMutation  = useBulkDeleteSlots();
+  const bulkLinkMutation    = useBulkSetMeetingLink();
 
   const [pendingBookingId, setPendingBookingId] = useState(null);
+
+  // Bulk slot selection (Open Slots list)
+  const [selectedSlotIds, setSelectedSlotIds] = useState([]);
+  const [bulkLinkValue, setBulkLinkValue] = useState("");
+  const [bulkLinkEditing, setBulkLinkEditing] = useState(false);
 
   // Slot creation form state
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
@@ -306,6 +406,34 @@ export default function MentorDashboard() {
     deleteSlotMutation.mutate(slotId, {
       onError: (err) => alert(err.message),
     });
+  };
+
+  const toggleSlotSelected = (slotId) => {
+    setSelectedSlotIds((prev) => (prev.includes(slotId) ? prev.filter((id) => id !== slotId) : [...prev, slotId]));
+  };
+  const toggleSelectAll = () => {
+    setSelectedSlotIds((prev) => (prev.length === availableSlots.length ? [] : availableSlots.map((s) => s.id)));
+  };
+  const clearSelection = () => { setSelectedSlotIds([]); setBulkLinkEditing(false); setBulkLinkValue(""); };
+
+  const handleBulkDelete = () => {
+    if (selectedSlotIds.length === 0) return;
+    if (!confirm(`Delete ${selectedSlotIds.length} selected slot${selectedSlotIds.length !== 1 ? "s" : ""}? Slots with existing bookings will be skipped.`)) return;
+    bulkDeleteMutation.mutate(selectedSlotIds, {
+      onSuccess: (res) => {
+        clearSelection();
+        if (res.skipped?.length > 0) alert(`${res.deleted} slot(s) deleted. ${res.skipped.length} skipped (already booked).`);
+      },
+      onError: (err) => alert(err.message),
+    });
+  };
+
+  const handleBulkSetLink = () => {
+    if (selectedSlotIds.length === 0) return;
+    bulkLinkMutation.mutate(
+      { slotIds: selectedSlotIds, meetingLink: bulkLinkValue.trim() },
+      { onSuccess: clearSelection, onError: (err) => alert(err.message) },
+    );
   };
 
   const handleGenerateSlots = () => {
@@ -415,9 +543,51 @@ export default function MentorDashboard() {
           </div>
 
           {/* Available Slots */}
-          <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-2 px-1">
-            Open Slots
-          </h2>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
+              Open Slots
+            </h2>
+            {availableSlots.length > 0 && (
+              <button onClick={toggleSelectAll} className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900">
+                {selectedSlotIds.length === availableSlots.length ? "Deselect all" : "Select all"}
+              </button>
+            )}
+          </div>
+
+          {selectedSlotIds.length > 0 && (
+            <div className="bg-emerald-900 text-white rounded-xl p-3 mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold mr-auto">{selectedSlotIds.length} selected</span>
+              {bulkLinkEditing ? (
+                <div className="flex items-center gap-1.5 w-full">
+                  <input
+                    type="url" autoFocus placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                    value={bulkLinkValue} onChange={(e) => setBulkLinkValue(e.target.value)}
+                    className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-xs font-semibold text-white placeholder:text-white/40 outline-none min-w-0"
+                  />
+                  <button onClick={handleBulkSetLink} disabled={bulkLinkMutation.isPending}
+                    className="text-xs font-bold bg-white text-emerald-900 px-3 py-1.5 rounded-lg shrink-0 disabled:opacity-50">
+                    {bulkLinkMutation.isPending ? "…" : "Save"}
+                  </button>
+                  <button onClick={() => setBulkLinkEditing(false)} className="text-white/60 hover:text-white shrink-0">
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={() => setBulkLinkEditing(true)} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                    <LinkIcon size={12} /> Set Meet Link
+                  </button>
+                  <button onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending} className="text-xs font-bold bg-red-500/90 hover:bg-red-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+                    <Trash2 size={12} /> {bulkDeleteMutation.isPending ? "Deleting…" : `Delete (${selectedSlotIds.length})`}
+                  </button>
+                  <button onClick={clearSelection} className="text-white/60 hover:text-white px-1">
+                    <X size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5 mb-8">
             {isLoading ? (
               <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
@@ -427,7 +597,13 @@ export default function MentorDashboard() {
               </div>
             ) : (
               availableSlots.map((slot) => (
-                <div key={slot.id} className="p-4 flex items-start justify-between gap-3">
+                <div key={slot.id} className="p-4 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedSlotIds.includes(slot.id)}
+                    onChange={() => toggleSlotSelected(slot.id)}
+                    className="mt-1 w-4 h-4 rounded border-emerald-300 text-emerald-700 shrink-0"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">

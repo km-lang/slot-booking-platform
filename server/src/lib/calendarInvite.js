@@ -4,6 +4,10 @@
 // nodemailer's `icalEvent` option needs to render a real "Accept/Decline"
 // calendar invite in Gmail/Outlook/Apple Calendar — no external dependency.
 
+// Shared across every controller that builds a calendar event, so it's defined
+// once here rather than duplicated per file.
+const CALENDAR_ORGANIZER_EMAIL = process.env.SMTP_FROM?.match(/<(.+)>/)?.[1] ?? "noreply@iiml.ac.in";
+
 const fmtICSDate = (d) => new Date(d).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
 // Escape order matters: backslash first, or the later escapes would
@@ -56,4 +60,18 @@ const buildSessionEvent = ({
   return lines.join("\r\n");
 };
 
-module.exports = { buildSessionEvent };
+// Web fallback alongside the .ics invite — Gmail's mobile app is inconsistent
+// about rendering ICS attachments with full Accept/Decline UI, so every
+// confirmation/update email gets this one-click link too.
+const buildGoogleCalendarLink = ({ summary, description, location, startTime, endTime }) => {
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: summary,
+    dates: `${fmtICSDate(startTime)}/${fmtICSDate(endTime)}`,
+    details: description,
+    location,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
+
+module.exports = { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL };

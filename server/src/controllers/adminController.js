@@ -736,6 +736,46 @@ const getStudentDetail = async (req, res, next) => {
   }
 };
 
+// ─── Calendar grid (SuperADMIN) ────────────────────────────────────────────────
+// All non-cancelled sessions in a 7-day window, for a week-grid view rather than
+// the table/card layouts everywhere else in this dashboard.
+
+const getCalendarWeek = async (req, res, next) => {
+  try {
+    const weekStart = req.query.weekStart ? new Date(req.query.weekStart) : new Date();
+    if (Number.isNaN(weekStart.getTime())) return res.status(400).json({ error: "Invalid weekStart date" });
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        status: { not: "CANCELLED" },
+        slot: { startTime: { gte: weekStart, lt: weekEnd } },
+      },
+      include: {
+        slot: { include: { mentorProfile: { include: { user: { select: { name: true } } } } } },
+        student: { select: { name: true, email: true } },
+      },
+      orderBy: { slot: { startTime: "asc" } },
+    });
+
+    res.json({
+      weekStart: weekStart.toISOString(),
+      sessions: bookings.map((b) => ({
+        id:         b.id,
+        startTime:  b.slot.startTime,
+        endTime:    b.slot.endTime,
+        status:     b.status,
+        venue:      b.slot.venue,
+        mentorName: b.slot.mentorProfile?.user?.name ?? "—",
+        studentName: b.student?.name ?? b.student?.email ?? "—",
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getAigOverview,
   getMentorSessionDetail,
@@ -751,4 +791,5 @@ module.exports = {
   listMentorStats,
   searchStudents,
   getStudentDetail,
+  getCalendarWeek,
 };
