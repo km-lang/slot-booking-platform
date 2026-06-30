@@ -112,6 +112,7 @@ model MentorProfile {
   cohort          Cohort?         @relation(fields: [cohortId], references: [id])
   bookingReleases BookingRelease[]
   slots           Slot[]
+  bookings        Booking[]
 }
 
 // ─── Organisation ─────────────────────────────────────────────────────────────
@@ -167,6 +168,7 @@ model Slot {
   delayMinutes    Int      @default(0)
   meetingLink     String?  // editable independently per-slot, e.g. added after the batch was created
   icsSequence     Int      @default(0) // RFC 5545 SEQUENCE for this slot's calendar event — bumped on reschedule
+  published       Boolean  @default(true) // false = draft, created but not yet visible/bookable by students
 
   release       BookingRelease @relation(fields: [releaseId], references: [id])
   mentorProfile MentorProfile  @relation(fields: [mentorProfileId], references: [id])
@@ -199,16 +201,23 @@ model SlotCapacity {
 }
 
 model Booking {
-  id             String        @id @default(cuid())
-  slotId         String
-  studentUserId  String
-  focus          String        // "overall" | "workex" | "por"
-  idempotencyKey String        @unique // client-generated UUID; replays return existing booking
-  status         BookingStatus @default(CONFIRMED)
-  createdAt      DateTime      @default(now())
+  id              String        @id @default(cuid())
+  slotId          String
+  studentUserId   String
+  mentorProfileId String        // denormalized from Slot at creation — backs the one-active-booking-per-mentor constraint below
+  focus           String        // "overall" | "workex" | "por"
+  idempotencyKey  String        @unique // client-generated UUID; replays return existing booking
+  status          BookingStatus @default(CONFIRMED)
+  allocatedBy     String?       // mentor's email, if this booking was directly allocated rather than self-booked
+  createdAt       DateTime      @default(now())
 
-  slot    Slot @relation(fields: [slotId], references: [id])
-  student User @relation(fields: [studentUserId], references: [id])
+  slot          Slot          @relation(fields: [slotId], references: [id])
+  student       User          @relation(fields: [studentUserId], references: [id])
+  mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
+
+  // A student may hold at most one CONFIRMED booking per mentor at a time — enforced
+  // as a partial unique index (status = 'CONFIRMED') in the migration SQL, since Prisma's
+  // schema DSL can't express a conditional unique constraint directly.
 }
 
 // ─── Penalties & Bans ─────────────────────────────────────────────────────────

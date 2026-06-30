@@ -40,6 +40,193 @@ const applyWarning = async (tx, userId, bookingId, reason, warningToStrikeAt = 3
   }
 };
 
+// Sends the booking confirmation email + calendar invite to both parties. Shared by
+// self-service booking and mentor-initiated allocation — the resulting email is
+// identical either way, since from the student's inbox the outcome is the same: a
+// confirmed session.
+const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUserId }) => {
+  prisma.user.findUnique({
+    where: { id: studentUserId },
+    select: { name: true, email: true, studentProfile: { select: { pgpId: true } } },
+  }).then(async (student) => {
+    const fmtDate = (d) =>
+      new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const fmtTime = (d) =>
+      new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    const mentorUser = await prisma.mentorProfile.findUnique({
+      where: { id: claimedSlot.mentorProfileId },
+      include: { user: { select: { name: true, email: true } } },
+    }).catch(() => null);
+
+    const mentorName = mentorUser?.user?.name ?? "your mentor";
+    const studentName = student?.name ?? student?.email ?? "your mentee";
+
+    const focusDescription = `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`;
+
+    const icsContent = buildSessionEvent({
+      uid: booking.id,
+      sequence: claimedSlot.icsSequence,
+      method: "REQUEST",
+      status: "CONFIRMED",
+      startTime: claimedSlot.startTime,
+      endTime: claimedSlot.endTime,
+      summary: `CV Review: ${studentName} × ${mentorName}`,
+      description: focusDescription,
+      location: claimedSlot.venue,
+      meetingLink: claimedSlot.meetingLink ?? null,
+      organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+      organizerName: "Parthsaarthi",
+      attendees: [
+        ...(student?.email ? [{ email: student.email, name: studentName }] : []),
+        ...(mentorUser?.user?.email ? [{ email: mentorUser.user.email, name: mentorName }] : []),
+      ],
+    });
+    const calendarLink = buildGoogleCalendarLink({
+      summary: `CV Review: ${studentName} × ${mentorName}`,
+      description: focusDescription,
+      location: claimedSlot.venue,
+      startTime: claimedSlot.startTime,
+      endTime: claimedSlot.endTime,
+    });
+
+    if (student?.email) {
+      mailer.sendBookingConfirmation({
+        studentEmail: student.email,
+        studentName,
+        mentorName,
+        firm:         mentorUser?.firm ?? "IIM Lucknow",
+        date:         fmtDate(claimedSlot.startTime),
+        time:         fmtTime(claimedSlot.startTime),
+        venue:        claimedSlot.venue,
+        meetingLink:  claimedSlot.meetingLink ?? null,
+        focus,
+        icsContent,
+        calendarLink,
+      }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
+    }
+    if (mentorUser?.user?.email) {
+      mailer.sendBookingConfirmationToMentor({
+        mentorEmail: mentorUser.user.email,
+        mentorName,
+        studentName,
+        pgpId:       student?.studentProfile?.pgpId ?? "N/A",
+        date:        fmtDate(claimedSlot.startTime),
+        time:        fmtTime(claimedSlot.startTime),
+        venue:       claimedSlot.venue,
+        meetingLink: claimedSlot.meetingLink ?? null,
+        focus,
+        icsContent,
+        calendarLink,
+      }).catch((e) => console.error("[mailer] booking confirmation to mentor:", e.message));
+    }
+  }).catch((e) => console.error("[mailer] student lookup:", e.message));
+};
+
+// The single source of truth for "give this student this slot" — used by both
+// self-service booking (createBooking) and mentor-initiated allocation
+// (allocateSlot). Returns a result object rather than throwing, so both callers
+// can map { ok, status, error } straight onto their HTTP response without
+// duplicating any of the race-safety or eligibility logic.
+const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempotencyKey, allocatedBy = null }) => {
+  const existing = await prisma.booking.findUnique({ where: { idempotencyKey } });
+  if (existing) {
+    if (existing.studentUserId !== studentUserId) {
+      return { ok: false, status: 409, error: "Idempotency key already in use" };
+    }
+    return { ok: true, replay: true, booking: existing };
+  }
+
+  const activeBan = await prisma.ban.findFirst({
+    where: {
+      userId: studentUserId,
+      liftedAt: null,
+      OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+    },
+  });
+  if (activeBan) return { ok: false, status: 403, error: "This student's booking access is currently suspended" };
+
+  const bookingOpenConfig = await prisma.systemConfig.findUnique({ where: { key: "booking_open" } });
+  if (bookingOpenConfig && bookingOpenConfig.value !== "true") {
+    return { ok: false, status: 403, error: "Booking is currently closed" };
+  }
+
+  const claimedSlot = await prisma.slot.findUnique({
+    where: { id: slotId },
+    include: { capacity: true, release: true, mentorProfile: true },
+  });
+  if (!claimedSlot) return { ok: false, status: 404, error: "Slot not found" };
+  if (claimedSlot.startTime <= new Date()) {
+    return { ok: false, status: 400, error: "This slot has already started" };
+  }
+  if (claimedSlot.release.cohortOnly) {
+    const studentProfile = await prisma.studentProfile.findUnique({ where: { userId: studentUserId } });
+    if (!studentProfile || studentProfile.cohortId !== claimedSlot.mentorProfile.cohortId) {
+      return { ok: false, status: 403, error: "This slot is reserved for the mentor's cohort" };
+    }
+  }
+  if (!claimedSlot.capacity) {
+    return { ok: false, status: 409, error: "Slot is full" };
+  }
+
+  const SLOT_FULL = Symbol("slot full");
+  const MENTOR_CONFLICT = Symbol("already booked with this mentor");
+  try {
+    const booking = await prisma.$transaction(async (tx) => {
+      // Single atomic conditional UPDATE — the WHERE clause and the increment run as
+      // one statement, so Postgres serializes concurrent callers on this row and at
+      // most `max` of them can ever see rowCount 1. A separate read-then-write here
+      // (read capacity, decide, write) leaves a gap concurrent requests can all walk
+      // through at once — confirmed empirically: that exact shape let 7 students book
+      // a 1-capacity slot under concurrent load before this fix.
+      const claims = await tx.$executeRaw`
+        UPDATE "SlotCapacity" SET current = current + 1
+        WHERE "slotId" = ${slotId} AND current < max
+      `;
+      if (claims === 0) throw SLOT_FULL;
+
+      let created;
+      try {
+        created = await tx.booking.create({
+          data: {
+            slotId,
+            studentUserId,
+            mentorProfileId: claimedSlot.mentorProfileId,
+            focus,
+            idempotencyKey,
+            status: "CONFIRMED",
+            allocatedBy,
+          },
+        });
+      } catch (err) {
+        // Two unique constraints can fire here: idempotencyKey (already ruled out by
+        // the upfront check above, bar a genuine concurrent replay) and the partial
+        // index enforcing one active booking per student-mentor pair.
+        if (err.code === "P2002" && !JSON.stringify(err.meta ?? {}).includes("idempotencyKey")) {
+          throw MENTOR_CONFLICT;
+        }
+        throw err;
+      }
+      await tx.auditEvent.create({
+        data: { userId: studentUserId, action: "BOOKING_CREATED", entity: "Booking", entityId: created.id },
+      });
+      return created;
+    });
+    return { ok: true, replay: false, booking, claimedSlot };
+  } catch (err) {
+    if (err === SLOT_FULL) {
+      return { ok: false, status: 409, error: "Someone else just booked this slot — please refresh and try another" };
+    }
+    if (err === MENTOR_CONFLICT) {
+      return { ok: false, status: 409, error: "This student already has an active booking with this mentor" };
+    }
+    if (err.code === "P2002") {
+      const replay = await prisma.booking.findUnique({ where: { idempotencyKey } });
+      if (replay && replay.studentUserId === studentUserId) return { ok: true, replay: true, booking: replay };
+    }
+    throw err;
+  }
+};
+
 const createBooking = async (req, res, next) => {
   try {
     const { slotId, focus, idempotencyKey } = req.body;
@@ -49,158 +236,64 @@ const createBooking = async (req, res, next) => {
         .json({ error: "slotId, focus (overall|workex|por), and idempotencyKey are required" });
     }
 
-    const existing = await prisma.booking.findUnique({ where: { idempotencyKey } });
-    if (existing) {
-      if (existing.studentUserId !== req.user.sub) {
-        return res.status(409).json({ error: "Idempotency key already in use" });
-      }
-      return res.status(200).json(existing);
-    }
+    const result = await claimSlotAndCreateBooking({ slotId, studentUserId: req.user.sub, focus, idempotencyKey });
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    if (result.replay) return res.status(200).json(result.booking);
 
-    const activeBan = await prisma.ban.findFirst({
-      where: {
-        userId: req.user.sub,
-        liftedAt: null,
-        OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
-      },
+    sendBookingConfirmationEmails({
+      claimedSlot: result.claimedSlot,
+      booking: result.booking,
+      focus,
+      studentUserId: req.user.sub,
     });
-    if (activeBan) return res.status(403).json({ error: "Your booking access is currently suspended" });
 
-    const bookingOpenConfig = await prisma.systemConfig.findUnique({ where: { key: "booking_open" } });
-    if (bookingOpenConfig && bookingOpenConfig.value !== "true") {
-      return res.status(403).json({ error: "Booking is currently closed" });
+    return res.status(201).json(result.booking);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const allocateSlot = async (req, res, next) => {
+  try {
+    const { pgpId, focus } = req.body;
+    if (!pgpId || !ALLOWED_FOCUS.includes(focus)) {
+      return res.status(400).json({ error: "pgpId and focus (overall|workex|por) are required" });
     }
 
-    const claimedSlot = await prisma.slot.findUnique({
-      where: { id: slotId },
-      include: { capacity: true, release: true, mentorProfile: true },
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slot = await prisma.slot.findUnique({ where: { id: req.params.id } });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) {
+      return res.status(403).json({ error: "You don't own this slot" });
+    }
+
+    const studentProfile = await prisma.studentProfile.findUnique({
+      where: { pgpId: String(pgpId).trim() },
+      include: { user: { select: { id: true, email: true } } },
     });
-    if (!claimedSlot) return res.status(404).json({ error: "Slot not found" });
-    if (claimedSlot.startTime <= new Date()) {
-      return res.status(400).json({ error: "This slot has already started" });
-    }
-    if (claimedSlot.release.cohortOnly) {
-      const studentProfile = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
-      if (!studentProfile || studentProfile.cohortId !== claimedSlot.mentorProfile.cohortId) {
-        return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
-      }
-    }
-    if (!claimedSlot.capacity) {
-      return res.status(409).json({ error: "Slot is full" });
-    }
+    if (!studentProfile) return res.status(404).json({ error: "No student found with that PGP ID" });
 
-    const SLOT_FULL = Symbol("slot full");
-    try {
-      const booking = await prisma.$transaction(async (tx) => {
-        // Single atomic conditional UPDATE — the WHERE clause and the increment run as
-        // one statement, so Postgres serializes concurrent callers on this row and at
-        // most `max` of them can ever see rowCount 1. A separate read-then-write here
-        // (read capacity, decide, write) leaves a gap concurrent requests can all walk
-        // through at once — confirmed empirically: that exact shape let 7 students book
-        // a 1-capacity slot under concurrent load before this fix.
-        const claims = await tx.$executeRaw`
-          UPDATE "SlotCapacity" SET current = current + 1
-          WHERE "slotId" = ${slotId} AND current < max
-        `;
-        if (claims === 0) throw SLOT_FULL;
+    const idempotencyKey = `allocate-${slot.id}-${studentProfile.userId}`;
+    const result = await claimSlotAndCreateBooking({
+      slotId: slot.id,
+      studentUserId: studentProfile.userId,
+      focus,
+      idempotencyKey,
+      allocatedBy: req.user.email,
+    });
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    if (result.replay) return res.status(200).json(result.booking);
 
-        const created = await tx.booking.create({
-          data: { slotId, studentUserId: req.user.sub, focus, idempotencyKey, status: "CONFIRMED" },
-        });
-        await tx.auditEvent.create({
-          data: { userId: req.user.sub, action: "BOOKING_CREATED", entity: "Booking", entityId: created.id },
-        });
-        return created;
-      });
+    sendBookingConfirmationEmails({
+      claimedSlot: result.claimedSlot,
+      booking: result.booking,
+      focus,
+      studentUserId: studentProfile.userId,
+    });
 
-      // Send booking confirmation email + calendar invite (non-blocking)
-      prisma.user.findUnique({
-        where: { id: req.user.sub },
-        select: { name: true, email: true, studentProfile: { select: { pgpId: true } } },
-      }).then(async (student) => {
-        const fmtDate = (d) =>
-          new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-        const fmtTime = (d) =>
-          new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-        const mentorUser = await prisma.mentorProfile.findUnique({
-          where: { id: claimedSlot.mentorProfileId },
-          include: { user: { select: { name: true, email: true } } },
-        }).catch(() => null);
-
-        const mentorName = mentorUser?.user?.name ?? "your mentor";
-        const studentName = student?.name ?? student?.email ?? "your mentee";
-
-        const focusDescription = `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`;
-
-        const icsContent = buildSessionEvent({
-          uid: booking.id,
-          sequence: claimedSlot.icsSequence,
-          method: "REQUEST",
-          status: "CONFIRMED",
-          startTime: claimedSlot.startTime,
-          endTime: claimedSlot.endTime,
-          summary: `CV Review: ${studentName} × ${mentorName}`,
-          description: focusDescription,
-          location: claimedSlot.venue,
-          meetingLink: claimedSlot.meetingLink ?? null,
-          organizerEmail: CALENDAR_ORGANIZER_EMAIL,
-          organizerName: "Parthsaarthi",
-          attendees: [
-            ...(student?.email ? [{ email: student.email, name: studentName }] : []),
-            ...(mentorUser?.user?.email ? [{ email: mentorUser.user.email, name: mentorName }] : []),
-          ],
-        });
-        const calendarLink = buildGoogleCalendarLink({
-          summary: `CV Review: ${studentName} × ${mentorName}`,
-          description: focusDescription,
-          location: claimedSlot.venue,
-          startTime: claimedSlot.startTime,
-          endTime: claimedSlot.endTime,
-        });
-
-        if (student?.email) {
-          mailer.sendBookingConfirmation({
-            studentEmail: student.email,
-            studentName,
-            mentorName,
-            firm:         mentorUser?.firm ?? "IIM Lucknow",
-            date:         fmtDate(claimedSlot.startTime),
-            time:         fmtTime(claimedSlot.startTime),
-            venue:        claimedSlot.venue,
-            meetingLink:  claimedSlot.meetingLink ?? null,
-            focus,
-            icsContent,
-            calendarLink,
-          }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
-        }
-        if (mentorUser?.user?.email) {
-          mailer.sendBookingConfirmationToMentor({
-            mentorEmail: mentorUser.user.email,
-            mentorName,
-            studentName,
-            pgpId:       student?.studentProfile?.pgpId ?? "N/A",
-            date:        fmtDate(claimedSlot.startTime),
-            time:        fmtTime(claimedSlot.startTime),
-            venue:       claimedSlot.venue,
-            meetingLink: claimedSlot.meetingLink ?? null,
-            focus,
-            icsContent,
-            calendarLink,
-          }).catch((e) => console.error("[mailer] booking confirmation to mentor:", e.message));
-        }
-      }).catch((e) => console.error("[mailer] student lookup:", e.message));
-
-      return res.status(201).json(booking);
-    } catch (err) {
-      if (err === SLOT_FULL) {
-        return res.status(409).json({ error: "Someone else just booked this slot — please refresh and try another" });
-      }
-      if (err.code === "P2002") {
-        const replay = await prisma.booking.findUnique({ where: { idempotencyKey } });
-        if (replay && replay.studentUserId === req.user.sub) return res.status(200).json(replay);
-      }
-      throw err;
-    }
+    return res.status(201).json(result.booking);
   } catch (err) {
     next(err);
   }
@@ -455,4 +548,4 @@ const getMyBookings = async (req, res, next) => {
   }
 };
 
-module.exports = { createBooking, cancelBooking, markAttendance, getMyBookings };
+module.exports = { createBooking, allocateSlot, cancelBooking, markAttendance, getMyBookings };

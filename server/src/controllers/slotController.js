@@ -119,7 +119,7 @@ const listSlots = async (req, res, next) => {
 
     const now = new Date();
     const slots = await prisma.slot.findMany({
-      where: { mentorProfileId: mentor.id, startTime: { gt: now } },
+      where: { mentorProfileId: mentor.id, startTime: { gt: now }, published: true },
       include: {
         capacity: true,
         bookings: { where: { status: "CONFIRMED" } },
@@ -159,7 +159,7 @@ const listSlots = async (req, res, next) => {
 
 const releaseSlots = async (req, res, next) => {
   try {
-    const { startTime, endTime, slotDuration, venue, cohortOnly, meetingLink } = req.body;
+    const { startTime, endTime, slotDuration, venue, cohortOnly, meetingLink, publish } = req.body;
     if (!startTime || !endTime || !slotDuration || !venue) {
       return res.status(400).json({ error: "startTime, endTime, slotDuration, and venue are required" });
     }
@@ -203,6 +203,9 @@ const releaseSlots = async (req, res, next) => {
         },
       });
 
+      // Defaults to published (matches pre-existing behavior for mentors who don't
+      // think about this) — pass publish:false to create as a draft instead.
+      const published = publish !== false;
       for (const interval of intervals) {
         const slot = await tx.slot.create({
           data: {
@@ -212,6 +215,7 @@ const releaseSlots = async (req, res, next) => {
             endTime: interval.endTime,
             venue,
             meetingLink: meetingLink || null,
+            published,
           },
         });
         await tx.slotCapacity.create({ data: { slotId: slot.id, max: 1, current: 0 } });
@@ -408,6 +412,7 @@ const listMentorOwnSlots = async (req, res, next) => {
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
         meetingLink: s.meetingLink ?? null,
+        published: s.published,
       }));
 
     // Cohort aggregate stats
@@ -681,6 +686,25 @@ const bulkSetMeetingLink = async (req, res, next) => {
   }
 };
 
+const bulkSetPublished = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slotIds = Array.isArray(req.body.slotIds) ? req.body.slotIds : [];
+    if (slotIds.length === 0) return res.status(400).json({ error: "slotIds must be a non-empty array" });
+
+    const result = await prisma.slot.updateMany({
+      where: { id: { in: slotIds }, mentorProfileId: mentorProfile.id },
+      data: { published: true },
+    });
+
+    res.json({ published: result.count, skipped: slotIds.length - result.count });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── Waitlist (notify-only — never auto-books) ──────────────────────────────────
 
 const joinWaitlist = async (req, res, next) => {
@@ -737,6 +761,7 @@ module.exports = {
   setSlotReschedule,
   bulkDeleteSlots,
   bulkSetMeetingLink,
+  bulkSetPublished,
   joinWaitlist,
   leaveWaitlist,
   getMentorCohort,

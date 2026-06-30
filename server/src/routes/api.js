@@ -71,6 +71,16 @@ router.patch(
   requireRole("MENTOR"),
   slotController.bulkSetMeetingLink,
 );
+router.patch(
+  "/slots/bulk-publish",
+  requireRole("MENTOR"),
+  slotController.bulkSetPublished,
+);
+router.post(
+  "/slots/:id/allocate",
+  requireRole("MENTOR"),
+  bookingController.allocateSlot,
+);
 router.post(
   "/slots/:id/waitlist",
   requireRole("STUDENT"),

@@ -290,6 +290,24 @@ export const useBulkSetMeetingLink = () => {
   });
 };
 
+export const useBulkPublishSlots = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotIds) =>
+      apiFetch("/slots/bulk-publish", { method: "PATCH", body: JSON.stringify({ slotIds }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useAllocateSlot = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, pgpId, focus }) =>
+      apiFetch(`/slots/${slotId}/allocate`, { method: "POST", body: JSON.stringify({ pgpId, focus }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
 export const useJoinWaitlist = (mentorSlug) => {
   const qc = useQueryClient();
   return useMutation({

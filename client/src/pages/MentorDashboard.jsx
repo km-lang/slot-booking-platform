@@ -4,11 +4,13 @@ import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, ChevronDown, Link as LinkIcon, Pencil, X,
+  Send, UserPlus,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance, useCreateSlots,
   useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
   useRescheduleSlot, useBulkDeleteSlots, useBulkSetMeetingLink,
+  useBulkPublishSlots, useAllocateSlot,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -178,6 +180,74 @@ function RescheduleSheet({ session, onClose }) {
         </button>
         <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
           No penalty applies. {session.student.name} will get an updated calendar invite.
+        </p>
+      </div>
+    </>
+  );
+}
+
+// ── Allocate Sheet ───────────────────────────────────────────────────────────────
+// Lets a mentor directly hand a specific open slot to a specific student by PGP ID
+// — skips the student's own booking action entirely. Same confirmation email +
+// calendar invite goes out as a normal self-service booking.
+function AllocateSheet({ slot, onClose }) {
+  const [pgpId, setPgpId] = useState("");
+  const [focus, setFocus] = useState("overall");
+  const allocate = useAllocateSlot();
+
+  const handleSubmit = () => {
+    if (!pgpId.trim()) return;
+    allocate.mutate(
+      { slotId: slot.id, pgpId: pgpId.trim(), focus },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <>
+      <div className="absolute inset-0 bg-emerald-950/40 backdrop-blur-sm z-40" onClick={onClose} />
+      <div className="absolute bottom-0 left-0 w-full bg-white rounded-t-3xl z-50 p-6 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.12)]">
+        <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5" />
+        <h3 className="text-lg font-black text-emerald-950 mb-0.5">Allocate Slot</h3>
+        <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">{slot.time} · {slot.venue}</p>
+
+        <div className="space-y-3 mb-5">
+          <div>
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Student PGP ID</label>
+            <input
+              type="text" placeholder="e.g. 25110" value={pgpId} autoFocus
+              onChange={(e) => setPgpId(e.target.value)}
+              className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Focus</label>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.entries(FOCUS_LABELS).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setFocus(key)}
+                  className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${focus === key ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {allocate.error && (
+          <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+            {allocate.error.message}
+          </p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={allocate.isPending || !pgpId.trim()}
+          className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95"
+        >
+          {allocate.isPending ? "Allocating…" : "Confirm Booking for This Student"}
+        </button>
+        <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
+          Books this slot immediately — no action needed from the student. They'll get the usual confirmation email.
         </p>
       </div>
     </>
@@ -356,6 +426,7 @@ export default function MentorDashboard() {
   const createSlotsMutation = useCreateSlots();
   const bulkDeleteMutation  = useBulkDeleteSlots();
   const bulkLinkMutation    = useBulkSetMeetingLink();
+  const bulkPublishMutation = useBulkPublishSlots();
 
   const [pendingBookingId, setPendingBookingId] = useState(null);
 
@@ -363,6 +434,9 @@ export default function MentorDashboard() {
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
   const [bulkLinkValue, setBulkLinkValue] = useState("");
   const [bulkLinkEditing, setBulkLinkEditing] = useState(false);
+
+  // Allocate-by-PGP-ID sheet (per open slot)
+  const [allocateSlotTarget, setAllocateSlotTarget] = useState(null);
 
   // Slot creation form state
   const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
@@ -374,6 +448,7 @@ export default function MentorDashboard() {
   const [selectedVenue, setSelectedVenue] = useState("Library (In-Person)");
   const [meetingLink, setMeetingLink] = useState("");
   const [cohortOnly, setCohortOnly]   = useState(false);
+  const [publishNow, setPublishNow]   = useState(true);
 
   useEffect(() => {
     document.body.style.overflow = isCreateSheetOpen ? "hidden" : "unset";
@@ -436,6 +511,14 @@ export default function MentorDashboard() {
     );
   };
 
+  const handleBulkPublish = () => {
+    if (selectedSlotIds.length === 0) return;
+    bulkPublishMutation.mutate(selectedSlotIds, {
+      onSuccess: clearSelection,
+      onError: (err) => alert(err.message),
+    });
+  };
+
   const handleGenerateSlots = () => {
     if (slotCount < 1) return;
     const startDateTime = new Date(`${slotDate}T${startTime}:00`).toISOString();
@@ -447,9 +530,10 @@ export default function MentorDashboard() {
         slotDuration,
         venue: selectedVenue,
         cohortOnly,
+        publish: publishNow,
         ...(isOnlineVenue && meetingLink.trim() && { meetingLink: meetingLink.trim() }),
       },
-      { onSuccess: () => { setIsCreateSheetOpen(false); setMeetingLink(""); } },
+      { onSuccess: () => { setIsCreateSheetOpen(false); setMeetingLink(""); setPublishNow(true); } },
     );
   };
 
@@ -574,6 +658,9 @@ export default function MentorDashboard() {
                 </div>
               ) : (
                 <>
+                  <button onClick={handleBulkPublish} disabled={bulkPublishMutation.isPending} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+                    <Send size={12} /> {bulkPublishMutation.isPending ? "Publishing…" : "Publish"}
+                  </button>
                   <button onClick={() => setBulkLinkEditing(true)} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                     <LinkIcon size={12} /> Set Meet Link
                   </button>
@@ -611,11 +698,21 @@ export default function MentorDashboard() {
                       {slot.cohortOnly && (
                         <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
                       )}
+                      {!slot.published && (
+                        <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Draft</span>
+                      )}
                     </div>
                     {slot.venue?.toLowerCase().includes("online") && (
                       <MeetingLinkRow slotId={slot.id} currentLink={slot.meetingLink} />
                     )}
                   </div>
+                  <button
+                    onClick={() => setAllocateSlotTarget(slot)}
+                    className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors shrink-0"
+                    title="Allocate to a specific student"
+                  >
+                    <UserPlus size={16} />
+                  </button>
                   <button
                     onClick={() => handleDeleteSlot(slot.id)}
                     disabled={deleteSlotMutation.isPending}
@@ -627,6 +724,10 @@ export default function MentorDashboard() {
               ))
             )}
           </div>
+
+          {allocateSlotTarget && (
+            <AllocateSheet slot={allocateSlotTarget} onClose={() => setAllocateSlotTarget(null)} />
+          )}
           <AppFooter />
         </main>
 
@@ -745,6 +846,19 @@ export default function MentorDashboard() {
               <div onClick={() => setCohortOnly(!cohortOnly)}
                 className={`w-12 h-6 rounded-full ${cohortOnly ? "bg-emerald-500" : "bg-slate-300"} relative cursor-pointer transition-colors`}>
                 <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${cohortOnly ? "left-7" : "left-1"}`} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+              <div>
+                <div className="text-sm font-bold text-emerald-950">Publish Immediately</div>
+                <div className="text-[10px] font-bold text-emerald-700/60 mt-0.5">
+                  {publishNow ? "Visible and bookable as soon as it's created" : "Saved as a draft — publish later when ready"}
+                </div>
+              </div>
+              <div onClick={() => setPublishNow(!publishNow)}
+                className={`w-12 h-6 rounded-full ${publishNow ? "bg-emerald-500" : "bg-slate-300"} relative cursor-pointer transition-colors`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${publishNow ? "left-7" : "left-1"}`} />
               </div>
             </div>
           </div>
