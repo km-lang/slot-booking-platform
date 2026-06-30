@@ -71,43 +71,42 @@ const createBooking = async (req, res, next) => {
       return res.status(403).json({ error: "Booking is currently closed" });
     }
 
-    let claimedSlot = null;
-    for (let attempt = 0; attempt < 3 && !claimedSlot; attempt++) {
-      const slot = await prisma.slot.findUnique({
-        where: { id: slotId },
-        include: { capacity: true, release: true, mentorProfile: true },
-      });
-      if (!slot) return res.status(404).json({ error: "Slot not found" });
-      if (slot.startTime <= new Date()) {
-        return res.status(400).json({ error: "This slot has already started" });
+    const claimedSlot = await prisma.slot.findUnique({
+      where: { id: slotId },
+      include: { capacity: true, release: true, mentorProfile: true },
+    });
+    if (!claimedSlot) return res.status(404).json({ error: "Slot not found" });
+    if (claimedSlot.startTime <= new Date()) {
+      return res.status(400).json({ error: "This slot has already started" });
+    }
+    if (claimedSlot.release.cohortOnly) {
+      const studentProfile = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
+      if (!studentProfile || studentProfile.cohortId !== claimedSlot.mentorProfile.cohortId) {
+        return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
       }
-      if (slot.release.cohortOnly) {
-        const studentProfile = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
-        if (!studentProfile || studentProfile.cohortId !== slot.mentorProfile.cohortId) {
-          return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
-        }
-      }
-      if (!slot.capacity || slot.capacity.current >= slot.capacity.max) {
-        return res.status(409).json({ error: "Slot is full" });
-      }
-
-      const result = await prisma.slot.updateMany({
-        where: { id: slotId, version: slot.version },
-        data: { version: { increment: 1 } },
-      });
-      if (result.count === 1) claimedSlot = slot;
+    }
+    if (!claimedSlot.capacity) {
+      return res.status(409).json({ error: "Slot is full" });
     }
 
-    if (!claimedSlot) {
-      return res.status(409).json({ error: "Someone else just booked this slot — please refresh and try another" });
-    }
-
+    const SLOT_FULL = Symbol("slot full");
     try {
       const booking = await prisma.$transaction(async (tx) => {
+        // Single atomic conditional UPDATE — the WHERE clause and the increment run as
+        // one statement, so Postgres serializes concurrent callers on this row and at
+        // most `max` of them can ever see rowCount 1. A separate read-then-write here
+        // (read capacity, decide, write) leaves a gap concurrent requests can all walk
+        // through at once — confirmed empirically: that exact shape let 7 students book
+        // a 1-capacity slot under concurrent load before this fix.
+        const claims = await tx.$executeRaw`
+          UPDATE "SlotCapacity" SET current = current + 1
+          WHERE "slotId" = ${slotId} AND current < max
+        `;
+        if (claims === 0) throw SLOT_FULL;
+
         const created = await tx.booking.create({
           data: { slotId, studentUserId: req.user.sub, focus, idempotencyKey, status: "CONFIRMED" },
         });
-        await tx.slotCapacity.update({ where: { slotId }, data: { current: { increment: 1 } } });
         await tx.auditEvent.create({
           data: { userId: req.user.sub, action: "BOOKING_CREATED", entity: "Booking", entityId: created.id },
         });
@@ -193,6 +192,9 @@ const createBooking = async (req, res, next) => {
 
       return res.status(201).json(booking);
     } catch (err) {
+      if (err === SLOT_FULL) {
+        return res.status(409).json({ error: "Someone else just booked this slot — please refresh and try another" });
+      }
       if (err.code === "P2002") {
         const replay = await prisma.booking.findUnique({ where: { idempotencyKey } });
         if (replay && replay.studentUserId === req.user.sub) return res.status(200).json(replay);
