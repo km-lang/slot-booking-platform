@@ -53,7 +53,7 @@ const wrap = (body) => `
 <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#02120A">
   <div style="background:#064E3B;padding:20px 24px;border-radius:12px 12px 0 0">
     <span style="color:#6EE7B7;font-weight:900;font-size:18px;letter-spacing:-0.5px">Parthsaarthi</span>
-    <span style="color:#A7F3D0;font-size:12px;margin-left:8px">by Team SynapsE · IIM Lucknow</span>
+    <span style="color:#A7F3D0;font-size:12px;margin-left:8px">SIP Mentor Booking · IIM Lucknow</span>
   </div>
   <div style="background:#F8FAF7;padding:24px;border:1px solid #D1FAE5;border-top:none;border-radius:0 0 12px 12px">
     ${body}
