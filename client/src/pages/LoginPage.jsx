@@ -86,7 +86,7 @@ export default function LoginPage() {
         </div>
         <h1 className="text-2xl font-black text-emerald-950 mb-1">Parthsaarthi</h1>
         <p className="text-sm font-semibold text-emerald-700/60 mb-8">
-          SIP Mentor Booking · IIM Lucknow
+          by Team SynapsE · IIM Lucknow
         </p>
 
         <div className="bg-white border border-emerald-900/10 rounded-2xl p-6 shadow-sm">

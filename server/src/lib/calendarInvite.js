@@ -36,7 +36,7 @@ const buildSessionEvent = ({
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Parthsaarthi//SIP Mentor Booking//EN",
+    "PRODID:-//Parthsaarthi//by Team SynapsE//EN",
     "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
     "BEGIN:VEVENT",

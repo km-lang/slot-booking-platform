@@ -1,4 +1,4 @@
-# Parthsaarthi — SIP Mentor Booking Platform
+# Parthsaarthi — Slot Booking Platform
 
 A high-concurrency slot-booking system for IIM Lucknow's Summer Internship Preparation (SIP) programme. Students book 15-minute CV-review sessions with alumni mentors. The platform handles burst traffic during cohort releases using Optimistic Concurrency Control and enforces a strict whitelist-based access gate.
 
