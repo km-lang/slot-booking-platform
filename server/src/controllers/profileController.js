@@ -3,27 +3,19 @@
 const prisma = require("../lib/prisma");
 
 // PATCH /profile
-// All roles: update name
-// MENTOR only: also update firm, domain
+// Name is locked to Google account (set at login, never editable).
+// MENTOR only: update firm and domain.
 const updateProfile = async (req, res, next) => {
   try {
-    const { name, firm, domain } = req.body;
+    const { firm, domain } = req.body;
 
-    if (name !== undefined && (typeof name !== "string" || !name.trim())) {
-      return res.status(400).json({ error: "name must be a non-empty string" });
-    }
-
-    const updates = {};
-    if (name) updates.name = name.trim();
-
-    const user = await prisma.user.update({
-      where: { id: req.user.sub },
-      data:  updates,
+    const user = await prisma.user.findUnique({
+      where:  { id: req.user.sub },
       select: { id: true, name: true, email: true, role: true },
     });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Mentor-specific profile fields
-    if (req.user.role === "MENTOR" && (firm !== undefined || domain !== undefined)) {
+    if (user.role === "MENTOR" && (firm !== undefined || domain !== undefined)) {
       const mentorUpdates = {};
       if (firm   && typeof firm   === "string") mentorUpdates.firm   = firm.trim();
       if (domain && typeof domain === "string") mentorUpdates.domain = domain.trim();
@@ -36,23 +28,21 @@ const updateProfile = async (req, res, next) => {
       }
     }
 
-    // Re-fetch mentor fields so the response matches GET /profile shape
-    let mentorFields = null;
-    if (user.role === "MENTOR") {
-      const mp = await prisma.mentorProfile.findUnique({
-        where:  { userId: req.user.sub },
-        select: { firm: true, domain: true, slug: true },
-      });
-      mentorFields = mp;
-    }
+    const mp = user.role === "MENTOR"
+      ? await prisma.mentorProfile.findUnique({
+          where:  { userId: req.user.sub },
+          select: { firm: true, domain: true, slug: true },
+        })
+      : null;
 
-    res.json({ name: user.name, email: user.email, role: user.role, ...(mentorFields ?? {}) });
+    res.json({ name: user.name, email: user.email, role: user.role, ...(mp ?? {}) });
   } catch (err) {
     next(err);
   }
 };
 
-// GET /profile  — returns current user's profile + mentor fields if applicable
+// GET /profile — returns current user's profile.
+// Students also get their cohort label and assigned Disha mentor name (read-only).
 const getProfile = async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({
@@ -61,16 +51,37 @@ const getProfile = async (req, res, next) => {
     });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    let mentorFields = null;
+    // Mentor-specific fields
     if (user.role === "MENTOR") {
       const mp = await prisma.mentorProfile.findUnique({
         where:  { userId: req.user.sub },
         select: { firm: true, domain: true, slug: true },
       });
-      mentorFields = mp;
+      return res.json({ ...user, ...(mp ?? {}) });
     }
 
-    res.json({ ...user, ...(mentorFields ?? {}) });
+    // Student-specific: add cohort + assigned Disha mentor (read-only, derived from cohort)
+    if (user.role === "STUDENT") {
+      const sp = await prisma.studentProfile.findUnique({
+        where:  { userId: req.user.sub },
+        include: {
+          cohort: {
+            select: {
+              label: true,
+              mentorProfiles: {
+                take: 1,
+                select: { user: { select: { name: true } } },
+              },
+            },
+          },
+        },
+      });
+      const cohort      = sp?.cohort?.label ?? null;
+      const dishaMentor = sp?.cohort?.mentorProfiles[0]?.user?.name ?? null;
+      return res.json({ ...user, cohort, dishaMentor });
+    }
+
+    res.json({ ...user });
   } catch (err) {
     next(err);
   }
