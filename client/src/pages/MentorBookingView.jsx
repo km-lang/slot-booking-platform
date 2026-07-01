@@ -68,9 +68,11 @@ export default function MentorBookingView() {
   const cancelMutation  = useCancelBooking(mentorId);
 
   const isProcessing = bookMutation.isPending || cancelMutation.isPending;
-  const actionError  = bookMutation.error?.message ?? cancelMutation.error?.message ?? null;
-  // Someone else booked this slot between us viewing and confirming — retrying would just
-  // hit the same conflict again, so swap the action to closing the sheet instead.
+  // Normalize "This student" → "You" for student-facing display.
+  const rawError     = bookMutation.error?.message ?? cancelMutation.error?.message ?? null;
+  const actionError  = rawError?.replace(/^This student('s)?/i, (_, s) => s ? "Your" : "You") ?? null;
+  // Any 409 on booking means the user can't book this specific slot right now —
+  // show the exact server reason and swap the button to "Choose Another Slot".
   const bookConflict = sheetMode === "BOOK" && bookMutation.error?.status === 409;
 
   useEffect(() => {
@@ -347,7 +349,7 @@ export default function MentorBookingView() {
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
                   <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
                   <p className="text-xs font-bold text-red-700">
-                    {bookConflict ? "This slot was just booked by someone else." : actionError}
+                    {actionError}
                   </p>
                 </div>
               )}

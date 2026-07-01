@@ -89,36 +89,22 @@ const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUse
       endTime: claimedSlot.endTime,
     });
 
-    if (student?.email) {
-      mailer.sendBookingConfirmation({
-        studentEmail: student.email,
-        studentName,
-        mentorName,
-        firm:         mentorUser?.firm ?? "IIM Lucknow",
-        date:         fmtDate(claimedSlot.startTime),
-        time:         fmtTime(claimedSlot.startTime),
-        venue:        claimedSlot.venue,
-        meetingLink:  claimedSlot.meetingLink ?? null,
-        focus,
-        icsContent,
-        calendarLink,
-      }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
-    }
-    if (mentorUser?.user?.email) {
-      mailer.sendBookingConfirmationToMentor({
-        mentorEmail: mentorUser.user.email,
-        mentorName,
-        studentName,
-        pgpId:       student?.studentProfile?.pgpId ?? "N/A",
-        date:        fmtDate(claimedSlot.startTime),
-        time:        fmtTime(claimedSlot.startTime),
-        venue:       claimedSlot.venue,
-        meetingLink: claimedSlot.meetingLink ?? null,
-        focus,
-        icsContent,
-        calendarLink,
-      }).catch((e) => console.error("[mailer] booking confirmation to mentor:", e.message));
-    }
+    // Single email to both student and mentor together (one TO: field, one calendar invite)
+    mailer.sendBookingConfirmationCombined({
+      studentEmail: student?.email ?? null,
+      studentName,
+      mentorEmail:  mentorUser?.user?.email ?? null,
+      mentorName,
+      pgpId:        student?.studentProfile?.pgpId ?? "N/A",
+      firm:         mentorUser?.firm ?? "IIM Lucknow",
+      date:         fmtDate(claimedSlot.startTime),
+      time:         fmtTime(claimedSlot.startTime),
+      venue:        claimedSlot.venue,
+      meetingLink:  claimedSlot.meetingLink ?? null,
+      focus,
+      icsContent,
+      calendarLink,
+    }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
   }).catch((e) => console.error("[mailer] student lookup:", e.message));
 };
 

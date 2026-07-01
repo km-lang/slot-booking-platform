@@ -53,7 +53,7 @@ const wrap = (body) => `
 <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#02120A">
   <div style="background:#064E3B;padding:20px 24px;border-radius:12px 12px 0 0">
     <span style="color:#6EE7B7;font-weight:900;font-size:18px;letter-spacing:-0.5px">Parthsaarthi</span>
-    <span style="color:#A7F3D0;font-size:12px;margin-left:8px">by Shukracharya · IIM Lucknow</span>
+    <span style="color:#A7F3D0;font-size:12px;margin-left:8px">SIP Mentor Booking · IIM Lucknow</span>
   </div>
   <div style="background:#F8FAF7;padding:24px;border:1px solid #D1FAE5;border-top:none;border-radius:0 0 12px 12px">
     ${body}
@@ -119,6 +119,50 @@ const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName,
       ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
       ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
       <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">A calendar invite is attached to this email.</p>
+    `),
+    ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
+  });
+};
+
+/**
+ * Single booking confirmation email sent to BOTH student and mentor together (to: field).
+ * Replaces the pair of sendBookingConfirmation + sendBookingConfirmationToMentor calls.
+ */
+const sendBookingConfirmationCombined = ({
+  studentEmail, studentName, mentorEmail, mentorName,
+  pgpId, firm, date, time, venue, focus, meetingLink, icsContent, calendarLink,
+}) => {
+  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
+  const toList     = [studentEmail, mentorEmail].filter(Boolean).join(", ");
+  return send({
+    to:      toList,
+    subject: `Session confirmed: ${studentName} × ${mentorName} · ${date}`,
+    text:    `This confirms the ${focusLabel} session between ${studentName} (PGP-${pgpId}) and ${mentorName} (${firm}) on ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} Students: to cancel, do so at least 60 minutes before the slot to avoid a penalty.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Session Confirmed</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
+      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">
+          <div>
+            <b style="font-size:15px">${studentName}</b>
+            <span style="font-size:13px;color:#064E3B99;margin-left:6px">PGP-${pgpId}</span>
+          </div>
+          <div style="text-align:right">
+            <b style="font-size:15px">${mentorName}</b>
+            <span style="font-size:13px;color:#064E3B99;display:block">${firm}</span>
+          </div>
+        </div>
+        <div style="margin-top:12px;border-top:1px solid #A7F3D0;padding-top:12px">
+          <span style="font-size:13px;color:#064E3B;font-weight:600">${date} · ${time}</span><br>
+          <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
+        </div>
+      </div>
+      ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
+      ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
+      <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">
+        A calendar invite is attached — accept it to add the session to your calendar.<br>
+        Students: cancel at least <b>60 minutes in advance</b> to avoid a penalty.
+      </p>
     `),
     ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
   });
@@ -345,6 +389,7 @@ const sendAigDigest = ({ adminEmail, adminName, aigName, atRiskCount, deadline, 
 module.exports = {
   sendBookingConfirmation,
   sendBookingConfirmationToMentor,
+  sendBookingConfirmationCombined,
   sendCancelConfirmationToStudent,
   sendBookingCancelledToMentor,
   sendRescheduleNotification,
