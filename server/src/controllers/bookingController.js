@@ -239,6 +239,38 @@ const createBooking = async (req, res, next) => {
   }
 };
 
+// Backs the mentor-facing search bar in the "Allocate Slot" sheet — lets a mentor
+// find a student by PGP ID, name, or email instead of having to know the exact ID.
+const searchStudentsForAllocation = async (req, res, next) => {
+  try {
+    const q = (req.query.q ?? "").trim();
+    if (!q) return res.json([]);
+
+    const students = await prisma.studentProfile.findMany({
+      where: {
+        OR: [
+          { pgpId: { contains: q, mode: "insensitive" } },
+          { user: { name: { contains: q, mode: "insensitive" } } },
+          { user: { email: { contains: q, mode: "insensitive" } } },
+        ],
+      },
+      include: { user: { select: { name: true, email: true } }, cohort: { select: { label: true } } },
+      take: 8,
+    });
+
+    res.json(
+      students.map((sp) => ({
+        pgpId: sp.pgpId,
+        name: sp.user.name ?? sp.user.email,
+        email: sp.user.email,
+        cohortLabel: sp.cohort?.label ?? null,
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
 const allocateSlot = async (req, res, next) => {
   try {
     const { pgpId, focus } = req.body;
@@ -534,4 +566,4 @@ const getMyBookings = async (req, res, next) => {
   }
 };
 
-module.exports = { createBooking, allocateSlot, cancelBooking, markAttendance, getMyBookings };
+module.exports = { createBooking, allocateSlot, searchStudentsForAllocation, cancelBooking, markAttendance, getMyBookings };

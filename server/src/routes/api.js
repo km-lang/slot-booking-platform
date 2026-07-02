@@ -76,6 +76,11 @@ router.patch(
   requireRole("MENTOR"),
   slotController.bulkSetPublished,
 );
+router.get(
+  "/slots/allocate/students-search",
+  requireRole("MENTOR"),
+  bookingController.searchStudentsForAllocation,
+);
 router.post(
   "/slots/:id/allocate",
   requireRole("MENTOR"),

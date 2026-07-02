@@ -19,6 +19,7 @@ export const QK = {
   orgStats:        ()        => ["orgStats"],
   mentorStats:     ()        => ["mentorStats"],
   studentSearch:   (q)       => ["studentSearch", q],
+  allocateStudentSearch: (q) => ["allocateStudentSearch", q],
   studentDetail:   (pgpId)   => ["studentDetail", pgpId],
   adminCalendar:   (weekStart) => ["adminCalendar", weekStart],
   whitelist:       ()        => ["whitelist"],
@@ -298,6 +299,14 @@ export const useBulkPublishSlots = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
   });
 };
+
+// Lazily enabled — only fires once the mentor types something in the Allocate Slot search bar.
+export const useAllocateStudentSearch = (q) =>
+  useQuery({
+    queryKey: QK.allocateStudentSearch(q),
+    queryFn:  () => apiFetch(`/slots/allocate/students-search?q=${encodeURIComponent(q)}`),
+    enabled:  !!q && q.trim().length > 0,
+  });
 
 export const useAllocateSlot = () => {
   const qc = useQueryClient();

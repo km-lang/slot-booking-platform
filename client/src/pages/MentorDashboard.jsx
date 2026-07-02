@@ -4,13 +4,13 @@ import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, ChevronDown, Link as LinkIcon, Pencil, X,
-  Send, UserPlus,
+  Send, UserPlus, Search,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance, useCreateSlots,
   useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
   useRescheduleSlot, useBulkDeleteSlots, useBulkSetMeetingLink,
-  useBulkPublishSlots, useAllocateSlot,
+  useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -187,18 +187,34 @@ function RescheduleSheet({ session, onClose }) {
 }
 
 // ── Allocate Sheet ───────────────────────────────────────────────────────────────
-// Lets a mentor directly hand a specific open slot to a specific student by PGP ID
-// — skips the student's own booking action entirely. Same confirmation email +
-// calendar invite goes out as a normal self-service booking.
+// Lets a mentor directly hand a specific open slot to a specific student, found via
+// a search bar (matches PGP ID, name, or email) — skips the student's own booking
+// action entirely. Same confirmation email + calendar invite goes out as a normal
+// self-service booking.
 function AllocateSheet({ slot, onClose }) {
-  const [pgpId, setPgpId] = useState("");
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null); // { pgpId, name, email, cohortLabel }
   const [focus, setFocus] = useState("overall");
   const allocate = useAllocateSlot();
 
+  // Only search while the mentor is still typing — once a student is picked, the
+  // dropdown closes and re-editing the text clears the selection.
+  const { data: results = [], isLoading: searching } = useAllocateStudentSearch(selected ? "" : query);
+
+  const handlePick = (student) => {
+    setSelected(student);
+    setQuery(`${student.name} · PGP-${student.pgpId}`);
+  };
+
+  const handleQueryChange = (value) => {
+    setQuery(value);
+    if (selected) setSelected(null);
+  };
+
   const handleSubmit = () => {
-    if (!pgpId.trim()) return;
+    if (!selected) return;
     allocate.mutate(
-      { slotId: slot.id, pgpId: pgpId.trim(), focus },
+      { slotId: slot.id, pgpId: selected.pgpId, focus },
       { onSuccess: onClose },
     );
   };
@@ -212,13 +228,38 @@ function AllocateSheet({ slot, onClose }) {
         <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">{slot.time} · {slot.venue}</p>
 
         <div className="space-y-3 mb-5">
-          <div>
-            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Student PGP ID</label>
-            <input
-              type="text" placeholder="e.g. 25110" value={pgpId} autoFocus
-              onChange={(e) => setPgpId(e.target.value)}
-              className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none"
-            />
+          <div className="relative">
+            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Student</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-900/30" />
+              <input
+                type="text" placeholder="Search by PGP ID or name…" value={query} autoFocus
+                onChange={(e) => handleQueryChange(e.target.value)}
+                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl pl-9 pr-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+              />
+            </div>
+
+            {!selected && query.trim() && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-emerald-900/10 rounded-xl shadow-lg z-10 max-h-56 overflow-y-auto">
+                {searching ? (
+                  <div className="px-4 py-3 text-xs font-bold text-emerald-800/40">Searching…</div>
+                ) : results.length === 0 ? (
+                  <div className="px-4 py-3 text-xs font-bold text-emerald-800/40">No students found</div>
+                ) : (
+                  results.map((s) => (
+                    <button
+                      key={s.pgpId} type="button" onClick={() => handlePick(s)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 transition-colors border-b border-emerald-900/5 last:border-0"
+                    >
+                      <div className="text-sm font-bold text-emerald-950">{s.name}</div>
+                      <div className="text-[11px] font-semibold text-emerald-700/60">
+                        PGP-{s.pgpId} · {s.email}{s.cohortLabel ? ` · ${s.cohortLabel}` : ""}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Focus</label>
@@ -241,7 +282,7 @@ function AllocateSheet({ slot, onClose }) {
 
         <button
           onClick={handleSubmit}
-          disabled={allocate.isPending || !pgpId.trim()}
+          disabled={allocate.isPending || !selected}
           className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95"
         >
           {allocate.isPending ? "Allocating…" : "Confirm Booking for This Student"}
