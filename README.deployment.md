@@ -4,6 +4,8 @@ This document describes the **application deployment** process actually used on 
 production host (Windows Server, PM2, Apache reverse proxy at `/parthsaarthi`). It
 reflects the exact steps followed for the 2026-07-02 deploy.
 
+Application created by Hrishikesh.
+
 > **Scope of this document: application code only.**
 > Database changes are covered separately in the "Database Safety Rules" section
 > below, and are **out of scope for a routine deploy**.

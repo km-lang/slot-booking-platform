@@ -9,3 +9,7 @@ server/prisma/dev.db-wal
 # Built client bundle served by Express in production — regenerate with
 # `npm run build` (client) and copy dist/* here, don't hand-edit or commit.
 server/public/
+
+# Timestamped rollback copies of server/public/ made before each deploy — local
+# safety nets only, never committed (see README.deployment.md).
+server/public_backup_*/

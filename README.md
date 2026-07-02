@@ -2,6 +2,8 @@
 
 A high-concurrency slot-booking system for IIM Lucknow's Summer Internship Preparation (SIP) programme. Students book 15-minute CV-review sessions with alumni mentors. The platform handles burst traffic during cohort releases using Optimistic Concurrency Control and enforces a strict whitelist-based access gate.
 
+Application created by Hrishikesh.
+
 ---
 
 ## Repository Structure
@@ -11,37 +13,52 @@ slot-booking-platform/
 ├── client/                     React 19 + Vite 8 + Tailwind CSS 3
 │   └── src/
 │       ├── components/
-│       │   └── RequireRole.jsx     Route guard (live)
+│       │   ├── RequireRole.jsx     Route guard
+│       │   ├── AvatarMenu.jsx      Account menu (profile, logout)
+│       │   └── AppFooter.jsx
 │       ├── pages/
 │       │   ├── StudentLayout.jsx
 │       │   ├── StudentDashboard.jsx
+│       │   ├── StudentMyBookings.jsx
 │       │   ├── MentorBookingView.jsx
-│       │   ├── MentorDashboard.jsx
+│       │   ├── MentorDashboard.jsx         Today's sessions, slot creation, allocate-to-student
 │       │   ├── MentorCohortDetails.jsx
-│       │   ├── AigAdminDashboard.jsx   Generic AIG-tier view (/admin/:aigSlug)
-│       │   ├── PlacementAdminDashboard.jsx  SuperADMIN KPI + live ops
-│       │   ├── LoginPage.jsx           (live — Google Identity Services)
+│       │   ├── AigAdminDashboard.jsx       Generic AIG-tier view (/admin/:aigSlug)
+│       │   ├── AigMentorDetail.jsx         Per-mentor session-history drilldown
+│       │   ├── AdminStudentDetail.jsx      Per-student session-history drilldown
+│       │   ├── PlacementAdminDashboard.jsx SuperADMIN: KPIs, whitelist, config, bans, calendar, history
+│       │   ├── ProfileSettings.jsx
+│       │   ├── LoginPage.jsx               Google Identity Services
 │       │   └── UnauthorizedPage.jsx
+│       ├── hooks/useApi.js         All React Query hooks (queries + mutations)
+│       ├── lib/apiClient.js        Fetch wrapper — session JWT, 401 handling, base-path-aware
 │       └── App.jsx                 Route map (RBAC-structured)
 │
-└── server/                     Node.js + Express 5 + Prisma 6 + SQLite/PostgreSQL
+└── server/                     Node.js + Express 5 + Prisma 6 + PostgreSQL (prod) / SQLite (dev)
     ├── prisma/
-    │   ├── schema.prisma           Full data model (13 tables, 3 enums)
-    │   ├── seed.js                 AIGs, whitelist, BanPolicyTiers, SystemConfig
+    │   ├── schema.prisma           Full data model
+    │   ├── seed.js                 AIGs, cohorts, real Disha mentors, whitelist, BanPolicyTiers, SystemConfig
     │   └── migrations/             Migration history
     └── src/
-        ├── index.js                Express app entry
+        ├── index.js                Express app entry — serves API + built client under BASE_PATH
         ├── routes/
-        │   ├── auth.js             POST /api/auth/google
+        │   ├── auth.js             POST /api/auth/google, /api/auth/refresh
         │   └── api.js              All authenticated routes
         ├── controllers/
-        │   ├── authController.js   (live)
-        │   ├── slotController.js   (live)
-        │   ├── bookingController.js (live — OCC + idempotency + penalty tiers)
-        │   └── adminController.js  (stub → Phase 6)
+        │   ├── authController.js
+        │   ├── slotController.js       Slot/AIG/mentor browsing, creation, reschedule, waitlist
+        │   ├── bookingController.js    OCC + idempotency + penalty tiers + mentor allocation
+        │   ├── adminController.js      AIG/SuperADMIN analytics, whitelist, config, bans, calendar
+        │   ├── exportController.js     CSV export (roster, cohort, bookings)
+        │   └── profileController.js
+        ├── lib/
+        │   ├── prisma.js
+        │   ├── mailer.js                Booking/reminder/digest emails
+        │   ├── calendarInvite.js        RFC 5545 .ics builder
+        │   └── scheduler.js             node-cron: session reminders, daily AIG digest
         └── middleware/
-            ├── auth.js             verifySession, requireRole, requireAigScope (live)
-            └── rateLimiter.js      10s / 8 req cap on POST /api/bookings (live)
+            ├── auth.js             verifySession, requireRole, requireAigScope
+            └── rateLimiter.js      Rate limiting on booking + auth endpoints
 ```
 
 ---
@@ -58,10 +75,12 @@ slot-booking-platform/
 | Backend | Node.js + Express 5 |
 | ORM | Prisma 6 |
 | Database (dev) | SQLite (`server/prisma/dev.db`) |
-| Database (prod) | PostgreSQL (swap one line in `.env` + `schema.prisma`) |
-| Auth | Google Identity Services → our own session JWT |
-| Deploy (frontend) | GitHub Pages via `gh-pages` |
-| Deploy (backend) | On-prem server (TBD) |
+| Database (prod) | PostgreSQL (live) |
+| Auth | Google Identity Services → our own session JWT (with silent refresh) |
+| Email | Nodemailer/SMTP — booking confirmations, reminders, daily AIG digest, .ics calendar invites |
+| Scheduling | `node-cron` (in-process, see `server/src/lib/scheduler.js`) |
+| Deploy (frontend) | Bundled into the Express server's `server/public/` and served under a reverse-proxy base path (see `README.deployment.md`) |
+| Deploy (backend) | On-prem Windows host, PM2 process manager, Apache reverse proxy |
 
 ---
 
@@ -159,6 +178,12 @@ npm run deploy          # pushes dist/ to gh-pages branch
 cd client
 npm run build           # VITE_BASE_PATH defaults to "/"
 ```
+
+> **Production deploys don't use GitHub Pages.** The live app is built with
+> `VITE_BASE_PATH=/parthsaarthi/`, copied into `server/public/`, and served by
+> the same Express process as the API behind an Apache reverse proxy, managed
+> by PM2. **See `README.deployment.md` for the exact, current runbook** —
+> including the rule that a routine app deploy must never touch the database.
 
 ---
 
@@ -309,6 +334,94 @@ Per-view changes:
 - **Bans tab** in `PlacementAdminDashboard` — table of active bans with "Lift Ban" button per row; live count badge
 
 **Bug fix**: `addToWhitelist` controller was missing `addedBy` (required schema field); now populated from `req.user.email`.
+
+---
+
+### ✅ Phase 9 — Real Org Chart, PostgreSQL, UI Redesign & Hardening
+**Status: Complete**
+
+- UI reworked to a light "Soft Sky & Slate" palette; removed the IIM Lucknow background photo for a flat, distraction-free shell
+- `AIG.category` added (`COMMITTEE` / `CLUB` / `AIG`) and seed data corrected against IIM Lucknow's real org chart — Disha is a Committee (not an AIG), and the 6 other AIGs now use real names (Consulting & Strategy Club, SIGFI, PRiSM, Operations Interest Group, Biztech, HELICS, IGFAB)
+- `MentorProfile.aigId` made optional with a new `mentorType` (`ALUMNI` / `PGP2_STUDENT`) to support independent PGP2-student mentors with no Committee/Club/AIG affiliation
+- Database provider switched from SQLite to PostgreSQL for production (migration regenerated and verified 1:1 against `schema.prisma`)
+- Client API base URL now derives from Vite's configured base path (`import.meta.env.BASE_URL`) instead of a hardcoded `/api`, so the app works correctly whether served from `/` or a reverse-proxy subpath like `/parthsaarthi/`
+- `server/public/` (the built client bundle) excluded from version control — it's a build artifact, not source
+- CSV export extended to AIG coordinators (cohort roster) and students (own booking history); CSV/Excel formula-injection neutralized on all exports; `/aigs`, `/mentors`, `/slots` locked down to the roles that actually use them
+- Security hardening: refuse to boot with `AUTH_MODE=dev` + `NODE_ENV=production` set together; rate limiting added to `/api/auth/google` and `/api/auth/refresh`; JWT algorithm pinned to HS256; 5xx error responses no longer echo raw error messages; idempotency-key replay now checks booking ownership; CSP `img-src` tightened
+- Dashboard UX fixes: role-aware home navigation, unified "Reviewed" status wording across mentor/AIG views, explicit "slot taken" messaging with a "Choose Another Slot" action, distinct `COHORT_RESTRICTED` status instead of a booking attempt that fails at confirm, mentor "running late" flag surfaced in the student slot list, real 15s-polling live-activity badge on the SuperAdmin dashboard
+
+---
+
+### ✅ Phase 10 — SuperAdmin Analytics, History & Mobile Layout
+**Status: Complete**
+
+- `GET /admin/org-stats` — Disha vs. AIGs vs. non-AIG rollup comparison
+- `GET /admin/mentors` — full mentor list tagged by category, backing a new **Org & Mentor Stats** tab (3-way comparison cards + collapsible per-org mentor tables)
+- `GET /admin/students` + `GET /admin/student/:pgpId` — student search and full booking history, backing a new **History** tab (search any mentor or student, drill into session history)
+- `getBatchOverview` extended with a 30-day created/attended/no-show trend chart and a cohort-by-cohort coverage breakdown
+- Cohort labels (`Q1`–`Q17`) now sort numerically everywhere instead of alphabetically (was producing `Q1, Q10, Q11...Q2, Q3`)
+- Mobile layout fixes across every admin screen: scrollable tab bar, truncating headers, stacked whitelist form fields on narrow viewports
+
+---
+
+### ✅ Phase 11 — Calendar Invites, Meeting Links & Custom Durations
+**Status: Complete**
+
+- Real `.ics` calendar invites (RFC 5545, `server/src/lib/calendarInvite.js`, no external dependency) attached to booking confirmation and cancellation emails — Gmail/Outlook/Apple Mail now show native Accept/Decline UI and the event lands on both parties' calendars automatically
+- Mentor now also receives a booking-confirmation email (previously only the student did)
+- Cancellation sends a `METHOD:CANCEL` update to remove the event from both calendars, independent of whether a penalty applies
+- Optional Google Meet link on both `BookingRelease` (batch default) and `Slot` (per-slot override), editable after creation via `PATCH /slots/:id/meeting-link`; only revealed to a student after they've booked (not shown on still-open slots)
+- Slot duration is now a free-form value instead of a fixed preset list; mentor UI keeps 15/20/30m presets plus a "Custom" tab
+- Students see a "Join Google Meet" action on both their booked-slot view and "My Sessions"
+
+---
+
+### ✅ Phase 12 — Reschedule, Waitlist, Bulk Actions & Admin Calendar
+**Status: Complete**
+
+- Mentors can reschedule an already-booked slot's time directly — updates both parties' calendar invites via `Slot.icsSequence` (RFC 5545 `SEQUENCE`, tracked separately from the existing `version` OCC counter)
+- One-click "Add to Google Calendar" link included alongside the `.ics` attachment on booking/reschedule emails
+- Bulk slot actions for mentors: bulk-delete and bulk-assign a meeting link across multiple open slots at once
+- Notify-only waitlist for full slots — never auto-books, emails once when a slot frees up so the student can book it themselves
+- New week-grid **Calendar** tab in the SuperAdmin dashboard
+- Fixed a 500 crash in `listMentors`/`getMentor` for non-AIG mentors (unguarded `mentor.aig.slug` access on a null `aig`) — found via load testing, had been breaking the student "browse all mentors" view since non-AIG mentors were introduced
+
+---
+
+### ✅ Phase 13 — Concurrency & Booking-Integrity Hardening
+**Status: Complete**
+
+- Fixed a race condition allowing overbooking past slot capacity: `createBooking` used to read `SlotCapacity`, decide locally whether it was full, then write the increment separately — under load, many concurrent requests could all read "not full" before any of them committed. A 300-concurrent stress test against a capacity-1 slot in production reproduced 7 successful bookings for one 1-on-1 session before the fix.
+- Replaced with a single atomic conditional `UPDATE` (`current = current + 1 WHERE current < max`) inside the booking transaction, relying on Postgres serializing concurrent updates to the same row. Re-running the same 300-concurrent test after the fix produced exactly 1 success and 299 clean `409`s.
+
+---
+
+### ✅ Phase 14 — Draft/Publish Slots, Per-Mentor Booking Limit & Mentor Allocation
+**Status: Complete**
+
+- Mentors can create slots as drafts (`publish: false`), visible only to themselves until explicitly published (individually or via bulk-select). Slots still publish immediately by default.
+- Students limited to one active booking per mentor at a time, enforced with a database-level partial unique index (not an application check) so it holds under concurrent requests the same way the capacity fix does — verified empirically with 3 concurrent booking attempts against 3 different slots from the same mentor resolving to exactly 1 success.
+- Mentors can allocate an open slot directly to a specific student by PGP ID — skips the student's own booking step, sends the same confirmation email + calendar invite as self-service booking. Shares the same atomic claim path as regular booking (`claimSlotAndCreateBooking`), so it gets the same race-safety and one-per-mentor enforcement for free.
+
+---
+
+### ✅ Phase 15 — Identity Lock, Error Clarity & Email Consolidation
+**Status: Complete**
+
+- Student/mentor display name is now read-only everywhere — set from the Google login payload on every sign-in, never editable through the profile form (`PATCH /profile` no longer accepts a `name` field)
+- `GET /profile` now returns a student's cohort label and assigned Disha mentor name (read-only, derived from cohort assignment)
+- Booking failures now surface the actual server reason instead of a generic "just booked by someone else" message — the per-mentor-limit case and the slot-full case are now distinguishable to the user
+- Booking confirmation consolidated from two separate emails (student, mentor) into one combined email with both addresses in `To:` and a single calendar invite attached
+- Outgoing email header rebranded from "by Team SynapsE" to "SIP Mentor Booking"
+
+---
+
+### ✅ Phase 16 — Mentor Student Search & Operational Hardening
+**Status: Complete**
+
+- The mentor "Allocate Slot" sheet now searches students by PGP ID, name, or email with a live dropdown (`GET /slots/allocate/students-search`), instead of requiring the mentor to already know the exact PGP ID
+- Scheduler's session-reminder and daily-digest cron jobs now isolate failures per-slot / per-AIG-admin (`Promise.allSettled` + per-item `try/catch`), so one bad email address or missing record no longer aborts the entire cron run for everyone else
+- Added `README.deployment.md`: the authoritative, current production deploy runbook (build → backup → PM2 restart → verify), with an explicit rule that a routine application deploy must never touch the database — any schema/data change requires a timestamped snapshot pushed to GitHub plus two separate explicit confirmations first
 
 ---
 

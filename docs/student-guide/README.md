@@ -3,6 +3,8 @@
 A quick walkthrough of how to book a CV-review session with your mentor on
 Parthsaarthi, IIM Lucknow's SIP Prep booking platform.
 
+Application created by Hrishikesh.
+
 > Screenshots below are from a synthetic demo account, not real student data.
 
 ---
