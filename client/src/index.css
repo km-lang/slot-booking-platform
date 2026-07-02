@@ -15,10 +15,40 @@
   .app-bg {
     background-color: #F5F7FA;
   }
+
+  /* 100vh with a 100dvh override where supported — avoids iOS Safari's
+     collapsing address bar clipping/jumping fixed-height layouts. Browsers
+     that don't recognize `dvh` ignore that declaration and keep the vh value. */
+  .min-h-screen-safe {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* iOS notch / Dynamic Island clearance for fixed/absolute headers, composed
+     with the header's existing py-3 (0.75rem) so height doesn't change on
+     non-notched devices. */
+  .header-safe-top {
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  }
+
+  /* Home-indicator clearance for page bottoms / bottom sheets, composed with
+     the element's existing bottom padding (env() resolves to 0 on devices
+     with no inset, e.g. Android/desktop, so this never shrinks that spacing). */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pb-safe-6 {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .pb-safe-8 {
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 body {
   @apply bg-[#F5F7FA] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
+  scrollbar-width: thin;
+  scrollbar-color: #dce6ec #F5F7FA;
 }
 
 ::-webkit-scrollbar {

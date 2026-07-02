@@ -262,18 +262,22 @@ export default function MentorBookingView() {
         </div>
       </div>
 
-      <AppFooter />
+      <div className="pb-safe">
+        <AppFooter />
+      </div>
 
       {/* Bottom Sheet Backdrop */}
       <div
-        className={`absolute inset-0 bg-emerald-950/40 backdrop-blur-sm z-40 transition-opacity duration-300 rounded-lg
+        className={`fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-40 transition-opacity duration-300
           ${selectedSlot ? "opacity-100 visible" : "opacity-0 invisible"}`}
         onClick={() => !isProcessing && setSelectedSlot(null)}
       />
 
-      {/* Bottom Sheet */}
+      {/* Bottom Sheet — fixed to the real viewport (not the scrolling content box this
+          page renders inside of), and width-clamped to match StudentLayout's shell so it
+          doesn't span the full browser window on desktop. */}
       <div
-        className={`absolute bottom-0 left-0 w-full bg-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 p-6 pb-8 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]
+        className={`fixed bottom-0 left-0 right-0 mx-auto max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl bg-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 p-6 pb-safe-8 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]
           ${selectedSlot ? "translate-y-0" : "translate-y-full"}`}
       >
         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6" />

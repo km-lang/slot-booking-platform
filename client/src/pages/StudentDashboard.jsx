@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, ChevronDown, Shield, Briefcase, TrendingUp, CalendarCheck } from "lucide-react";
 import { useAigs, useAigMentors, useAllMentors, useMyBookings } from "../hooks/useApi";
-import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 
 const AIG_ICON = {
@@ -18,22 +17,22 @@ const MentorRow = ({ mentor, aigSlug }) => {
   return (
     <button
       onClick={() => navigate(`/student/${aigSlug}/${mentor.id}`)}
-      className="w-full bg-white p-4 flex items-center gap-4 hover:bg-emerald-50/80 active:bg-emerald-100/50 transition-colors relative overflow-hidden text-left"
+      className="w-full h-full bg-white rounded-xl border border-emerald-900/10 p-4 flex items-center gap-4 hover:bg-emerald-50/80 active:bg-emerald-100/50 transition-colors relative overflow-hidden text-left"
     >
       {isDisha && <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />}
       <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black shrink-0 z-10 ${isDisha ? "bg-emerald-900 text-emerald-400" : "bg-emerald-100 text-emerald-800"}`}>
         {mentor.name?.split(" ").map((n) => n[0]).join("").substring(0, 2) ?? "?"}
       </div>
-      <div className="flex-1 z-10">
+      <div className="flex-1 min-w-0 z-10">
         <div className="flex items-center gap-2 mb-0.5">
-          <h3 className="font-bold text-emerald-950 leading-tight">{mentor.name}</h3>
+          <h3 className="font-bold text-emerald-950 leading-tight truncate">{mentor.name}</h3>
           {isDisha && (
-            <span className="bg-emerald-900 text-emerald-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded flex items-center gap-1">
+            <span className="bg-emerald-900 text-emerald-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
               <Shield size={8} /> Disha
             </span>
           )}
         </div>
-        <p className="text-[11px] font-bold text-emerald-700">
+        <p className="text-[11px] font-bold text-emerald-700 truncate">
           {mentor.firm} <span className="text-emerald-900/30">|</span> {mentor.domain}
         </p>
       </div>
@@ -79,13 +78,15 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
       </button>
 
       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="bg-[#F5F7FA] border-t border-emerald-900/5 divide-y divide-emerald-900/5">
+        <div className="bg-[#F5F7FA] border-t border-emerald-900/5 p-3">
           {isLoading ? (
             <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading mentors…</div>
           ) : mentors.length > 0 ? (
-            mentors.map((mentor) => (
-              <MentorRow key={mentor.id} mentor={mentor} aigSlug={aig.id} />
-            ))
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {mentors.map((mentor) => (
+                <MentorRow key={mentor.id} mentor={mentor} aigSlug={aig.id} />
+              ))}
+            </div>
           ) : (
             <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">No mentors available</div>
           )}
@@ -119,110 +120,92 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative flex flex-col">
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
-          <div className="flex-1">
-            <h1 className="font-black text-lg leading-tight">Book your Slot</h1>
-            <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">SIP Prep 2026</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => navigate("/student")}
-              className="bg-emerald-900 hover:bg-emerald-800 text-white text-[11px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.15)] active:scale-95 transition-all"
-            >
-              Shukracharya
-            </button>
-            <AvatarMenu />
-          </div>
-        </header>
+    <div className="px-4 py-6 pb-safe-6">
+      <div className="relative mb-6">
+        <Search size={18} className="absolute left-3 top-3.5 text-emerald-900/40" />
+        <input
+          type="text"
+          placeholder="Search by name, firm, or domain…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-white border border-emerald-900/10 rounded-xl pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm transition-all"
+        />
+      </div>
 
-        <main className="flex-1 px-4 py-6 overflow-y-auto pb-24">
-          <div className="relative mb-6">
-            <Search size={18} className="absolute left-3 top-3.5 text-emerald-900/40" />
-            <input
-              type="text"
-              placeholder="Search by name, firm, or domain…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-emerald-900/10 rounded-xl pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm transition-all"
-            />
+      {/* My Sessions shortcut */}
+      <button
+        onClick={() => navigate("/student/bookings")}
+        className="w-full flex items-center justify-between bg-white border border-emerald-900/10 rounded-xl px-4 py-3 shadow-sm hover:bg-emerald-50/50 active:bg-emerald-100/50 transition-colors mb-6"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
+            <CalendarCheck size={16} />
           </div>
-
-          {/* My Sessions shortcut */}
-          <button
-            onClick={() => navigate("/student/bookings")}
-            className="w-full flex items-center justify-between bg-white border border-emerald-900/10 rounded-xl px-4 py-3 shadow-sm hover:bg-emerald-50/50 active:bg-emerald-100/50 transition-colors mb-6"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700">
-                <CalendarCheck size={16} />
-              </div>
-              <div className="text-left">
-                <div className="font-bold text-sm text-emerald-950">My Sessions</div>
-                <div className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
-                  {upcomingCount > 0 ? `${upcomingCount} upcoming` : "View booking history"}
-                </div>
-              </div>
+          <div className="text-left">
+            <div className="font-bold text-sm text-emerald-950">My Sessions</div>
+            <div className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
+              {upcomingCount > 0 ? `${upcomingCount} upcoming` : "View booking history"}
             </div>
-            {upcomingCount > 0 && (
-              <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                {upcomingCount}
-              </span>
+          </div>
+        </div>
+        {upcomingCount > 0 && (
+          <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+            {upcomingCount}
+          </span>
+        )}
+      </button>
+
+      {aigsError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700 mb-4">
+          Could not load groups: {aigsError.message}
+        </div>
+      )}
+
+      {isSearching ? (
+        <div className="animate-in fade-in duration-200">
+          <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1">
+            Search Results{allMentors && ` (${filteredMentors.length})`}
+          </h2>
+          <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden p-3">
+            {!allMentors ? (
+              <div className="p-8 text-center text-emerald-800/40 text-sm font-semibold">Loading…</div>
+            ) : filteredMentors.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {filteredMentors.map((mentor) => (
+                  <MentorRow key={mentor.id} mentor={mentor} aigSlug={mentor.aigId} />
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-emerald-800/50 text-sm font-semibold">
+                No mentors found matching "{searchQuery}"
+              </div>
             )}
-          </button>
-
-          {aigsError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700 mb-4">
-              Could not load groups: {aigsError.message}
-            </div>
-          )}
-
-          {isSearching ? (
-            <div className="animate-in fade-in duration-200">
-              <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1">
-                Search Results{allMentors && ` (${filteredMentors.length})`}
-              </h2>
-              <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
-                {!allMentors ? (
-                  <div className="p-8 text-center text-emerald-800/40 text-sm font-semibold">Loading…</div>
-                ) : filteredMentors.length > 0 ? (
-                  filteredMentors.map((mentor) => (
-                    <MentorRow key={mentor.id} mentor={mentor} aigSlug={mentor.aigId} />
-                  ))
-                ) : (
-                  <div className="p-8 text-center text-emerald-800/50 text-sm font-semibold">
-                    No mentors found matching "{searchQuery}"
-                  </div>
-                )}
-              </div>
+          </div>
+        </div>
+      ) : (
+        <div className="animate-in fade-in duration-200">
+          <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1">
+            Preparation Groups
+          </h2>
+          {aigsLoading ? (
+            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm p-8 text-center text-emerald-800/40 text-sm font-semibold">
+              Loading groups…
             </div>
           ) : (
-            <div className="animate-in fade-in duration-200">
-              <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1">
-                Preparation Groups
-              </h2>
-              {aigsLoading ? (
-                <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm p-8 text-center text-emerald-800/40 text-sm font-semibold">
-                  Loading groups…
-                </div>
-              ) : (
-                <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
-                  {aigs.map((aig) => (
-                    <AigRow
-                      key={aig.id}
-                      aig={aig}
-                      isExpanded={expandedAig === aig.id}
-                      onToggle={() => setExpandedAig((prev) => (prev === aig.id ? null : aig.id))}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+              {aigs.map((aig) => (
+                <AigRow
+                  key={aig.id}
+                  aig={aig}
+                  isExpanded={expandedAig === aig.id}
+                  onToggle={() => setExpandedAig((prev) => (prev === aig.id ? null : aig.id))}
+                />
+              ))}
             </div>
           )}
-          <AppFooter />
-        </main>
-      </div>
+        </div>
+      )}
+      <AppFooter />
     </div>
   );
 }

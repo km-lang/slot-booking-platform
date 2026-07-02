@@ -144,14 +144,14 @@ export default function StudentMyBookings() {
   };
 
   return (
-    <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl flex flex-col">
+    <div className="min-h-screen-safe app-bg text-emerald-950 font-sans">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl flex flex-col">
 
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between gap-3">
+        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 header-safe-top pb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/student")}
-              className="p-2 -ml-2 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
+              className="p-3 -ml-3 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
             >
               <ArrowLeft size={20} />
             </button>
@@ -167,10 +167,10 @@ export default function StudentMyBookings() {
           <button
             onClick={() => downloadCsv(`${API_BASE}/bookings/export`, "my-bookings.csv")}
             disabled={isLoading || (upcoming.length === 0 && past.length === 0)}
-            className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
+            className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-3 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
             title="Export my booking history (CSV)"
           >
-            <Download size={16} />
+            <Download size={20} />
           </button>
         </header>
 
@@ -199,7 +199,7 @@ export default function StudentMyBookings() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {upcoming.map((b) => (
                   <BookingCard
                     key={b.id}
@@ -226,7 +226,7 @@ export default function StudentMyBookings() {
                 No past sessions yet
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {past.map((b) => (
                   <BookingCard
                     key={b.id}
@@ -239,7 +239,9 @@ export default function StudentMyBookings() {
             )}
           </section>
         </main>
-        <AppFooter />
+        <div className="pb-safe">
+          <AppFooter />
+        </div>
       </div>
     </div>
   );
