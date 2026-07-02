@@ -2,9 +2,19 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldX } from "lucide-react";
 import AppFooter from "../components/AppFooter";
+import { useAuth } from "../context/useAuth";
+import { getRoleHome } from "../lib/roleHome";
 
 export default function UnauthorizedPage() {
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
+
+  // Route guards redirect here with `replace`, so there's often no valid
+  // history entry to go back to — send the user to a known-good page instead
+  // of gambling on browser history (which can leave them stuck here).
+  const goBack = () => {
+    navigate(isAuthenticated ? getRoleHome(user) : "/login", { replace: true });
+  };
 
   return (
     <div className="min-h-screen app-bg flex items-center justify-center px-4">
@@ -20,7 +30,7 @@ export default function UnauthorizedPage() {
           you believe this is an error.
         </p>
         <button
-          onClick={() => navigate(-1)}
+          onClick={goBack}
           className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-3 px-8 rounded-xl text-sm transition-colors shadow-md"
         >
           Go Back

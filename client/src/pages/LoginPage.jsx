@@ -2,15 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Shield, Heart } from "lucide-react";
 import { useAuth } from "../context/useAuth";
+import { getRoleHome } from "../lib/roleHome";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-const ROLE_HOME = {
-  STUDENT: () => "/student",
-  MENTOR: () => "/mentor",
-  SuperADMIN: () => "/admin/placements",
-  AIGs: (user) => `/admin/${user.aigSlug}`,
-};
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -24,8 +18,7 @@ export default function LoginPage() {
   const isDevMode = import.meta.env.DEV;
 
   const handleSuccess = (user) => {
-    const resolveHome = ROLE_HOME[user.role];
-    navigate(resolveHome ? resolveHome(user) : "/unauthorized", { replace: true });
+    navigate(getRoleHome(user), { replace: true });
   };
 
   // Dev-mode: plain email form
