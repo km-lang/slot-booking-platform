@@ -81,6 +81,7 @@ const googleSignIn = async (req, res, next) => {
         role: user.role,
         name: user.name,
         ...(whitelistEntry.aig?.slug && { aigSlug: whitelistEntry.aig.slug }),
+        ...(whitelistEntry.aig?.category && { aigCategory: whitelistEntry.aig.category }),
       },
     });
   } catch (err) {

@@ -67,7 +67,7 @@ export default function AdminStudentDetail() {
           <div className="min-w-0">
             <div className="font-black text-emerald-950 text-sm leading-tight truncate">{student.name}</div>
             <div className="text-[11px] text-emerald-700/60 font-semibold truncate">
-              PGP-{student.pgpId} · {student.cohortLabel ?? "No Cohort"} {student.orgName ? `· ${student.orgName}` : ""}
+              {student.pgpId} · {student.cohortLabel ?? "No Cohort"} {student.orgName ? `· ${student.orgName}` : ""}
             </div>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default function AdminStudentDetail() {
           <div className="flex-1 min-w-0">
             <h2 className="font-black text-emerald-950 text-lg">{student.name}</h2>
             <p className="text-sm text-emerald-700/70">{student.email}</p>
-            <p className="text-xs text-slate-400 mt-0.5">PGP-{student.pgpId}</p>
+            <p className="text-xs text-slate-400 mt-0.5">{student.pgpId}</p>
           </div>
           {activeBan && (
             <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">

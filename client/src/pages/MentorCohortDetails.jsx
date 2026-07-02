@@ -101,7 +101,7 @@ export default function MentorCohortDetails() {
                       <div>
                         <h3 className="font-bold text-[15px] text-emerald-950 leading-tight">{mentee.name}</h3>
                         <div className="text-[11px] font-bold text-emerald-700/60 mt-0.5">
-                          PGP-{mentee.pgp}
+                          {mentee.pgp}
                           {mentee.isBanned && (
                             <span className="ml-2 bg-red-100 text-red-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
                               Banned

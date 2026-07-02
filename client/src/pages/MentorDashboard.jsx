@@ -203,7 +203,7 @@ function AllocateSheet({ slot, onClose }) {
 
   const handlePick = (student) => {
     setSelected(student);
-    setQuery(`${student.name} · PGP-${student.pgpId}`);
+    setQuery(`${student.name} · ${student.pgpId}`);
   };
 
   const handleQueryChange = (value) => {
@@ -253,7 +253,7 @@ function AllocateSheet({ slot, onClose }) {
                     >
                       <div className="text-sm font-bold text-emerald-950">{s.name}</div>
                       <div className="text-[11px] font-semibold text-emerald-700/60">
-                        PGP-{s.pgpId} · {s.email}{s.cohortLabel ? ` · ${s.cohortLabel}` : ""}
+                        {s.pgpId} · {s.email}{s.cohortLabel ? ` · ${s.cohortLabel}` : ""}
                       </div>
                     </button>
                   ))
@@ -382,7 +382,7 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
           <div>
             <h3 className="font-bold text-[15px] text-emerald-950">{session.student.name}</h3>
             <p className="text-[11px] font-bold text-emerald-700/60 mt-0.5">
-              PGP-{session.student.pgp}
+              {session.student.pgp}
               <span className="text-emerald-900/20 mx-1">|</span>
               {FOCUS_LABELS[session.student.purpose] ?? session.student.purpose}
             </p>

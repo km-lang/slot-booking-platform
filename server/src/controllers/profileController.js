@@ -81,6 +81,17 @@ const getProfile = async (req, res, next) => {
       return res.json({ ...user, cohort, dishaMentor });
     }
 
+    // AIGs-specific: category (e.g. "COMMITTEE" for Disha) drives the display
+    // label on the profile page and account menu.
+    if (user.role === "AIGs") {
+      const whitelistEntry = await prisma.accessWhitelist.findUnique({
+        where:  { email: user.email },
+        include: { aig: { select: { category: true } } },
+      });
+      const aigCategory = whitelistEntry?.aig?.category ?? null;
+      return res.json({ ...user, aigCategory });
+    }
+
     res.json({ ...user });
   } catch (err) {
     next(err);

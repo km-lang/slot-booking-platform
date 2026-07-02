@@ -566,7 +566,7 @@ function HistoryTab() {
             >
               <div>
                 <div className="font-bold text-sm text-emerald-950">{s.name}</div>
-                <div className="text-xs font-semibold text-emerald-700/60">PGP-{s.pgpId} {s.cohortLabel ? `· ${s.cohortLabel}` : ""}</div>
+                <div className="text-xs font-semibold text-emerald-700/60">{s.pgpId} {s.cohortLabel ? `· ${s.cohortLabel}` : ""}</div>
               </div>
               <ChevronRight size={16} className="text-emerald-400" />
             </button>

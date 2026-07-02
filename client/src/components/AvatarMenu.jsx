@@ -18,6 +18,8 @@ export default function AvatarMenu({ variant = "light" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
+  const roleLabel = user?.aigCategory === "COMMITTEE" ? "Committee" : user?.role;
+
   const initials =
     user?.name
       ?.split(" ")
@@ -58,7 +60,7 @@ export default function AvatarMenu({ variant = "light" }) {
             <span
               className={`inline-block mt-1.5 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${ROLE_BADGE[user?.role] ?? ROLE_BADGE.STUDENT}`}
             >
-              {user?.role}
+              {roleLabel}
             </span>
           </div>
           <button

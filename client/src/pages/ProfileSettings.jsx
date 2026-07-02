@@ -23,6 +23,7 @@ export default function ProfileSettings() {
   }, [profile]);
 
   const isMentor = profile?.role === "MENTOR";
+  const roleLabel = profile?.aigCategory === "COMMITTEE" ? "Committee" : profile?.role;
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -81,7 +82,7 @@ export default function ProfileSettings() {
             <div className="flex items-center gap-2">
               <User size={12} className="text-emerald-700/50" />
               <span className="text-xs font-bold text-emerald-700/60 uppercase tracking-widest">
-                {profile?.role}
+                {roleLabel}
               </span>
             </div>
           </div>
