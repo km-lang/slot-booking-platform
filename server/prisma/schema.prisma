@@ -176,6 +176,10 @@ model Slot {
   capacity      SlotCapacity?
   bookings      Booking[]
   waitlist      SlotWaitlist[]
+
+  // A mentor may not have two slots with overlapping [startTime, endTime) ranges —
+  // enforced as a GiST exclusion constraint (slot_no_overlap_per_mentor) in the
+  // migration SQL, since Prisma's schema DSL can't express range-exclusion constraints.
 }
 
 // One-shot notification queue: when a full slot frees up, every waitlisted student

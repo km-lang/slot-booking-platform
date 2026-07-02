@@ -237,6 +237,11 @@ const releaseSlots = async (req, res, next) => {
     const slots = await prisma.slot.findMany({ where: { releaseId: release.id }, include: { capacity: true } });
     res.status(201).json({ release, slots });
   } catch (err) {
+    // DB-enforced by the slot_no_overlap_per_mentor GiST exclusion constraint —
+    // Prisma surfaces this as an untyped error, so match on the constraint name.
+    if (err.message?.includes("slot_no_overlap_per_mentor")) {
+      return res.status(409).json({ error: "This time range overlaps with one of your existing slots" });
+    }
     next(err);
   }
 };
@@ -616,6 +621,11 @@ const setSlotReschedule = async (req, res, next) => {
 
     res.json({ id: updated.id, startTime: updated.startTime, endTime: updated.endTime });
   } catch (err) {
+    // DB-enforced by the slot_no_overlap_per_mentor GiST exclusion constraint —
+    // Prisma surfaces this as an untyped error, so match on the constraint name.
+    if (err.message?.includes("slot_no_overlap_per_mentor")) {
+      return res.status(409).json({ error: "The new time overlaps with one of your existing slots" });
+    }
     next(err);
   }
 };
