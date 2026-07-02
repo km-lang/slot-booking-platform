@@ -16,6 +16,12 @@ export const QK = {
   aigOverview:     (slug)    => ["aigOverview", slug],
   mentorDetail:    (slug)    => ["mentorDetail", slug],
   adminBatch:      ()        => ["adminBatch"],
+  orgStats:        ()        => ["orgStats"],
+  mentorStats:     ()        => ["mentorStats"],
+  studentSearch:   (q)       => ["studentSearch", q],
+  allocateStudentSearch: (q) => ["allocateStudentSearch", q],
+  studentDetail:   (pgpId)   => ["studentDetail", pgpId],
+  adminCalendar:   (weekStart) => ["adminCalendar", weekStart],
   whitelist:       ()        => ["whitelist"],
   config:          ()        => ["config"],
   bans:            ()        => ["bans"],
@@ -112,10 +118,39 @@ export const useMentorDetail = (mentorSlug) =>
     staleTime: 30_000,
   });
 
+// Polls so the "Live" activity feed on the Placement Admin dashboard is actually live.
 export const useAdminBatch = () =>
   useQuery({
     queryKey: QK.adminBatch(),
     queryFn:  () => apiFetch("/admin/batch"),
+    refetchInterval: 15_000,
+  });
+
+export const useOrgStats = () =>
+  useQuery({
+    queryKey: QK.orgStats(),
+    queryFn:  () => apiFetch("/admin/org-stats"),
+  });
+
+export const useMentorStats = () =>
+  useQuery({
+    queryKey: QK.mentorStats(),
+    queryFn:  () => apiFetch("/admin/mentors"),
+  });
+
+// Lazily enabled — only fires once the SuperAdmin types something in the search box.
+export const useStudentSearch = (q) =>
+  useQuery({
+    queryKey: QK.studentSearch(q),
+    queryFn:  () => apiFetch(`/admin/students?q=${encodeURIComponent(q)}`),
+    enabled:  !!q && q.trim().length > 0,
+  });
+
+export const useStudentDetail = (pgpId) =>
+  useQuery({
+    queryKey: QK.studentDetail(pgpId),
+    queryFn:  () => apiFetch(`/admin/student/${pgpId}`),
+    enabled:  !!pgpId,
   });
 
 export const useWhitelist = () =>
@@ -213,6 +248,96 @@ export const useSetSlotDelay = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
   });
 };
+
+export const useSetSlotMeetingLink = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, meetingLink }) =>
+      apiFetch(`/slots/${slotId}/meeting-link`, {
+        method: "PATCH",
+        body: JSON.stringify({ meetingLink }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useRescheduleSlot = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, startTime, endTime }) =>
+      apiFetch(`/slots/${slotId}/reschedule`, {
+        method: "PATCH",
+        body: JSON.stringify({ startTime, endTime }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useBulkDeleteSlots = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotIds) =>
+      apiFetch("/slots/bulk-delete", { method: "POST", body: JSON.stringify({ slotIds }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useBulkSetMeetingLink = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotIds, meetingLink }) =>
+      apiFetch("/slots/bulk-meeting-link", { method: "PATCH", body: JSON.stringify({ slotIds, meetingLink }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useBulkPublishSlots = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotIds) =>
+      apiFetch("/slots/bulk-publish", { method: "PATCH", body: JSON.stringify({ slotIds }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+// Lazily enabled — only fires once the mentor types something in the Allocate Slot search bar.
+export const useAllocateStudentSearch = (q) =>
+  useQuery({
+    queryKey: QK.allocateStudentSearch(q),
+    queryFn:  () => apiFetch(`/slots/allocate/students-search?q=${encodeURIComponent(q)}`),
+    enabled:  !!q && q.trim().length > 0,
+  });
+
+export const useAllocateSlot = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, pgpId, focus }) =>
+      apiFetch(`/slots/${slotId}/allocate`, { method: "POST", body: JSON.stringify({ pgpId, focus }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useJoinWaitlist = (mentorSlug) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotId) => apiFetch(`/slots/${slotId}/waitlist`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.slots(mentorSlug) }),
+  });
+};
+
+export const useLeaveWaitlist = (mentorSlug) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotId) => apiFetch(`/slots/${slotId}/waitlist`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.slots(mentorSlug) }),
+  });
+};
+
+export const useAdminCalendar = (weekStart) =>
+  useQuery({
+    queryKey: QK.adminCalendar(weekStart),
+    queryFn:  () => apiFetch(`/admin/calendar?weekStart=${weekStart}`),
+  });
 
 export const useAddWhitelist = () => {
   const qc = useQueryClient();

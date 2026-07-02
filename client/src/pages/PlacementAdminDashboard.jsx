@@ -1,19 +1,24 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Activity, Users, CalendarCheck, Ban, Download, Shield, AlertTriangle,
   ActivitySquare, Lock, List, Settings, Plus, Trash2, Save, ShieldOff, Search,
+  Building2, History as HistoryIcon, GraduationCap, ChevronDown, ChevronRight,
+  CalendarDays, ChevronLeft,
 } from "lucide-react";
 import {
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import {
   useAdminBatch, useWhitelist, useAigs, useConfig, useBans,
   useAddWhitelist, useRemoveWhitelist, useSaveConfig, useLiftBan,
+  useOrgStats, useMentorStats, useStudentSearch, useStudentDetail, useAdminCalendar,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
-import { getToken } from "../lib/apiClient";
+import AppFooter from "../components/AppFooter";
+import { getToken, API_BASE } from "../lib/apiClient";
 
-const COLORS = ["#064E3B", "#047857", "#10B981", "#6EE7B7"];
+const COLORS = ["#2E3A46", "#5B7C99", "#8FB0C2", "#A8C3D1"];
 
 const downloadCsv = async (url, filename) => {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -66,10 +71,13 @@ const parseMeta = (action, metaStr) => {
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "overview",  label: "Overview",  icon: <ActivitySquare size={14} /> },
-  { id: "whitelist", label: "Whitelist", icon: <List size={14} /> },
-  { id: "config",    label: "Config",    icon: <Settings size={14} /> },
-  { id: "bans",      label: "Bans",      icon: <ShieldOff size={14} /> },
+  { id: "overview",   label: "Overview",         icon: <ActivitySquare size={14} /> },
+  { id: "orgmentors", label: "Org & Mentor Stats", icon: <Building2 size={14} /> },
+  { id: "history",    label: "History",          icon: <HistoryIcon size={14} /> },
+  { id: "calendar",   label: "Calendar",         icon: <CalendarDays size={14} /> },
+  { id: "whitelist",  label: "Whitelist",        icon: <List size={14} /> },
+  { id: "config",     label: "Config",           icon: <Settings size={14} /> },
+  { id: "bans",       label: "Bans",             icon: <ShieldOff size={14} /> },
 ];
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
@@ -151,7 +159,7 @@ function OverviewTab() {
                     <Pie data={purposeDistribution} innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
                       {purposeDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#02120A", fontWeight: "bold" }} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#2E3A46", fontWeight: "bold" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -178,15 +186,79 @@ function OverviewTab() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={mentorUtilization} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#064E3B", fontSize: 12, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#064E3B", fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: "rgba(16,185,129,0.05)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
-                  <Bar dataKey="offered" name="Slots Offered" fill="#A7F3D0" radius={[4, 4, 0, 0]} barSize={24} />
-                  <Bar dataKey="completed" name="Completed" fill="#047857" radius={[4, 4, 0, 0]} barSize={24} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 12, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 12 }} />
+                  <Tooltip cursor={{ fill: "rgba(91,124,153,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
+                  <Bar dataKey="offered" name="Slots Offered" fill="#A8C3D1" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Bar dataKey="completed" name="Completed" fill="#5B7C99" radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 30-day trend */}
+      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+        <h3 className="font-bold text-emerald-950 mb-1">30-Day Trend</h3>
+        <p className="text-xs font-semibold text-emerald-700/60 mb-6">Bookings created vs. attended vs. no-show, by day</p>
+        {!data?.trends || data.trends.length === 0 ? (
+          <div className="h-48 flex items-center justify-center text-xs font-bold text-emerald-800/30">
+            {isLoading ? "Loading…" : "No data yet"}
+          </div>
+        ) : (
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data.trends} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#A8C3D1" opacity={0.3} />
+                <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 11 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
+                <Line type="monotone" dataKey="created" name="Created" stroke="#5B7C99" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="attended" name="Attended" stroke="#2E3A46" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="noShow" name="No-Show" stroke="#A8C3D1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Cohort breakdown */}
+      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm overflow-hidden">
+        <h3 className="font-bold text-emerald-950 mb-1">Cohort Breakdown</h3>
+        <p className="text-xs font-semibold text-emerald-700/60 mb-4">Coverage by cohort, across every org unit</p>
+        <div className="overflow-x-auto max-h-72 overflow-y-auto">
+          <table className="w-full text-left border-collapse min-w-[480px]">
+            <thead>
+              <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
+                <th className="py-2 px-3">Cohort</th>
+                <th className="py-2 px-3">Org Unit</th>
+                <th className="py-2 px-3">Coverage</th>
+              </tr>
+            </thead>
+            <tbody className="text-sm">
+              {isLoading ? (
+                <tr><td colSpan={3} className="py-8 text-center text-xs font-bold text-emerald-800/30">Loading…</td></tr>
+              ) : (data?.cohortBreakdown ?? []).length === 0 ? (
+                <tr><td colSpan={3} className="py-8 text-center text-xs font-bold text-emerald-800/30">No cohorts yet</td></tr>
+              ) : (
+                data.cohortBreakdown.map((c, i) => (
+                  <tr key={i} className="border-b border-emerald-900/5 hover:bg-emerald-50/50 transition-colors">
+                    <td className="py-2.5 px-3 font-semibold text-emerald-950">{c.label}</td>
+                    <td className="py-2.5 px-3 text-emerald-700/70">{c.orgName}</td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
+                          <div className="h-full bg-emerald-500" style={{ width: `${c.pct}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-emerald-700/70">{c.covered}/{c.total} ({c.pct}%)</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -196,8 +268,11 @@ function OverviewTab() {
           <h3 className="font-bold text-emerald-950 flex items-center gap-2">
             <ActivitySquare size={18} className="text-emerald-600" /> Recent Activity
           </h3>
-          <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+          <span
+            title="Auto-refreshes every 15 seconds"
+            className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Auto-Refresh
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -242,6 +317,369 @@ function OverviewTab() {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Org & Mentor Stats Tab ─────────────────────────────────────────────────────
+
+function OrgCard({ title, stats, loading, accent }) {
+  const accentCls = {
+    emerald: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    slate:   "text-slate-700 bg-slate-50 border-slate-200",
+    amber:   "text-amber-700 bg-amber-50 border-amber-200",
+  }[accent] ?? "text-emerald-700 bg-emerald-50 border-emerald-200";
+
+  return (
+    <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+      <div className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded mb-3 border ${accentCls}`}>
+        {title}
+      </div>
+      {loading ? (
+        <div className="text-xs font-bold text-emerald-800/30">Loading…</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-2xl font-black text-emerald-950">{stats?.mentorCount ?? 0}</div>
+            <div className="text-[10px] font-bold text-emerald-700/50 uppercase">Mentors</div>
+          </div>
+          <div>
+            <div className="text-2xl font-black text-emerald-950">{stats?.utilizationPct ?? 0}%</div>
+            <div className="text-[10px] font-bold text-emerald-700/50 uppercase">Utilization</div>
+          </div>
+          <div className="col-span-2 text-xs font-semibold text-emerald-700/70">
+            {stats?.completed ?? 0} completed / {stats?.slotsOffered ?? 0} slots offered
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
+  return (
+    <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden">
+      <button
+        onClick={onToggle}
+        className={`w-full p-4 flex items-center gap-3 transition-colors ${isExpanded ? "bg-emerald-50/50" : "hover:bg-emerald-50/30"}`}
+      >
+        {icon}
+        <span className="font-bold text-sm text-emerald-950 flex-1 text-left">{title}</span>
+        <span className="text-xs font-bold text-emerald-700/50">{mentors.length} mentor{mentors.length !== 1 ? "s" : ""}</span>
+        <ChevronDown size={16} className={`text-emerald-900/40 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+      </button>
+      {isExpanded && (
+        <div className="border-t border-emerald-900/5 overflow-x-auto">
+          {loading ? (
+            <div className="p-6 text-center text-xs font-bold text-emerald-800/30">Loading…</div>
+          ) : mentors.length === 0 ? (
+            <div className="p-6 text-center text-xs font-bold text-emerald-800/30">No mentors in this group</div>
+          ) : (
+            <table className="w-full text-left border-collapse min-w-[640px]">
+              <thead>
+                <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
+                  <th className="py-2 px-4">Name</th>
+                  <th className="py-2 px-4">Firm / Domain</th>
+                  <th className="py-2 px-4">Offered</th>
+                  <th className="py-2 px-4">Completed</th>
+                  <th className="py-2 px-4">No-Show</th>
+                  <th className="py-2 px-4">Util %</th>
+                </tr>
+              </thead>
+              <tbody className="text-sm">
+                {mentors.map((m) => (
+                  <tr key={m.slug} className="border-b border-emerald-900/5 hover:bg-emerald-50/30">
+                    <td className="py-2.5 px-4 font-semibold text-emerald-950">{m.name}</td>
+                    <td className="py-2.5 px-4 text-emerald-700/70 text-xs">{m.firm} · {m.domain}</td>
+                    <td className="py-2.5 px-4">{m.slotsOffered}</td>
+                    <td className="py-2.5 px-4">{m.completed}</td>
+                    <td className="py-2.5 px-4">{m.noShow}</td>
+                    <td className="py-2.5 px-4 font-bold">{m.utilizationPct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrgMentorStatsTab() {
+  const { data: org, isLoading: orgLoading } = useOrgStats();
+  const { data: mentors = [], isLoading: mentorsLoading } = useMentorStats();
+  const [expanded, setExpanded] = useState(null); // null | "disha" | "non-aig" | <aig-slug>
+
+  const grouped = useMemo(() => {
+    const disha = mentors.filter((m) => m.category === "disha");
+    const nonAig = mentors.filter((m) => m.category === "non-aig");
+    const byAig = {};
+    for (const m of mentors) {
+      if (m.category !== "disha" && m.category !== "non-aig") {
+        if (!byAig[m.category]) byAig[m.category] = { name: m.orgName, mentors: [] };
+        byAig[m.category].mentors.push(m);
+      }
+    }
+    return { disha, nonAig, byAig };
+  }, [mentors]);
+
+  const aigsCombined = useMemo(() => {
+    const agg = (org?.aigs ?? []).reduce(
+      (acc, a) => ({
+        mentorCount: acc.mentorCount + a.mentorCount,
+        slotsOffered: acc.slotsOffered + a.slotsOffered,
+        completed: acc.completed + a.completed,
+      }),
+      { mentorCount: 0, slotsOffered: 0, completed: 0 },
+    );
+    return { ...agg, utilizationPct: agg.slotsOffered > 0 ? Math.round((agg.completed / agg.slotsOffered) * 100) : 0 };
+  }, [org]);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <OrgCard title="Disha (Committee)" stats={org?.disha} loading={orgLoading} accent="emerald" />
+        <OrgCard title={`AIGs (${org?.aigs?.length ?? 0} groups, combined)`} stats={aigsCombined} loading={orgLoading} accent="slate" />
+        <OrgCard title="Non-AIG (PGP2 Mentors)" stats={org?.nonAig} loading={orgLoading} accent="amber" />
+      </div>
+
+      <div className="space-y-3">
+        <MentorGroup
+          title="Disha Mentors"
+          icon={<Shield size={16} className="text-emerald-700" />}
+          mentors={grouped.disha}
+          isExpanded={expanded === "disha"}
+          onToggle={() => setExpanded((e) => (e === "disha" ? null : "disha"))}
+          loading={mentorsLoading}
+        />
+
+        <div>
+          <h3 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-2 px-1">AIGs</h3>
+          <div className="space-y-2">
+            {Object.entries(grouped.byAig).map(([slug, group]) => (
+              <MentorGroup
+                key={slug}
+                title={group.name}
+                icon={<Building2 size={16} className="text-emerald-700" />}
+                mentors={group.mentors}
+                isExpanded={expanded === slug}
+                onToggle={() => setExpanded((e) => (e === slug ? null : slug))}
+                loading={mentorsLoading}
+              />
+            ))}
+          </div>
+        </div>
+
+        <MentorGroup
+          title="Non-AIG Mentors (PGP2 Students)"
+          icon={<GraduationCap size={16} className="text-amber-700" />}
+          mentors={grouped.nonAig}
+          isExpanded={expanded === "non-aig"}
+          onToggle={() => setExpanded((e) => (e === "non-aig" ? null : "non-aig"))}
+          loading={mentorsLoading}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── History Tab ────────────────────────────────────────────────────────────────
+
+function HistoryTab() {
+  const navigate = useNavigate();
+  const [mode, setMode] = useState("mentor"); // "mentor" | "student"
+  const [query, setQuery] = useState("");
+
+  const { data: allMentors = [] } = useMentorStats();
+  const { data: studentResults = [], isLoading: studentsLoading } = useStudentSearch(mode === "student" ? query : "");
+
+  const mentorResults =
+    mode === "mentor" && query.trim()
+      ? allMentors.filter(
+          (m) =>
+            m.name.toLowerCase().includes(query.toLowerCase()) ||
+            m.email.toLowerCase().includes(query.toLowerCase()),
+        )
+      : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 bg-emerald-900/5 border border-emerald-900/10 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => { setMode("mentor"); setQuery(""); }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${mode === "mentor" ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10" : "text-emerald-800/60"}`}
+        >
+          Mentor History
+        </button>
+        <button
+          onClick={() => { setMode("student"); setQuery(""); }}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${mode === "student" ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10" : "text-emerald-800/60"}`}
+        >
+          Student History
+        </button>
+      </div>
+
+      <div className="relative max-w-md">
+        <Search size={16} className="absolute left-3 top-3 text-emerald-900/40" />
+        <input
+          type="text"
+          placeholder={mode === "mentor" ? "Search mentor by name or email…" : "Search student by name, PGP ID, or email…"}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full bg-white border border-emerald-900/10 rounded-xl pl-9 pr-4 py-2.5 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
+        />
+      </div>
+
+      <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+        {!query.trim() ? (
+          <div className="p-8 text-center text-xs font-bold text-emerald-800/30">Start typing to search</div>
+        ) : mode === "mentor" ? (
+          mentorResults.length === 0 ? (
+            <div className="p-8 text-center text-xs font-bold text-emerald-800/30">No mentors found</div>
+          ) : (
+            mentorResults.map((m) => (
+              <button
+                key={m.slug}
+                onClick={() => navigate(`/admin/placements/mentor/${m.slug}`)}
+                className="w-full p-4 flex items-center justify-between hover:bg-emerald-50/50 transition-colors text-left"
+              >
+                <div>
+                  <div className="font-bold text-sm text-emerald-950">{m.name}</div>
+                  <div className="text-xs font-semibold text-emerald-700/60">{m.orgName} · {m.firm}</div>
+                </div>
+                <ChevronRight size={16} className="text-emerald-400" />
+              </button>
+            ))
+          )
+        ) : studentsLoading ? (
+          <div className="p-8 text-center text-xs font-bold text-emerald-800/30">Searching…</div>
+        ) : studentResults.length === 0 ? (
+          <div className="p-8 text-center text-xs font-bold text-emerald-800/30">No students found</div>
+        ) : (
+          studentResults.map((s) => (
+            <button
+              key={s.pgpId}
+              onClick={() => navigate(`/admin/placements/student/${s.pgpId}`)}
+              className="w-full p-4 flex items-center justify-between hover:bg-emerald-50/50 transition-colors text-left"
+            >
+              <div>
+                <div className="font-bold text-sm text-emerald-950">{s.name}</div>
+                <div className="text-xs font-semibold text-emerald-700/60">PGP-{s.pgpId} {s.cohortLabel ? `· ${s.cohortLabel}` : ""}</div>
+              </div>
+              <ChevronRight size={16} className="text-emerald-400" />
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Calendar Tab ───────────────────────────────────────────────────────────────
+// A real per-day grid instead of another table — sessions listed chronologically
+// within each day column, color-coded by status.
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const STATUS_DOT = { CONFIRMED: "bg-blue-500", ATTENDED: "bg-emerald-500", NO_SHOW: "bg-red-500" };
+
+const startOfWeek = (d) => {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - date.getDay());
+  return date;
+};
+const toYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function CalendarTab() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const weekStart = useMemo(() => {
+    const base = startOfWeek(new Date());
+    base.setDate(base.getDate() + weekOffset * 7);
+    return base;
+  }, [weekOffset]);
+
+  const { data, isLoading } = useAdminCalendar(toYMD(weekStart));
+
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      return d;
+    }),
+    [weekStart],
+  );
+
+  const sessionsByDay = useMemo(() => {
+    const map = {};
+    for (const day of days) map[toYMD(day)] = [];
+    for (const s of (data?.sessions ?? [])) {
+      const key = toYMD(new Date(s.startTime));
+      if (map[key]) map[key].push(s);
+    }
+    return map;
+  }, [days, data]);
+
+  const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const todayKey = toYMD(new Date());
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-lg font-black text-emerald-950">
+          {weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {days[6].toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+        </h2>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setWeekOffset((w) => w - 1)} className="p-2 rounded-lg bg-white border border-emerald-900/10 hover:bg-emerald-50">
+            <ChevronLeft size={16} />
+          </button>
+          <button onClick={() => setWeekOffset(0)} className="text-xs font-bold text-emerald-700 px-3 py-2 rounded-lg bg-white border border-emerald-900/10 hover:bg-emerald-50">
+            This Week
+          </button>
+          <button onClick={() => setWeekOffset((w) => w + 1)} className="p-2 rounded-lg bg-white border border-emerald-900/10 hover:bg-emerald-50">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Confirmed</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Attended</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> No-Show</span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-7 gap-3">
+        {days.map((day, i) => {
+          const key = toYMD(day);
+          const daySessions = sessionsByDay[key] ?? [];
+          const isToday = key === todayKey;
+          return (
+            <div key={key} className={`bg-white border rounded-2xl p-3 min-h-[140px] ${isToday ? "border-emerald-400 ring-1 ring-emerald-200" : "border-emerald-900/10"}`}>
+              <div className="text-[10px] font-bold text-emerald-700/50 uppercase tracking-widest mb-0.5">{DAY_NAMES[i]}</div>
+              <div className={`text-sm font-black mb-2 ${isToday ? "text-emerald-700" : "text-emerald-950"}`}>{day.getDate()}</div>
+              {isLoading ? (
+                <div className="text-[10px] font-bold text-emerald-800/30">Loading…</div>
+              ) : daySessions.length === 0 ? (
+                <div className="text-[10px] font-semibold text-emerald-800/20">No sessions</div>
+              ) : (
+                <div className="space-y-1.5">
+                  {daySessions.map((s) => (
+                    <div key={s.id} className="border-l-2 border-emerald-400 pl-2 py-0.5">
+                      <div className="flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[s.status] ?? "bg-slate-400"}`} />
+                        <span className="text-[10px] font-bold text-emerald-950">{fmtTime(s.startTime)}</span>
+                      </div>
+                      <div className="text-[10px] font-semibold text-emerald-700/70 truncate" title={`${s.mentorName} → ${s.studentName}`}>
+                        {s.mentorName} → {s.studentName}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -294,11 +732,11 @@ function WhitelistTab() {
           <input
             type="email" placeholder="email@iiml.ac.in" value={addEmail}
             onChange={(e) => setAddEmail(e.target.value)} required
-            className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
+            className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
           />
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <select value={addRole} onChange={(e) => { setAddRole(e.target.value); setAddAigSlug(""); }}
-              className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+              className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
               <option value="STUDENT">STUDENT</option>
               <option value="MENTOR">MENTOR</option>
               <option value="AIGs">AIGs</option>
@@ -306,7 +744,7 @@ function WhitelistTab() {
             </select>
             {addRole === "AIGs" && (
               <select value={addAigSlug} onChange={(e) => setAddAigSlug(e.target.value)} required
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
                 <option value="">Select AIG…</option>
                 {aigs.map((a) => <option key={a.id} value={a.slug}>{a.name}</option>)}
               </select>
@@ -337,7 +775,7 @@ function WhitelistTab() {
               placeholder="Search email or role…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
+              className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
             />
           </div>
         </div>
@@ -442,7 +880,7 @@ function ConfigTab() {
         <input
           type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)}
           disabled={isLoading}
-          className="w-full bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
+          className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
         />
         <button
           onClick={() => saveMutation.mutate({ key: "cv_freeze_deadline", value: new Date(deadline).toISOString() })}
@@ -474,7 +912,7 @@ function ConfigTab() {
                 onChange={(e) => setWarnAt(e.target.value)}
                 disabled={isLoading}
                 placeholder="60"
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_warning_minutes", value: warnAt })}
@@ -499,7 +937,7 @@ function ConfigTab() {
                 onChange={(e) => setStrikeAt(e.target.value)}
                 disabled={isLoading}
                 placeholder="30"
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_strike_minutes", value: strikeAt })}
@@ -524,7 +962,7 @@ function ConfigTab() {
                 onChange={(e) => setWarnToStrike(e.target.value)}
                 disabled={isLoading}
                 placeholder="3"
-                className="flex-1 bg-[#F8FAF7] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
               />
               <button
                 onClick={() => saveMutation.mutate({ key: "penalty_warning_to_strike", value: warnToStrike })}
@@ -614,24 +1052,55 @@ function BansTab() {
   );
 }
 
+// ── Sync Badge ────────────────────────────────────────────────────────────────
+// Honest replacement for a hardcoded "Live" label — shows real elapsed time since the
+// last successful fetch, ticking every second, backed by useAdminBatch's 15s poll.
+
+function SyncBadge() {
+  const { dataUpdatedAt, isFetching } = useAdminBatch();
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const label = (() => {
+    if (isFetching) return "Syncing…";
+    if (!dataUpdatedAt) return "Not synced yet";
+    const secs = Math.max(0, Math.round((Date.now() - dataUpdatedAt) / 1000));
+    if (secs < 5) return "Synced just now";
+    if (secs < 60) return `Synced ${secs}s ago`;
+    return `Synced ${Math.round(secs / 60)}m ago`;
+  })();
+
+  return (
+    <span
+      title="Auto-refreshes every 15 seconds"
+      className="flex items-center gap-1.5 text-xs font-bold text-emerald-700/60 bg-emerald-900/5 px-2.5 sm:px-3 py-1.5 rounded-full border border-emerald-900/10"
+    >
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isFetching ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+      <span className="hidden sm:inline">{label}</span>
+    </span>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function PlacementAdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] text-emerald-950 font-sans pb-12">
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-3 font-bold text-lg text-emerald-950">
-          <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400">
+    <div className="min-h-screen app-bg text-emerald-950 font-sans pb-12">
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center gap-3 shadow-sm">
+        <div className="flex items-center gap-3 font-bold text-lg text-emerald-950 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400 shrink-0">
             <Shield size={18} />
           </div>
-          <div>Placements <span className="text-emerald-700 text-sm font-semibold ml-1">Admin Console</span></div>
+          <div className="truncate">Placements <span className="hidden sm:inline text-emerald-700 text-sm font-semibold ml-1">Admin Console</span></div>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-emerald-700/60 bg-emerald-900/5 px-3 py-1.5 rounded-full border border-emerald-900/10">
-            Last Sync: Live
-          </span>
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <SyncBadge />
           <AvatarMenu />
         </div>
       </nav>
@@ -642,7 +1111,7 @@ export default function PlacementAdminDashboard() {
           <p className="text-sm font-semibold text-emerald-700/70">PGP &amp; ABM Cohorts · Academic Year 2026</p>
         </div>
         <button
-          onClick={() => downloadCsv("/api/admin/export/roster", "batch-roster.csv")}
+          onClick={() => downloadCsv(`${API_BASE}/admin/export/roster`, "batch-roster.csv")}
           className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-2.5 px-5 rounded-xl transition-colors shadow-md flex items-center gap-2 text-sm"
         >
           <Download size={16} /> Export Full Roster CSV
@@ -650,28 +1119,34 @@ export default function PlacementAdminDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 pt-6">
-        <div className="flex gap-1 bg-emerald-900/5 border border-emerald-900/10 rounded-xl p-1 w-fit mb-6">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                activeTab === tab.id
-                  ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10"
-                  : "text-emerald-800/60 hover:text-emerald-950"
-              }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+        <div className="overflow-x-auto -mx-4 px-4 sm:overflow-visible sm:mx-0 sm:px-0 mb-6">
+          <div className="flex gap-1 bg-emerald-900/5 border border-emerald-900/10 rounded-xl p-1 w-fit">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? "bg-white text-emerald-950 shadow-sm border border-emerald-900/10"
+                    : "text-emerald-800/60 hover:text-emerald-950"
+                }`}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 pb-8">
-        {activeTab === "overview"  && <OverviewTab />}
-        {activeTab === "whitelist" && <WhitelistTab />}
-        {activeTab === "config"    && <ConfigTab />}
-        {activeTab === "bans"      && <BansTab />}
+        {activeTab === "overview"   && <OverviewTab />}
+        {activeTab === "orgmentors" && <OrgMentorStatsTab />}
+        {activeTab === "history"    && <HistoryTab />}
+        {activeTab === "calendar"   && <CalendarTab />}
+        {activeTab === "whitelist"  && <WhitelistTab />}
+        {activeTab === "config"     && <ConfigTab />}
+        {activeTab === "bans"       && <BansTab />}
+        <AppFooter />
       </main>
     </div>
   );

@@ -5,3 +5,7 @@ server/prisma/dev.db
 server/prisma/dev.db-journal
 server/prisma/dev.db-shm
 server/prisma/dev.db-wal
+
+# Built client bundle served by Express in production — regenerate with
+# `npm run build` (client) and copy dist/* here, don't hand-edit or commit.
+server/public/

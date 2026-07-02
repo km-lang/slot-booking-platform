@@ -2,6 +2,7 @@
 
 const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
+const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } = require("../lib/calendarInvite");
 
 const listAigs = async (_req, res, next) => {
   try {
@@ -36,23 +37,41 @@ const listMentors = async (req, res, next) => {
   try {
     const { aigSlug } = req.query;
     const now = new Date();
+
+    // Only students booking for themselves need cohort eligibility factored into the count —
+    // without this, a student could see "5 Slots" on a mentor and find most are cohort-only
+    // slots they're not actually eligible to book.
+    let studentCohortId = null;
+    if (req.user.role === "STUDENT") {
+      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
+      studentCohortId = sp?.cohortId ?? null;
+    }
+
     const mentors = await prisma.mentorProfile.findMany({
       where: aigSlug ? { aig: { slug: aigSlug } } : undefined,
       include: {
         user: true,
         aig: true,
-        slots: { where: { startTime: { gt: now } }, include: { capacity: true } },
+        slots: {
+          where: { startTime: { gt: now } },
+          include: { capacity: true, release: { select: { cohortOnly: true } } },
+        },
       },
     });
 
     res.json(
       mentors.map((m) => ({
         id: m.slug,
-        aigId: m.aig.slug,
+        aigId: m.aig?.slug ?? null,
         name: m.user.name,
         firm: m.firm,
         domain: m.domain,
-        liveSlots: m.slots.filter((s) => !s.capacity || s.capacity.current < s.capacity.max).length,
+        liveSlots: m.slots.filter((s) => {
+          const open = !s.capacity || s.capacity.current < s.capacity.max;
+          if (!open) return false;
+          const restricted = s.release?.cohortOnly && (studentCohortId === null || studentCohortId !== m.cohortId);
+          return !restricted;
+        }).length,
       })),
     );
   } catch (err) {
@@ -73,7 +92,7 @@ const getMentor = async (req, res, next) => {
       firm: mentor.firm,
       domain: mentor.domain,
       cohortId: mentor.cohortId,
-      aig: { id: mentor.aig.slug, name: mentor.aig.name },
+      aig: mentor.aig ? { id: mentor.aig.slug, name: mentor.aig.name } : null,
     });
   } catch (err) {
     next(err);
@@ -88,13 +107,24 @@ const listSlots = async (req, res, next) => {
     const mentor = await prisma.mentorProfile.findUnique({ where: { slug: mentorSlug } });
     if (!mentor) return res.status(404).json({ error: "Mentor not found" });
 
+    // Eligibility for cohort-only slots — surfaced as a distinct status below so the UI can
+    // show ineligible slots as restricted up front, instead of inviting a "Book" tap that
+    // would only fail with a 403 once the student reaches the confirm step.
+    let studentCohortId = null;
+    if (req.user.role === "STUDENT") {
+      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
+      studentCohortId = sp?.cohortId ?? null;
+    }
+    const isCohortMember = studentCohortId !== null && studentCohortId === mentor.cohortId;
+
     const now = new Date();
     const slots = await prisma.slot.findMany({
-      where: { mentorProfileId: mentor.id, startTime: { gt: now } },
+      where: { mentorProfileId: mentor.id, startTime: { gt: now }, published: true },
       include: {
         capacity: true,
         bookings: { where: { status: "CONFIRMED" } },
         release: { select: { cohortOnly: true } },
+        waitlist: { where: { studentUserId: req.user.sub }, select: { id: true } },
       },
       orderBy: { startTime: "asc" },
     });
@@ -102,18 +132,23 @@ const listSlots = async (req, res, next) => {
     res.json(
       slots.map((slot) => {
         const myBooking = slot.bookings.find((b) => b.studentUserId === req.user.sub);
+        const cohortOnly = slot.release?.cohortOnly ?? false;
         let status = "AVAILABLE";
         if (myBooking) status = "BOOKED_BY_ME";
         else if (slot.capacity && slot.capacity.current >= slot.capacity.max) status = "BOOKED_BY_OTHER";
+        else if (cohortOnly && !isCohortMember) status = "COHORT_RESTRICTED";
 
         return {
           id: slot.id,
           startTime: slot.startTime,
           endTime: slot.endTime,
           venue: slot.venue,
-          cohortOnly: slot.release?.cohortOnly ?? false,
+          cohortOnly,
           status,
-          ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus }),
+          delayMinutes: slot.delayMinutes ?? 0,
+          onWaitlist: slot.waitlist.length > 0,
+          // Only reveal the meeting link once the student has actually booked it.
+          ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus, meetingLink: slot.meetingLink ?? null }),
         };
       }),
     );
@@ -124,9 +159,12 @@ const listSlots = async (req, res, next) => {
 
 const releaseSlots = async (req, res, next) => {
   try {
-    const { startTime, endTime, slotDuration, venue, cohortOnly } = req.body;
+    const { startTime, endTime, slotDuration, venue, cohortOnly, meetingLink, publish } = req.body;
     if (!startTime || !endTime || !slotDuration || !venue) {
       return res.status(400).json({ error: "startTime, endTime, slotDuration, and venue are required" });
+    }
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
     }
 
     const start = new Date(startTime);
@@ -161,9 +199,13 @@ const releaseSlots = async (req, res, next) => {
           slotDuration: duration,
           venue,
           cohortOnly: Boolean(cohortOnly),
+          meetingLink: meetingLink || null,
         },
       });
 
+      // Defaults to published (matches pre-existing behavior for mentors who don't
+      // think about this) — pass publish:false to create as a draft instead.
+      const published = publish !== false;
       for (const interval of intervals) {
         const slot = await tx.slot.create({
           data: {
@@ -172,6 +214,8 @@ const releaseSlots = async (req, res, next) => {
             startTime: interval.startTime,
             endTime: interval.endTime,
             venue,
+            meetingLink: meetingLink || null,
+            published,
           },
         });
         await tx.slotCapacity.create({ data: { slotId: slot.id, max: 1, current: 0 } });
@@ -274,7 +318,7 @@ const getMentorCohort = async (req, res, next) => {
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       const isBanned = sp.user.bans.length > 0;
       const isReady = attended.length > 0;
-      const status = isBanned ? "Action Needed" : isReady ? "Ready" : "In Progress";
+      const status = isBanned ? "Action Needed" : isReady ? "Reviewed" : "In Progress";
       return {
         id: sp.id,
         name: sp.user.name,
@@ -334,10 +378,13 @@ const listMentorOwnSlots = async (req, res, next) => {
     const bookedSessions = upcomingBooked.map((s) => ({
       id:           s.id,
       bookingId:    s.bookings[0].id,
+      startTime:    s.startTime,
+      endTime:      s.endTime,
       date:         new Date(s.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
       time:         fmtTime(s.startTime),
       venue:        s.venue,
       delayMinutes: s.delayMinutes,
+      meetingLink:  s.meetingLink ?? null,
       student: {
         name:    s.bookings[0].student?.name ?? "—",
         email:   s.bookings[0].student?.email ?? null,
@@ -364,6 +411,8 @@ const listMentorOwnSlots = async (req, res, next) => {
         time: fmtSlotTime(s.startTime, s.endTime),
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
+        meetingLink: s.meetingLink ?? null,
+        published: s.published,
       }));
 
     // Cohort aggregate stats
@@ -444,6 +493,260 @@ const setSlotDelay = async (req, res, next) => {
   }
 };
 
+// Lets a mentor add/edit a slot's meeting link after the slot was already created
+// ("or later somewhere", per the original ask) — e.g. filling it in right before
+// a session if it wasn't set at release time.
+const setSlotMeetingLink = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const meetingLink = (req.body.meetingLink ?? "").trim();
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
+    }
+
+    const slot = await prisma.slot.findUnique({ where: { id: req.params.id } });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your slot" });
+
+    const updated = await prisma.slot.update({
+      where: { id: slot.id },
+      data:  { meetingLink: meetingLink || null },
+    });
+
+    res.json({ id: updated.id, meetingLink: updated.meetingLink });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Mentor-initiated time shift of an already-booked session — same booking record,
+// same student, no penalty either direction. Rescheduling an *unbooked* slot isn't
+// supported here (just delete + recreate it instead).
+const setSlotReschedule = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const newStart = new Date(req.body.startTime);
+    const newEnd   = new Date(req.body.endTime);
+    if (Number.isNaN(newStart.getTime()) || Number.isNaN(newEnd.getTime()) || newEnd <= newStart) {
+      return res.status(400).json({ error: "Invalid time range" });
+    }
+    if (newStart <= new Date()) {
+      return res.status(400).json({ error: "New start time must be in the future" });
+    }
+
+    const slot = await prisma.slot.findUnique({
+      where: { id: req.params.id },
+      include: {
+        bookings: {
+          where: { status: "CONFIRMED" },
+          include: { student: { select: { name: true, email: true } } },
+        },
+      },
+    });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your slot" });
+    const booking = slot.bookings[0];
+    if (!booking) return res.status(400).json({ error: "This slot has no active booking to reschedule — delete and recreate it instead" });
+
+    const oldStart = slot.startTime;
+    const updated = await prisma.slot.update({
+      where: { id: slot.id },
+      data:  { startTime: newStart, endTime: newEnd, icsSequence: { increment: 1 } },
+    });
+
+    // Notify both parties (non-blocking) — mentor's own calendar entry needs the
+    // time pushed to it too, not just the student's.
+    (async () => {
+      const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+      const mentorName  = mentorProfile.user?.name ?? "your mentor";
+      const studentName = booking.student?.name ?? booking.student?.email ?? "your mentee";
+
+      const icsContent = buildSessionEvent({
+        uid: booking.id,
+        sequence: updated.icsSequence,
+        method: "REQUEST",
+        status: "CONFIRMED",
+        startTime: updated.startTime,
+        endTime: updated.endTime,
+        summary: `CV Review: ${studentName} × ${mentorName}`,
+        description: "Rescheduled session via Parthsaarthi.",
+        location: updated.venue,
+        meetingLink: updated.meetingLink ?? null,
+        organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+        organizerName: "Parthsaarthi",
+        attendees: [
+          ...(booking.student?.email ? [{ email: booking.student.email, name: studentName }] : []),
+          ...(mentorProfile.user?.email ? [{ email: mentorProfile.user.email, name: mentorName }] : []),
+        ],
+      });
+      const calendarLink = buildGoogleCalendarLink({
+        summary: `CV Review: ${studentName} × ${mentorName}`,
+        description: "Rescheduled session via Parthsaarthi.",
+        location: updated.venue,
+        startTime: updated.startTime,
+        endTime: updated.endTime,
+      });
+
+      const shared = {
+        oldDate: fmtDate(oldStart), oldTime: fmtTime(oldStart),
+        newDate: fmtDate(updated.startTime), newTime: fmtTime(updated.startTime),
+        venue: updated.venue, meetingLink: updated.meetingLink ?? null, icsContent, calendarLink,
+      };
+
+      if (booking.student?.email) {
+        mailer.sendRescheduleNotification({
+          to: booking.student.email, recipientName: studentName, otherPartyName: mentorName, ...shared,
+        }).catch((e) => console.error("[mailer] reschedule to student:", e.message));
+      }
+      if (mentorProfile.user?.email) {
+        mailer.sendRescheduleNotification({
+          to: mentorProfile.user.email, recipientName: mentorName, otherPartyName: studentName, ...shared,
+        }).catch((e) => console.error("[mailer] reschedule to mentor:", e.message));
+      }
+    })().catch((e) => console.error("[mailer] reschedule notification:", e.message));
+
+    res.json({ id: updated.id, startTime: updated.startTime, endTime: updated.endTime });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Bulk slot actions ──────────────────────────────────────────────────────────
+// Same ownership + "any booking history blocks deletion" rule as the single-slot
+// deleteSlot above, just applied across a list. Per-slot, not all-or-nothing —
+// one ineligible slot in the batch shouldn't block deleting the rest.
+
+const bulkDeleteSlots = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slotIds = Array.isArray(req.body.slotIds) ? req.body.slotIds : [];
+    if (slotIds.length === 0) return res.status(400).json({ error: "slotIds must be a non-empty array" });
+
+    const slots = await prisma.slot.findMany({
+      where: { id: { in: slotIds } },
+      include: { bookings: true },
+    });
+
+    const deletable = slots.filter((s) => s.mentorProfileId === mentorProfile.id && s.bookings.length === 0);
+    const skipped = slotIds.filter((id) => !deletable.some((s) => s.id === id));
+
+    if (deletable.length > 0) {
+      await prisma.$transaction([
+        prisma.slotCapacity.deleteMany({ where: { slotId: { in: deletable.map((s) => s.id) } } }),
+        prisma.slot.deleteMany({ where: { id: { in: deletable.map((s) => s.id) } } }),
+        prisma.auditEvent.create({
+          data: {
+            userId: req.user.sub,
+            action: "SLOT_DELETED",
+            entity: "Slot",
+            meta: JSON.stringify({ bulk: true, count: deletable.length }),
+          },
+        }),
+      ]);
+    }
+
+    res.json({ deleted: deletable.length, skipped });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const bulkSetMeetingLink = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slotIds = Array.isArray(req.body.slotIds) ? req.body.slotIds : [];
+    if (slotIds.length === 0) return res.status(400).json({ error: "slotIds must be a non-empty array" });
+
+    const meetingLink = (req.body.meetingLink ?? "").trim();
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
+    }
+
+    const result = await prisma.slot.updateMany({
+      where: { id: { in: slotIds }, mentorProfileId: mentorProfile.id },
+      data: { meetingLink: meetingLink || null },
+    });
+
+    res.json({ updated: result.count, skipped: slotIds.length - result.count });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const bulkSetPublished = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slotIds = Array.isArray(req.body.slotIds) ? req.body.slotIds : [];
+    if (slotIds.length === 0) return res.status(400).json({ error: "slotIds must be a non-empty array" });
+
+    const result = await prisma.slot.updateMany({
+      where: { id: { in: slotIds }, mentorProfileId: mentorProfile.id },
+      data: { published: true },
+    });
+
+    res.json({ published: result.count, skipped: slotIds.length - result.count });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── Waitlist (notify-only — never auto-books) ──────────────────────────────────
+
+const joinWaitlist = async (req, res, next) => {
+  try {
+    const slot = await prisma.slot.findUnique({
+      where: { id: req.params.id },
+      include: { capacity: true, release: { select: { cohortOnly: true } }, mentorProfile: true },
+    });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (!slot.capacity || slot.capacity.current < slot.capacity.max) {
+      return res.status(400).json({ error: "This slot isn't full — just book it directly" });
+    }
+    if (slot.release?.cohortOnly) {
+      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
+      if (!sp || sp.cohortId !== slot.mentorProfile.cohortId) {
+        return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
+      }
+    }
+
+    await prisma.slotWaitlist.upsert({
+      where: { slotId_studentUserId: { slotId: slot.id, studentUserId: req.user.sub } },
+      update: {},
+      create: { slotId: slot.id, studentUserId: req.user.sub },
+    });
+
+    res.status(201).json({ onWaitlist: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const leaveWaitlist = async (req, res, next) => {
+  try {
+    await prisma.slotWaitlist.deleteMany({
+      where: { slotId: req.params.id, studentUserId: req.user.sub },
+    });
+    res.json({ onWaitlist: false });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   listAigs,
   getAig,
@@ -454,5 +757,12 @@ module.exports = {
   releaseSlots,
   deleteSlot,
   setSlotDelay,
+  setSlotMeetingLink,
+  setSlotReschedule,
+  bulkDeleteSlots,
+  bulkSetMeetingLink,
+  bulkSetPublished,
+  joinWaitlist,
+  leaveWaitlist,
   getMentorCohort,
 };

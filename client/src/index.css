@@ -4,16 +4,21 @@
 
 @layer utilities {
   .glass-panel {
-    @apply bg-[#F8FAF7]/80 backdrop-blur-xl border border-emerald-900/10 shadow-sm;
+    @apply bg-[#F5F7FA]/80 backdrop-blur-xl border border-emerald-900/10 shadow-sm;
   }
 
   .glass-card {
     @apply bg-white/70 backdrop-blur-md border border-emerald-900/10 hover:bg-white hover:shadow-md transition-all;
   }
+
+  /* Page-level shell background: flat theme color, no image. */
+  .app-bg {
+    background-color: #F5F7FA;
+  }
 }
 
 body {
-  @apply bg-[#F8FAF7] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
+  @apply bg-[#F5F7FA] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
 }
 
 ::-webkit-scrollbar {
@@ -21,10 +26,10 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-[#F8FAF7];
+  @apply bg-[#F5F7FA];
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-emerald-200 rounded-full border-2 border-[#F8FAF7];
+  @apply bg-emerald-200 rounded-full border-2 border-[#F5F7FA];
 }
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gem-accent;

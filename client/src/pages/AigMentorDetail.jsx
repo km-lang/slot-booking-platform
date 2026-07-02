@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, BookOpen, CheckCircle, XCircle, Clock, AlertTriangle, Users } from "lucide-react";
 import { useMentorDetail } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
+import AppFooter from "../components/AppFooter";
 
 const STATUS_BADGE = {
   CONFIRMED: { label: "Confirmed", cls: "bg-blue-100 text-blue-700" },
@@ -12,7 +13,7 @@ const STATUS_BADGE = {
 };
 
 const STUDENT_STATUS = {
-  Attended: { label: "Cleared",  cls: "bg-emerald-100 text-emerald-700" },
+  Attended: { label: "Reviewed", cls: "bg-emerald-100 text-emerald-700" },
   Booked:   { label: "Booked",   cls: "bg-blue-100 text-blue-700" },
   Pending:  { label: "Pending",  cls: "bg-slate-100 text-slate-500" },
 };
@@ -41,7 +42,7 @@ export default function AigMentorDetail() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F0FAF4] flex items-center justify-center">
+      <div className="min-h-screen app-bg flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-4 border-emerald-300 border-t-emerald-700 animate-spin" />
       </div>
     );
@@ -49,7 +50,7 @@ export default function AigMentorDetail() {
 
   if (isError || !data) {
     return (
-      <div className="min-h-screen bg-[#F0FAF4] flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen app-bg flex flex-col items-center justify-center gap-4">
         <p className="text-slate-500">Could not load mentor data.</p>
         <button onClick={() => navigate(-1)} className="text-emerald-700 font-semibold underline text-sm">Go back</button>
       </div>
@@ -59,20 +60,20 @@ export default function AigMentorDetail() {
   const { mentor, aig, cohortLabel, stats, students = [], sessionHistory = [] } = data;
 
   return (
-    <div className="min-h-screen bg-[#F0FAF4]">
+    <div className="min-h-screen app-bg">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
-            onClick={() => navigate(`/admin/${aigSlug}`)}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors"
+            onClick={() => navigate(aigSlug ? `/admin/${aigSlug}` : "/admin/placements")}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors shrink-0"
           >
             <ArrowLeft size={18} className="text-emerald-800" />
           </button>
-          <div>
-            <div className="font-black text-emerald-950 text-sm leading-tight">{mentor.name}</div>
-            <div className="text-[11px] text-emerald-700/60 font-semibold">
-              {aig?.name ?? aigSlug} · {cohortLabel ?? "No Cohort"}
+          <div className="min-w-0">
+            <div className="font-black text-emerald-950 text-sm leading-tight truncate">{mentor.name}</div>
+            <div className="text-[11px] text-emerald-700/60 font-semibold truncate">
+              {aig?.name ?? "Independent (No AIG)"} · {cohortLabel ?? "No Cohort"}
             </div>
           </div>
         </div>
@@ -192,6 +193,7 @@ export default function AigMentorDetail() {
             </div>
           )}
         </section>
+        <AppFooter />
       </main>
     </div>
   );

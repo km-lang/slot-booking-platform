@@ -1,12 +1,13 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldX } from "lucide-react";
+import AppFooter from "../components/AppFooter";
 
 export default function UnauthorizedPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#F8FAF7] flex items-center justify-center px-4">
+    <div className="min-h-screen app-bg flex items-center justify-center px-4">
       <div className="text-center">
         <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-500 mx-auto mb-6">
           <ShieldX size={32} />
@@ -24,6 +25,9 @@ export default function UnauthorizedPage() {
         >
           Go Back
         </button>
+        <div className="mt-10">
+          <AppFooter />
+        </div>
       </div>
     </div>
   );

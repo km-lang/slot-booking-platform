@@ -4,7 +4,7 @@ const express = require("express");
 const router = express.Router();
 
 const { verifySession, requireRole, requireAigScope } = require("../middleware/auth");
-const bookingRateLimiter = require("../middleware/rateLimiter");
+const { bookingRateLimiter } = require("../middleware/rateLimiter");
 
 const slotController    = require("../controllers/slotController");
 const bookingController = require("../controllers/bookingController");
@@ -19,20 +19,23 @@ router.use(verifySession);
 router.get("/profile",   profileController.getProfile);
 router.patch("/profile", profileController.updateProfile);
 
-// ── AIGs (public-within-auth) ──────────────────────────────────────────────
-router.get("/aigs", slotController.listAigs);
-router.get("/aigs/:slug", slotController.getAig);
+// ── AIGs ───────────────────────────────────────────────────────────────────
+// STUDENT: browses AIGs to find a mentor to book.
+// SuperADMIN: populates the AIG picker on the Whitelist tab.
+router.get("/aigs", requireRole("STUDENT", "SuperADMIN"), slotController.listAigs);
+router.get("/aigs/:slug", requireRole("STUDENT", "SuperADMIN"), slotController.getAig);
 
 // ── Mentors ────────────────────────────────────────────────────────────────
-router.get("/mentors", slotController.listMentors);
-router.get("/mentors/:slug", slotController.getMentor);
+// STUDENT only — browsing/booking is a student-board action.
+router.get("/mentors", requireRole("STUDENT"), slotController.listMentors);
+router.get("/mentors/:slug", requireRole("STUDENT"), slotController.getMentor);
 
 // ── Slots ──────────────────────────────────────────────────────────────────
 // GET  /api/slots/mine                      mentor: own dashboard data (today's sessions + available slots)
 // GET  /api/slots?mentorSlug=evelyn-vance   student: list slots (auth-aware: marks bookedByMe)
 // POST /api/slots                           mentor: release a new block
 router.get("/slots/mine", requireRole("MENTOR"), slotController.listMentorOwnSlots);
-router.get("/slots", slotController.listSlots);
+router.get("/slots", requireRole("STUDENT"), slotController.listSlots);
 router.post(
   "/slots",
   requireRole("MENTOR"),
@@ -48,6 +51,51 @@ router.patch(
   requireRole("MENTOR"),
   slotController.setSlotDelay,
 );
+router.patch(
+  "/slots/:id/meeting-link",
+  requireRole("MENTOR"),
+  slotController.setSlotMeetingLink,
+);
+router.patch(
+  "/slots/:id/reschedule",
+  requireRole("MENTOR"),
+  slotController.setSlotReschedule,
+);
+router.post(
+  "/slots/bulk-delete",
+  requireRole("MENTOR"),
+  slotController.bulkDeleteSlots,
+);
+router.patch(
+  "/slots/bulk-meeting-link",
+  requireRole("MENTOR"),
+  slotController.bulkSetMeetingLink,
+);
+router.patch(
+  "/slots/bulk-publish",
+  requireRole("MENTOR"),
+  slotController.bulkSetPublished,
+);
+router.get(
+  "/slots/allocate/students-search",
+  requireRole("MENTOR"),
+  bookingController.searchStudentsForAllocation,
+);
+router.post(
+  "/slots/:id/allocate",
+  requireRole("MENTOR"),
+  bookingController.allocateSlot,
+);
+router.post(
+  "/slots/:id/waitlist",
+  requireRole("STUDENT"),
+  slotController.joinWaitlist,
+);
+router.delete(
+  "/slots/:id/waitlist",
+  requireRole("STUDENT"),
+  slotController.leaveWaitlist,
+);
 
 // ── Bookings ───────────────────────────────────────────────────────────────
 // GET    /api/bookings/mine         student: own booking history (upcoming + past)
@@ -55,6 +103,7 @@ router.patch(
 // DELETE /api/bookings/:id/release  student: cancel booking (penalty tiers apply)
 // POST   /api/bookings/:id/attendance  mentor: mark attended / no-show
 router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
+router.get("/bookings/export", requireRole("STUDENT"), exportController.exportMyBookings);
 router.post("/bookings", bookingRateLimiter, requireRole("STUDENT"), bookingController.createBooking);
 router.delete("/bookings/:id/release", requireRole("STUDENT"), bookingController.cancelBooking);
 router.post(
@@ -75,6 +124,12 @@ router.get(
   adminController.getAigOverview,
 );
 router.get(
+  "/admin/aig/:aigSlug/export",
+  requireRole("AIGs"),
+  requireAigScope("aigSlug"),
+  exportController.exportAigRoster,
+);
+router.get(
   "/admin/mentor/:mentorSlug",
   requireRole("AIGs", "SuperADMIN"),
   adminController.getMentorSessionDetail,
@@ -85,6 +140,31 @@ router.get(
   "/admin/batch",
   requireRole("SuperADMIN"),
   adminController.getBatchOverview,
+);
+router.get(
+  "/admin/org-stats",
+  requireRole("SuperADMIN"),
+  adminController.getOrgStats,
+);
+router.get(
+  "/admin/mentors",
+  requireRole("SuperADMIN"),
+  adminController.listMentorStats,
+);
+router.get(
+  "/admin/students",
+  requireRole("SuperADMIN"),
+  adminController.searchStudents,
+);
+router.get(
+  "/admin/student/:pgpId",
+  requireRole("SuperADMIN"),
+  adminController.getStudentDetail,
+);
+router.get(
+  "/admin/calendar",
+  requireRole("SuperADMIN"),
+  adminController.getCalendarWeek,
 );
 router.get(
   "/admin/whitelist",

@@ -4,8 +4,8 @@ import {
   Clock, MapPin, Video, AlertTriangle, ShieldCheck,
   ChevronDown, XCircle, Timer,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useMentor, useSlots, useBookSlot, useCancelBooking, QK } from "../hooks/useApi";
+import { useMentor, useSlots, useBookSlot, useCancelBooking, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
+import AppFooter from "../components/AppFooter";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -22,10 +22,39 @@ const penaltyTier = (minsUntilSlot) => {
   return "STRIKE";
 };
 
+// Notification-only — never auto-books. Joining just means: get emailed once if
+// this exact slot frees up; still have to come back and book it like anyone else.
+function WaitlistButton({ slot, mentorId }) {
+  const join = useJoinWaitlist(mentorId);
+  const leave = useLeaveWaitlist(mentorId);
+  const isPending = join.isPending || leave.isPending;
+
+  if (slot.onWaitlist) {
+    return (
+      <button
+        onClick={() => leave.mutate(slot.id)}
+        disabled={isPending}
+        className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 disabled:opacity-50"
+        title="Tap to leave the waitlist"
+      >
+        {isPending ? "…" : "✓ On Waitlist"}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={() => join.mutate(slot.id)}
+      disabled={isPending}
+      className="text-[10px] font-bold text-emerald-900/50 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-emerald-200 transition-colors disabled:opacity-50"
+    >
+      {isPending ? "…" : "Booked — Join Waitlist"}
+    </button>
+  );
+}
+
 export default function MentorBookingView() {
   const { group, mentorId } = useParams();
   const navigate = useNavigate();
-  const qc = useQueryClient();
 
   const { data: mentor, isLoading: mentorLoading, error: mentorError } = useMentor(mentorId);
   const { data: slots = [], isLoading: slotsLoading, error: slotsError } = useSlots(mentorId);
@@ -39,9 +68,12 @@ export default function MentorBookingView() {
   const cancelMutation  = useCancelBooking(mentorId);
 
   const isProcessing = bookMutation.isPending || cancelMutation.isPending;
-  const actionError  = (bookMutation.error?.status !== 409 ? bookMutation.error?.message : null)
-                    ?? cancelMutation.error?.message
-                    ?? null;
+  // Normalize "This student" → "You" for student-facing display.
+  const rawError     = bookMutation.error?.message ?? cancelMutation.error?.message ?? null;
+  const actionError  = rawError?.replace(/^This student('s)?/i, (_, s) => s ? "Your" : "You") ?? null;
+  // Any 409 on booking means the user can't book this specific slot right now —
+  // show the exact server reason and swap the button to "Choose Another Slot".
+  const bookConflict = sheetMode === "BOOK" && bookMutation.error?.status === 409;
 
   useEffect(() => {
     if (selectedSlot) document.body.style.overflow = "hidden";
@@ -69,15 +101,10 @@ export default function MentorBookingView() {
     if (sheetMode === "BOOK") {
       bookMutation.mutate(
         { slotId: selectedSlot.id, focus: purpose, idempotencyKey },
-        {
-          onSuccess: () => setSelectedSlot(null),
-          onError: (err) => {
-            if (err.status === 409) {
-              // Slot sniped — cache already invalidated by hook; just close sheet
-              setSelectedSlot(null);
-            }
-          },
-        },
+        // On a 409 (someone else booked it first) we deliberately leave the sheet open —
+        // the error message renders below and the slot list behind it has already
+        // refreshed (see useBookSlot's onError) to show the slot as taken.
+        { onSuccess: () => setSelectedSlot(null) },
       );
     } else {
       cancelMutation.mutate(selectedSlot.bookingId, {
@@ -118,10 +145,10 @@ export default function MentorBookingView() {
       {/* Profile Header */}
       <div className="flex flex-col items-center text-center py-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="relative mb-4">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center font-black text-3xl text-emerald-800 border-4 border-[#F8FAF7] shadow-lg">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center font-black text-3xl text-emerald-800 border-4 border-[#F5F7FA] shadow-lg">
             {displayName.split(" ").map((n) => n[0]).join("").substring(0, 2)}
           </div>
-          <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-[#F8FAF7] flex items-center justify-center animate-pulse" />
+          <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-[#F5F7FA] flex items-center justify-center animate-pulse" />
         </div>
         <h2 className="text-2xl font-black text-emerald-950 leading-tight">{displayName}</h2>
         {mentor?.firm && (
@@ -179,7 +206,23 @@ export default function MentorBookingView() {
                           {FOCUS_LABELS[slot.focus] ?? slot.focus}
                         </span>
                       )}
+                      {isMine && slot.delayMinutes > 0 && (
+                        <span className="flex items-center gap-1 bg-amber-100 text-amber-700 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
+                          <Clock size={9} /> Running {slot.delayMinutes}m late
+                        </span>
+                      )}
                     </div>
+                    {isMine && slot.meetingLink && (
+                      <a
+                        href={slot.meetingLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+                      >
+                        <Video size={10} /> Join Google Meet
+                      </a>
+                    )}
                   </div>
 
                   <div className="shrink-0">
@@ -204,8 +247,11 @@ export default function MentorBookingView() {
                       </button>
                     )}
                     {slot.status === "BOOKED_BY_OTHER" && (
-                      <div className="text-[10px] font-bold text-emerald-900/30 uppercase tracking-widest px-2">
-                        Booked
+                      <WaitlistButton slot={slot} mentorId={mentorId} />
+                    )}
+                    {slot.status === "COHORT_RESTRICTED" && (
+                      <div className="text-[10px] font-bold text-amber-700/70 uppercase tracking-widest px-2 text-right">
+                        Restricted
                       </div>
                     )}
                   </div>
@@ -215,6 +261,8 @@ export default function MentorBookingView() {
           )}
         </div>
       </div>
+
+      <AppFooter />
 
       {/* Bottom Sheet Backdrop */}
       <div
@@ -242,7 +290,7 @@ export default function MentorBookingView() {
               </h3>
               <p className="text-sm font-semibold text-emerald-700/70 mb-6">with {displayName}</p>
 
-              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F8FAF7] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
+              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F5F7FA] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
                 <div className={`flex items-center gap-3 mb-3 pb-3 border-b ${sheetMode === "BOOK" ? "border-emerald-900/5" : "border-red-900/5"}`}>
                   <Clock className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
                   <span className="font-bold text-emerald-950">{slotTime}</span>
@@ -298,23 +346,30 @@ export default function MentorBookingView() {
               )}
 
               {actionError && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-                  <p className="text-xs font-bold text-red-700">{actionError}</p>
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+                  <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-bold text-red-700">
+                    {actionError}
+                  </p>
                 </div>
               )}
 
               <button
-                disabled={(sheetMode === "BOOK" && !purpose) || isProcessing}
-                onClick={handleAction}
+                disabled={bookConflict ? false : (sheetMode === "BOOK" && !purpose) || isProcessing}
+                onClick={bookConflict ? () => setSelectedSlot(null) : handleAction}
                 className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200
-                  ${isProcessing || (sheetMode === "BOOK" && !purpose)
+                  ${bookConflict
+                    ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95"
+                    : isProcessing || (sheetMode === "BOOK" && !purpose)
                     ? "bg-slate-100 text-slate-400 cursor-not-allowed"
                     : sheetMode === "BOOK"
-                    ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(6,45,28,0.2)] active:scale-95"
+                    ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95"
                     : "bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:scale-95"}`}
               >
                 {isProcessing ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : bookConflict ? (
+                  "Choose Another Slot"
                 ) : (
                   <>
                     {sheetMode === "BOOK" ? <ShieldCheck size={18} /> : <XCircle size={18} />}
@@ -323,13 +378,15 @@ export default function MentorBookingView() {
                 )}
               </button>
 
-              <button
-                disabled={isProcessing}
-                onClick={() => setSelectedSlot(null)}
-                className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
-              >
-                {sheetMode === "BOOK" ? "Cancel" : "Keep My Booking"}
-              </button>
+              {!bookConflict && (
+                <button
+                  disabled={isProcessing}
+                  onClick={() => setSelectedSlot(null)}
+                  className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
+                >
+                  {sheetMode === "BOOK" ? "Cancel" : "Keep My Booking"}
+                </button>
+              )}
             </div>
           );
         })()}

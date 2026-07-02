@@ -9,7 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -32,6 +32,23 @@ enum BookingStatus {
 enum WarnType {
   WARNING // 3 warnings auto-convert to 1 STRIKE via bookingController
   STRIKE  // directly feeds ban evaluation
+}
+
+// Structural categorization of an AIG row — Disha is a Committee, not an AIG,
+// despite sharing the same table/role/route plumbing. Display/grouping only;
+// does not affect RBAC (role "AIGs", /admin/:aigSlug, requireAigScope all key
+// off the row's slug/id, never this field).
+enum OrgCategory {
+  COMMITTEE
+  CLUB
+  AIG
+}
+
+// Distinguishes alumni mentors from current PGP2 students mentoring without
+// any org affiliation (mentorType=PGP2_STUDENT implies aigId is null).
+enum MentorType {
+  ALUMNI
+  PGP2_STUDENT
 }
 
 // ─── Access Control ───────────────────────────────────────────────────────────
@@ -67,6 +84,7 @@ model User {
   warnings       StudentWarning[]
   bans           Ban[]
   auditEvents    AuditEvent[]
+  slotWaitlist   SlotWaitlist[]
 }
 
 model StudentProfile {
@@ -80,28 +98,31 @@ model StudentProfile {
 }
 
 model MentorProfile {
-  id       String  @id @default(cuid())
-  userId   String  @unique
-  slug     String  @unique // e.g. "evelyn-vance" — server-generated at profile creation
-  firm     String
-  domain   String
-  aigId    String
-  cohortId String?
+  id         String     @id @default(cuid())
+  userId     String     @unique
+  slug       String     @unique // e.g. "evelyn-vance" — server-generated at profile creation
+  firm       String
+  domain     String
+  aigId      String?    // null = no org affiliation (e.g. a PGP2-student mentor)
+  cohortId   String?
+  mentorType MentorType @default(ALUMNI)
 
   user            User            @relation(fields: [userId], references: [id])
-  aig             AIG             @relation(fields: [aigId], references: [id])
+  aig             AIG?            @relation(fields: [aigId], references: [id])
   cohort          Cohort?         @relation(fields: [cohortId], references: [id])
   bookingReleases BookingRelease[]
   slots           Slot[]
+  bookings        Booking[]
 }
 
 // ─── Organisation ─────────────────────────────────────────────────────────────
 
 model AIG {
-  id   String @id @default(cuid())
-  slug String @unique // e.g. "disha" — used in /admin/:aigSlug routes
-  name String          // e.g. "Team Disha" — display name fetched by AigAdminDashboard
-  type String          // e.g. "Core Preparation" | "Domain AIG"
+  id       String      @id @default(cuid())
+  slug     String      @unique // e.g. "disha" — used in /admin/:aigSlug routes
+  name     String              // e.g. "Team Disha" — display name fetched by AigAdminDashboard
+  type     String              // e.g. "Core Preparation" | "Domain AIG" — free-text display label
+  category OrgCategory @default(AIG) // structural bucket: Disha is COMMITTEE, the rest are AIG
 
   cohorts          Cohort[]
   mentorProfiles   MentorProfile[]
@@ -129,6 +150,7 @@ model BookingRelease {
   slotDuration    Int      // minutes per slot
   venue           String
   cohortOnly      Boolean  @default(false)
+  meetingLink     String?  // default Google Meet (or other) link applied to every slot created in this batch
   createdAt       DateTime @default(now())
 
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
@@ -144,11 +166,29 @@ model Slot {
   venue           String
   version         Int      @default(0)
   delayMinutes    Int      @default(0)
+  meetingLink     String?  // editable independently per-slot, e.g. added after the batch was created
+  icsSequence     Int      @default(0) // RFC 5545 SEQUENCE for this slot's calendar event — bumped on reschedule
+  published       Boolean  @default(true) // false = draft, created but not yet visible/bookable by students
 
   release       BookingRelease @relation(fields: [releaseId], references: [id])
   mentorProfile MentorProfile  @relation(fields: [mentorProfileId], references: [id])
   capacity      SlotCapacity?
   bookings      Booking[]
+  waitlist      SlotWaitlist[]
+}
+
+// One-shot notification queue: when a full slot frees up, every waitlisted student
+// is emailed once and their row is deleted — never auto-booked on their behalf.
+model SlotWaitlist {
+  id            String   @id @default(cuid())
+  slotId        String
+  studentUserId String
+  createdAt     DateTime @default(now())
+
+  slot    Slot @relation(fields: [slotId], references: [id])
+  student User @relation(fields: [studentUserId], references: [id])
+
+  @@unique([slotId, studentUserId])
 }
 
 // Separate table so max capacity is configurable per slot without touching Slot itself
@@ -161,16 +201,23 @@ model SlotCapacity {
 }
 
 model Booking {
-  id             String        @id @default(cuid())
-  slotId         String
-  studentUserId  String
-  focus          String        // "overall" | "workex" | "por"
-  idempotencyKey String        @unique // client-generated UUID; replays return existing booking
-  status         BookingStatus @default(CONFIRMED)
-  createdAt      DateTime      @default(now())
+  id              String        @id @default(cuid())
+  slotId          String
+  studentUserId   String
+  mentorProfileId String        // denormalized from Slot at creation — backs the one-active-booking-per-mentor constraint below
+  focus           String        // "overall" | "workex" | "por"
+  idempotencyKey  String        @unique // client-generated UUID; replays return existing booking
+  status          BookingStatus @default(CONFIRMED)
+  allocatedBy     String?       // mentor's email, if this booking was directly allocated rather than self-booked
+  createdAt       DateTime      @default(now())
 
-  slot    Slot @relation(fields: [slotId], references: [id])
-  student User @relation(fields: [studentUserId], references: [id])
+  slot          Slot          @relation(fields: [slotId], references: [id])
+  student       User          @relation(fields: [studentUserId], references: [id])
+  mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
+
+  // A student may hold at most one CONFIRMED booking per mentor at a time — enforced
+  // as a partial unique index (status = 'CONFIRMED') in the migration SQL, since Prisma's
+  // schema DSL can't express a conditional unique constraint directly.
 }
 
 // ─── Penalties & Bans ─────────────────────────────────────────────────────────
