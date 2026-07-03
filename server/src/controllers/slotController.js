@@ -19,6 +19,9 @@ const listAigs = async (_req, res, next) => {
       type: aig.type,
       count: aig._count.mentorProfiles,
     }));
+    // Team Disha is a Committee, not an AIG (see schema's OrgCategory) — surface it
+    // first regardless of alphabetical name order so it stays the lead entry.
+    groups.sort((a, b) => (a.id === "disha" ? -1 : b.id === "disha" ? 1 : 0));
     // Mentors not attached to any AIG (independent/general mentors) were previously
     // invisible on the student dashboard's browse view — only findable via search.
     // Surface them as a pseudo-group alongside the real AIGs.
@@ -375,11 +378,13 @@ const listMentorOwnSlots = async (req, res, next) => {
       return `${date}, ${fmtTime(start)} – ${fmtTime(end)}`;
     };
 
-    // All upcoming slots with confirmed bookings (full schedule view)
+    // All booked slots not yet finished (still in progress or fully upcoming) —
+    // endTime bound (rather than startTime) so an in-progress session stays visible
+    // here instead of dropping off the dashboard before its attendance is marked.
     const upcomingBooked = await prisma.slot.findMany({
       where: {
         mentorProfileId: mentorProfile.id,
-        startTime: { gte: now },
+        endTime: { gte: now },
         bookings: { some: { status: "CONFIRMED" } },
       },
       include: {
@@ -391,7 +396,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       orderBy: { startTime: "asc" },
     });
 
-    const bookedSessions = upcomingBooked.map((s) => ({
+    const bookedAndOngoing = upcomingBooked.map((s) => ({
       id:           s.id,
       bookingId:    s.bookings[0].id,
       startTime:    s.startTime,
@@ -408,6 +413,11 @@ const listMentorOwnSlots = async (req, res, next) => {
         purpose: s.bookings[0].focus,
       },
     }));
+
+    // Split by whether the session has already started — surfaced as separate
+    // "Ongoing" / "Upcoming" sections on the mentor dashboard.
+    const ongoingSessions = bookedAndOngoing.filter((s) => new Date(s.startTime) <= now);
+    const bookedSessions  = bookedAndOngoing.filter((s) => new Date(s.startTime) > now);
 
     // Upcoming unbooked slots (for the live slot list)
     // Include any non-CANCELLED booking so used slots (ATTENDED/NO_SHOW) are excluded.
@@ -512,7 +522,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
     }
 
-    res.json({ bookedSessions, availableSlots, cancelledSessions, historySessions, cohortStats });
+    res.json({ bookedSessions, ongoingSessions, availableSlots, cancelledSessions, historySessions, cohortStats });
   } catch (err) {
     next(err);
   }

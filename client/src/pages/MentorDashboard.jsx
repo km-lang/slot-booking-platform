@@ -468,6 +468,7 @@ export default function MentorDashboard() {
 
   const { data, isLoading, error } = useMentorDashboard();
   const bookedSessions    = data?.bookedSessions ?? [];
+  const ongoingSessions   = data?.ongoingSessions ?? [];
   const availableSlots    = data?.availableSlots ?? [];
   const cancelledSessions = data?.cancelledSessions ?? [];
   const historySessions   = data?.historySessions ?? [];
@@ -609,6 +610,33 @@ export default function MentorDashboard() {
               {error.message}
             </div>
           )}
+
+          {/* Ongoing Sessions — already started, attendance not yet marked */}
+          <CollapsibleSection
+            title="Ongoing Sessions"
+            count={ongoingSessions.length}
+            badgeClassName="bg-red-100 text-red-700"
+            defaultOpen
+          >
+            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5 relative">
+              {isLoading ? (
+                <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
+              ) : ongoingSessions.length === 0 ? (
+                <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">
+                  No sessions in progress right now
+                </div>
+              ) : (
+                ongoingSessions.map((session) => (
+                  <SessionCard
+                    key={session.bookingId}
+                    session={session}
+                    onAttendance={handleAttendance}
+                    pendingBookingId={pendingBookingId}
+                  />
+                ))
+              )}
+            </div>
+          </CollapsibleSection>
 
           {/* Upcoming Sessions */}
           <CollapsibleSection

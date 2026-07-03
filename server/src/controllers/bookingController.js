@@ -587,16 +587,20 @@ const getMyBookings = async (req, res, next) => {
       domain:       b.slot.mentorProfile?.domain ?? null,
     });
 
+    const ongoing = bookings
+      .filter((b) => b.status === "CONFIRMED" && b.slot.startTime <= now && b.slot.endTime > now)
+      .map(shape);
+
     const upcoming = bookings
       .filter((b) => b.status === "CONFIRMED" && b.slot.startTime > now)
       .map(shape);
 
     const past = bookings
-      .filter((b) => b.status !== "CONFIRMED" || b.slot.startTime <= now)
+      .filter((b) => b.status !== "CONFIRMED" || b.slot.endTime <= now)
       .sort((a, b) => new Date(b.slot.startTime) - new Date(a.slot.startTime))
       .map(shape);
 
-    res.json({ upcoming, past });
+    res.json({ ongoing, upcoming, past });
   } catch (err) {
     next(err);
   }

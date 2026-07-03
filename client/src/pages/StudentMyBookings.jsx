@@ -150,6 +150,7 @@ export default function StudentMyBookings() {
   const { data, isLoading, error } = useMyBookings();
   const cancelMutation = useCancelBooking(null);
 
+  const ongoing  = data?.ongoing  ?? [];
   const upcoming = data?.upcoming ?? [];
   const past     = data?.past     ?? [];
 
@@ -177,7 +178,7 @@ export default function StudentMyBookings() {
               <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
                 {isLoading
                   ? "Loading…"
-                  : `${upcoming.length} upcoming · ${past.length} past`}
+                  : `${ongoing.length} ongoing · ${upcoming.length} upcoming · ${past.length} past`}
               </p>
             </div>
           </div>
@@ -197,6 +198,36 @@ export default function StudentMyBookings() {
               {error.message}
             </div>
           )}
+
+          {/* Ongoing — session has started but the mentor hasn't ended/marked it yet */}
+          <CollapsibleSection
+            title="Ongoing"
+            count={ongoing.length}
+            badgeClassName="bg-red-100 text-red-700"
+            defaultOpen
+          >
+            {isLoading ? (
+              <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center text-xs font-bold text-emerald-800/30">
+                Loading…
+              </div>
+            ) : ongoing.length === 0 ? (
+              <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center">
+                <CalendarCheck size={32} className="text-emerald-200 mx-auto mb-2" />
+                <p className="text-sm font-bold text-emerald-800/40">No ongoing sessions right now</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {ongoing.map((b) => (
+                  <BookingCard
+                    key={b.id}
+                    booking={b}
+                    onCancel={handleCancel}
+                    isCancelling={cancelMutation.isPending}
+                  />
+                ))}
+              </div>
+            )}
+          </CollapsibleSection>
 
           {/* Upcoming */}
           <CollapsibleSection
