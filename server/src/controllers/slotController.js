@@ -6,18 +6,26 @@ const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } =
 
 const listAigs = async (_req, res, next) => {
   try {
-    const aigs = await prisma.aIG.findMany({
-      include: { _count: { select: { mentorProfiles: true } } },
-      orderBy: { name: "asc" },
-    });
-    res.json(
-      aigs.map((aig) => ({
-        id: aig.slug,
-        name: aig.name,
-        type: aig.type,
-        count: aig._count.mentorProfiles,
-      })),
-    );
+    const [aigs, nonAigCount] = await Promise.all([
+      prisma.aIG.findMany({
+        include: { _count: { select: { mentorProfiles: true } } },
+        orderBy: { name: "asc" },
+      }),
+      prisma.mentorProfile.count({ where: { aigId: null } }),
+    ]);
+    const groups = aigs.map((aig) => ({
+      id: aig.slug,
+      name: aig.name,
+      type: aig.type,
+      count: aig._count.mentorProfiles,
+    }));
+    // Mentors not attached to any AIG (independent/general mentors) were previously
+    // invisible on the student dashboard's browse view — only findable via search.
+    // Surface them as a pseudo-group alongside the real AIGs.
+    if (nonAigCount > 0) {
+      groups.push({ id: "none", name: "Non-AIG Mentors", type: "Independent", count: nonAigCount });
+    }
+    res.json(groups);
   } catch (err) {
     next(err);
   }
@@ -48,7 +56,7 @@ const listMentors = async (req, res, next) => {
     }
 
     const mentors = await prisma.mentorProfile.findMany({
-      where: aigSlug ? { aig: { slug: aigSlug } } : undefined,
+      where: aigSlug === "none" ? { aigId: null } : aigSlug ? { aig: { slug: aigSlug } } : undefined,
       include: {
         user: true,
         aig: true,

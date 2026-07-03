@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronDown, Shield, Briefcase, TrendingUp, CalendarCheck } from "lucide-react";
+import { Search, ChevronDown, Shield, Briefcase, TrendingUp, CalendarCheck, Users } from "lucide-react";
 import { useAigs, useAigMentors, useAllMentors, useMyBookings } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 
@@ -8,6 +8,7 @@ const AIG_ICON = {
   disha:      <Shield size={20} />,
   consulting: <TrendingUp size={20} />,
   finance:    <Briefcase size={20} />,
+  none:       <Users size={20} />,
 };
 const aigIcon = (slug) => AIG_ICON[slug] ?? <Briefcase size={20} />;
 
@@ -172,7 +173,7 @@ export default function StudentDashboard() {
             ) : filteredMentors.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {filteredMentors.map((mentor) => (
-                  <MentorRow key={mentor.id} mentor={mentor} aigSlug={mentor.aigId} />
+                  <MentorRow key={mentor.id} mentor={mentor} aigSlug={mentor.aigId ?? "none"} />
                 ))}
               </div>
             ) : (
