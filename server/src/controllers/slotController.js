@@ -420,22 +420,61 @@ const listMentorOwnSlots = async (req, res, next) => {
         published: s.published,
       }));
 
+    // Bookings the mentor's students cancelled — surfaced here so the mentor can
+    // review each one and optionally apply a strike (the only way a cancellation
+    // now results in a strike; see bookingController.applyManualStrike).
+    const cancelledBookings = await prisma.booking.findMany({
+      where: { mentorProfileId: mentorProfile.id, status: "CANCELLED", cancelledBy: "STUDENT" },
+      include: {
+        slot: { select: { startTime: true, endTime: true, venue: true } },
+        student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
+      },
+      orderBy: { cancelledAt: "desc" },
+      take: 50,
+    });
+    const strikedBookingIds = new Set(
+      (await prisma.studentWarning.findMany({
+        where: { bookingId: { in: cancelledBookings.map((b) => b.id) }, type: "STRIKE" },
+        select: { bookingId: true },
+      })).map((w) => w.bookingId),
+    );
+    const cancelledSessions = cancelledBookings.map((b) => ({
+      bookingId:   b.id,
+      startTime:   b.slot.startTime,
+      endTime:     b.slot.endTime,
+      date:        new Date(b.slot.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      time:        fmtTime(b.slot.startTime),
+      venue:       b.slot.venue,
+      cancelledAt: b.cancelledAt,
+      hasStrike:   strikedBookingIds.has(b.id),
+      student: {
+        name:  b.student?.name ?? "—",
+        email: b.student?.email ?? null,
+        pgp:   b.student?.studentProfile?.pgpId ?? "N/A",
+      },
+    }));
+
     // Cohort aggregate stats
     let cohortStats = { totalMentees: 0, totalSlotsTaken: 0 };
     if (mentorProfile.cohortId) {
       const [menteeCount, bookingCount] = await Promise.all([
         prisma.studentProfile.count({ where: { cohortId: mentorProfile.cohortId } }),
+        // "Taken" means the slot was claimed, whether or not the mentee actually
+        // showed — same status set as the per-mentee count on the Cohort Tracker
+        // page (getMentorCohort's activeBookings), so the two screens' numbers
+        // reconcile. A cancelled booking freed the slot back up, so that's the
+        // one status excluded.
         prisma.booking.count({
           where: {
             slot: { mentorProfileId: mentorProfile.id },
-            status: { in: ["CONFIRMED", "ATTENDED"] },
+            status: { not: "CANCELLED" },
           },
         }),
       ]);
       cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
     }
 
-    res.json({ bookedSessions, availableSlots, cohortStats });
+    res.json({ bookedSessions, availableSlots, cancelledSessions, cohortStats });
   } catch (err) {
     next(err);
   }

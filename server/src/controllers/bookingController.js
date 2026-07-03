@@ -4,40 +4,22 @@ const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
 const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } = require("../lib/calendarInvite");
 
-// Read penalty thresholds from SystemConfig; fall back to built-in defaults.
-const getPenaltyThresholds = async () => {
-  const rows = await prisma.systemConfig.findMany({
-    where: { key: { in: ["penalty_warning_minutes", "penalty_strike_minutes", "penalty_warning_to_strike"] } },
-  });
-  const cfg = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return {
-    warningMinutes:      Number(cfg.penalty_warning_minutes      ?? 60),
-    strikeMinutes:       Number(cfg.penalty_strike_minutes       ?? 30),
-    warningToStrikeAt:   Number(cfg.penalty_warning_to_strike    ?? 3),
-  };
-};
-
 const ALLOWED_FOCUS = ["overall", "workex", "por"];
 
 // Records a strike and, if the new strike count exactly matches a seeded
 // BanPolicyTier threshold, opens a Ban for the duration that tier specifies.
-const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason) => {
-  await tx.studentWarning.create({ data: { userId, bookingId, type: "STRIKE", reason } });
+// issuedBy is the acting mentor's email — set by markAttendance's NO_SHOW path
+// and by the manual strike endpoint; mirrors Ban.liftedBy.
+const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = null) => {
+  await tx.studentWarning.create({ data: { userId, bookingId, type: "STRIKE", reason, issuedBy } });
   const strikeCount = await tx.studentWarning.count({ where: { userId, type: "STRIKE" } });
   const tier = await tx.banPolicyTier.findUnique({ where: { strikeThreshold: strikeCount } });
+  let ban = null;
   if (tier) {
     const endsAt = tier.banDurationHours ? new Date(Date.now() + tier.banDurationHours * 3600 * 1000) : null;
-    await tx.ban.create({ data: { userId, reason: tier.description, endsAt } });
+    ban = await tx.ban.create({ data: { userId, reason: tier.description, endsAt } });
   }
-};
-
-// Every N warnings (configurable via SystemConfig) auto-converts into 1 strike.
-const applyWarning = async (tx, userId, bookingId, reason, warningToStrikeAt = 3) => {
-  await tx.studentWarning.create({ data: { userId, bookingId, type: "WARNING", reason } });
-  const warningCount = await tx.studentWarning.count({ where: { userId, type: "WARNING" } });
-  if (warningCount % warningToStrikeAt === 0) {
-    await applyStrikeAndMaybeBan(tx, userId, bookingId, `${warningToStrikeAt} warnings converted to 1 strike`);
-  }
+  return { ban };
 };
 
 // Sends the booking confirmation email + calendar invite to both parties. Shared by
@@ -317,10 +299,9 @@ const allocateSlot = async (req, res, next) => {
   }
 };
 
-// Penalty tiers — thresholds configurable via SystemConfig:
-//   ≥ warningMinutes before slot start → no penalty
-//   strikeMinutes–(warningMinutes-1) min before → WARNING
-//   < strikeMinutes before / after start → STRIKE
+// Cancellation itself is never auto-penalised — the student can always cancel
+// freely. The mentor is notified and can, at their own discretion, apply a
+// strike to this specific cancellation afterward (see applyManualStrike below).
 const cancelBooking = async (req, res, next) => {
   try {
     const booking = await prisma.booking.findUnique({
@@ -338,25 +319,12 @@ const cancelBooking = async (req, res, next) => {
     if (booking.studentUserId !== req.user.sub) return res.status(403).json({ error: "Not your booking" });
     if (booking.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
 
-    const { warningMinutes, strikeMinutes, warningToStrikeAt } = await getPenaltyThresholds();
-    const minutesBeforeStart = (booking.slot.startTime.getTime() - Date.now()) / 60000;
-    let penalty = "NONE";
-
     await prisma.$transaction(async (tx) => {
-      await tx.booking.update({ where: { id: booking.id }, data: { status: "CANCELLED" } });
+      await tx.booking.update({
+        where: { id: booking.id },
+        data:  { status: "CANCELLED", cancelledBy: "STUDENT", cancelledAt: new Date() },
+      });
       await tx.slotCapacity.update({ where: { slotId: booking.slotId }, data: { current: { decrement: 1 } } });
-
-      if (minutesBeforeStart >= warningMinutes) {
-        penalty = "NONE";
-      } else if (minutesBeforeStart >= strikeMinutes) {
-        penalty = "WARNING";
-        await applyWarning(tx, booking.studentUserId, booking.id,
-          `Late cancellation (${strikeMinutes}–${warningMinutes - 1} min before slot)`, warningToStrikeAt);
-      } else {
-        penalty = "STRIKE";
-        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id,
-          `Late cancellation (<${strikeMinutes} min before slot)`);
-      }
 
       await tx.auditEvent.create({
         data: {
@@ -364,7 +332,7 @@ const cancelBooking = async (req, res, next) => {
           action:   "BOOKING_CANCELLED",
           entity:   "Booking",
           entityId: booking.id,
-          meta:     JSON.stringify({ penalty }),
+          meta:     JSON.stringify({ cancelledBy: "STUDENT" }),
         },
       });
     });
@@ -396,7 +364,8 @@ const cancelBooking = async (req, res, next) => {
       ],
     });
 
-    // Always notify the student of their cancellation
+    // Notify the student their cancellation went through — no penalty language,
+    // since cancelling is never itself penalised.
     if (student?.email) {
       mailer.sendCancelConfirmationToStudent({
         studentEmail: student.email,
@@ -404,12 +373,12 @@ const cancelBooking = async (req, res, next) => {
         mentorName:   mentor?.name ?? "your mentor",
         date:         fmtDate(booking.slot.startTime),
         time:         fmtTime(booking.slot.startTime),
-        penalty,
         icsContent: cancelIcsContent,
       }).catch((e) => console.error("[mailer] cancel confirmation:", e.message));
     }
 
-    // Always keep the mentor's calendar in sync, regardless of penalty
+    // Notify the mentor their slot was cancelled by this student — this is also
+    // the mentor's cue to review it and optionally apply a strike.
     if (mentor?.email) {
       mailer.sendBookingCancelledToMentor({
         mentorEmail: mentor.email,
@@ -420,19 +389,6 @@ const cancelBooking = async (req, res, next) => {
         time:        fmtTime(booking.slot.startTime),
         icsContent:  cancelIcsContent,
       }).catch((e) => console.error("[mailer] booking cancelled to mentor:", e.message));
-    }
-
-    // Notify mentor only for penalised cancellations
-    if (penalty !== "NONE" && mentor?.email) {
-      mailer.sendLateCancelToMentor({
-        mentorEmail:  mentor.email,
-        mentorName:   mentor.name ?? mentor.email,
-        studentName:  student?.name ?? req.user.email,
-        pgpId:        student?.studentProfile?.pgpId ?? "N/A",
-        date:         fmtDate(booking.slot.startTime),
-        time:         fmtTime(booking.slot.startTime),
-        penalty,
-      }).catch((e) => console.error("[mailer] late cancel to mentor:", e.message));
     }
 
     // Notify the waitlist (if any) that this slot just freed up — one-shot, never
@@ -458,7 +414,7 @@ const cancelBooking = async (req, res, next) => {
       await prisma.slotWaitlist.deleteMany({ where: { slotId: booking.slotId } });
     }).catch((e) => console.error("[waitlist] notify lookup:", e.message));
 
-    res.json({ id: booking.id, status: "CANCELLED", penalty });
+    res.json({ id: booking.id, status: "CANCELLED", cancelledBy: "STUDENT" });
   } catch (err) {
     next(err);
   }
@@ -486,12 +442,15 @@ const markAttendance = async (req, res, next) => {
     if (booking.status !== "CONFIRMED") {
       return res.status(400).json({ error: "Booking is not active" });
     }
+    if (booking.slot.startTime > new Date()) {
+      return res.status(400).json({ error: "Cannot mark attendance before the session has started" });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.booking.update({ where: { id: booking.id }, data: { status } });
 
       if (status === "NO_SHOW") {
-        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "No-show");
+        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "No-show", req.user.email);
       }
 
       await tx.auditEvent.create({
@@ -505,6 +464,78 @@ const markAttendance = async (req, res, next) => {
     });
 
     res.json({ id: booking.id, status });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Mentor-only: manually applies a strike to a booking the student already
+// cancelled — this is now the ONLY way a cancellation ever produces a strike,
+// replacing the old automatic timing-based penalty. Idempotent per booking —
+// a booking can only be struck once.
+const applyManualStrike = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where:  { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const booking = await prisma.booking.findUnique({
+      where:   { id: req.params.id },
+      include: {
+        slot: true,
+        student: { select: { name: true, email: true } },
+      },
+    });
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    if (booking.mentorProfileId !== mentorProfile.id) {
+      return res.status(403).json({ error: "Not your session" });
+    }
+    if (booking.status !== "CANCELLED") {
+      return res.status(400).json({ error: "Only cancelled bookings can be struck" });
+    }
+
+    const alreadyStruck = await prisma.studentWarning.findFirst({
+      where: { bookingId: booking.id, type: "STRIKE" },
+    });
+    if (alreadyStruck) return res.status(409).json({ error: "Strike already applied for this cancellation" });
+
+    const { ban } = await prisma.$transaction(async (tx) => {
+      const result = await applyStrikeAndMaybeBan(
+        tx, booking.studentUserId, booking.id,
+        "Mentor-applied strike for cancelled session", req.user.email,
+      );
+      await tx.auditEvent.create({
+        data: {
+          userId:   req.user.sub,
+          action:   "STRIKE_MANUALLY_APPLIED",
+          entity:   "Booking",
+          entityId: booking.id,
+          meta:     JSON.stringify({ studentUserId: booking.studentUserId }),
+        },
+      });
+      return result;
+    });
+
+    const student = booking.student;
+    if (student?.email) {
+      const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) =>
+        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      mailer.sendStrikeAppliedToStudent({
+        studentEmail: student.email,
+        studentName:  student.name ?? student.email,
+        mentorName:   mentorProfile.user?.name ?? mentorProfile.user?.email ?? "your mentor",
+        date:         fmtDate(booking.slot.startTime),
+        time:         fmtTime(booking.slot.startTime),
+        banApplied:   !!ban,
+        banDurationHours: ban?.endsAt ? Math.round((ban.endsAt.getTime() - Date.now()) / 3600000) : null,
+      }).catch((e) => console.error("[mailer] strike applied:", e.message));
+    }
+
+    res.json({ id: booking.id, struck: true, banApplied: !!ban });
   } catch (err) {
     next(err);
   }
@@ -538,6 +569,8 @@ const getMyBookings = async (req, res, next) => {
       status:       b.status,
       focus:        b.focus,
       createdAt:    b.createdAt,
+      cancelledBy:  b.cancelledBy ?? null,
+      cancelledAt:  b.cancelledAt ?? null,
       slotStart:    b.slot.startTime,
       slotEnd:      b.slot.endTime,
       slotLabel:    fmt(b.slot.startTime),
@@ -566,4 +599,7 @@ const getMyBookings = async (req, res, next) => {
   }
 };
 
-module.exports = { createBooking, allocateSlot, searchStudentsForAllocation, cancelBooking, markAttendance, getMyBookings };
+module.exports = {
+  createBooking, allocateSlot, searchStudentsForAllocation, cancelBooking,
+  markAttendance, applyManualStrike, getMyBookings,
+};

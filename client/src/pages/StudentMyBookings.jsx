@@ -26,6 +26,14 @@ const FOCUS_LABELS = {
   por:     "POR / ECA",
 };
 
+// Only STUDENT is reachable today (no mentor-cancel path exists in this app),
+// but keying off the server's cancelledBy value keeps this correct without
+// further client changes if that ever changes.
+const CANCELLED_BY_LABEL = {
+  STUDENT: "Cancelled by you",
+  MENTOR:  "Cancelled by mentor",
+};
+
 const STATUS_CONFIG = {
   CONFIRMED: {
     label: "Confirmed",
@@ -77,6 +85,11 @@ function BookingCard({ booking, onCancel, isCancelling }) {
           <p className="text-[11px] font-bold text-emerald-700/60 mt-0.5 truncate">
             {booking.firm}{booking.domain ? ` · ${booking.domain}` : ""}
           </p>
+          {booking.status === "CANCELLED" && booking.cancelledBy && (
+            <p className="text-[10px] font-bold text-amber-700/70 mt-0.5">
+              {CANCELLED_BY_LABEL[booking.cancelledBy] ?? "Cancelled"}
+            </p>
+          )}
         </div>
       </div>
 
@@ -137,7 +150,7 @@ export default function StudentMyBookings() {
   const past     = data?.past     ?? [];
 
   const handleCancel = (bookingId) => {
-    if (!confirm("Cancel this booking? A penalty may apply if the slot starts soon.")) return;
+    if (!confirm("Cancel this booking? This won't automatically affect your record, but your mentor will be notified and may apply a strike for last-minute or repeated cancellations.")) return;
     cancelMutation.mutate(bookingId, {
       onError: (err) => alert(err.message),
     });

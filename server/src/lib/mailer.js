@@ -169,19 +169,15 @@ const sendBookingConfirmationCombined = ({
 };
 
 /**
- * Sent to a student when they cancel a booking (always, regardless of penalty).
+ * Sent to a student when they cancel a booking. Cancelling is never itself
+ * penalised — the mentor is notified separately and may, at their own
+ * discretion, apply a strike afterward (see sendStrikeAppliedToStudent).
  */
-const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName, date, time, penalty, icsContent }) => {
-  const penaltyNote = penalty === "STRIKE"
-    ? "⚠️ A <b>strike</b> has been added to your account for last-minute cancellation."
-    : penalty === "WARNING"
-    ? "⚠️ A <b>warning</b> has been added to your account for late cancellation."
-    : "No penalty was applied.";
-
-  return send({
+const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
+  send({
     to:      studentEmail,
     subject: `Booking cancelled: ${mentorName} on ${date}`,
-    text:    `Hi ${studentName}, your session with ${mentorName} on ${date} at ${time} has been cancelled. ${penalty !== "NONE" ? `Penalty applied: ${penalty}.` : "No penalty applied."}`,
+    text:    `Hi ${studentName}, your session with ${mentorName} on ${date} at ${time} has been cancelled. Your mentor has been notified.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Booking Cancelled</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Your session has been removed</p>
@@ -189,17 +185,16 @@ const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName
         <b>${mentorName}</b><br>
         <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
       </div>
-      <p style="font-size:14px;color:#064E3B">${penaltyNote}</p>
+      <p style="font-size:14px;color:#064E3B">Your mentor has been notified. Repeated or last-minute cancellations may lead to a strike at your mentor's discretion.</p>
       <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time. The calendar event has been cancelled.</p>
     `),
     ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
   });
-};
 
 /**
- * Sent to a mentor whenever a student cancels a booking, regardless of penalty —
- * keeps the mentor's calendar in sync. Separate from sendLateCancelToMentor, which
- * is the additional penalty-detail email sent only for late cancellations.
+ * Sent to a mentor whenever a student cancels a booking — keeps the mentor's
+ * calendar in sync, and is also their cue to review the cancellation and
+ * optionally apply a strike from the dashboard.
  */
 const sendBookingCancelledToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, icsContent }) =>
   send({
@@ -289,21 +284,28 @@ const sendDelayNotification = ({ studentEmail, studentName, mentorName, date, ti
   });
 
 /**
- * Sent to a mentor when a student cancels less than 60 minutes before the slot.
+ * Sent to a student when their mentor manually applies a strike to a
+ * cancellation they made — the only path that ever produces a strike from a
+ * cancellation now, so this is the student's sole notice it happened.
  */
-const sendLateCancelToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, penalty }) => {
-  const penaltyNote = penalty === "STRIKE"
-    ? "This was a <b>last-minute cancellation</b> (less than 30 minutes before start). A strike has been issued."
-    : "This was a late cancellation (30–59 minutes before start). A warning has been issued.";
+const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorName, date, time, banApplied, banDurationHours }) => {
+  const banNote = banApplied
+    ? banDurationHours
+      ? ` This also triggered a booking ban for approximately ${banDurationHours} hour${banDurationHours === 1 ? "" : "s"}.`
+      : " This also triggered a booking ban."
+    : "";
 
   return send({
-    to:      mentorEmail,
-    subject: `Slot cancellation: ${studentName} cancelled their ${time} session`,
-    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) has cancelled their ${time} slot on ${date}. ${penalty} issued.`,
+    to:      studentEmail,
+    subject: `A strike was applied to your account`,
+    text:    `Hi ${studentName}, ${mentorName} applied a strike to your record for the ${date} at ${time} session you cancelled.${banNote}`,
     html:    wrap(`
-      <h2 style="margin:0 0 8px;font-size:20px">Slot Cancelled</h2>
-      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Your ${date} · ${time} session is now free</p>
-      <p style="font-size:14px;color:#064E3B"><b>${studentName}</b> (PGP-${pgpId}) has cancelled their booking. ${penaltyNote}</p>
+      <h2 style="margin:0 0 8px;font-size:20px">Strike Applied</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">From your cancelled session with ${mentorName}</p>
+      <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b style="color:#991B1B">${mentorName}</b> applied a strike for the session you cancelled on ${date} at ${time}.${banNote ? `<br><span style="font-size:13px;color:#991B1B">${banNote.trim()}</span>` : ""}
+      </div>
+      <p style="font-size:13px;color:#064E3B99;margin:0">Reach out to your mentor directly if you'd like to discuss this.</p>
     `),
   });
 };
@@ -395,7 +397,7 @@ module.exports = {
   sendRescheduleNotification,
   sendWaitlistSlotAvailable,
   sendDelayNotification,
-  sendLateCancelToMentor,
+  sendStrikeAppliedToStudent,
   sendStudentReminder,
   sendMentorReminder,
   sendAigDigest,

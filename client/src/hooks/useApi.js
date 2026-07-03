@@ -220,6 +220,15 @@ export const useMarkAttendance = () => {
   });
 };
 
+export const useApplyStrike = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId) =>
+      apiFetch(`/bookings/${bookingId}/strike`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
 export const useCreateSlots = () => {
   const qc = useQueryClient();
   return useMutation({

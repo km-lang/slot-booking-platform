@@ -100,8 +100,9 @@ router.delete(
 // ── Bookings ───────────────────────────────────────────────────────────────
 // GET    /api/bookings/mine         student: own booking history (upcoming + past)
 // POST   /api/bookings              student: create booking (OCC, idempotency)
-// DELETE /api/bookings/:id/release  student: cancel booking (penalty tiers apply)
+// DELETE /api/bookings/:id/release  student: cancel booking (never penalised)
 // POST   /api/bookings/:id/attendance  mentor: mark attended / no-show
+// POST   /api/bookings/:id/strike      mentor: manually strike a cancelled booking
 router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
 router.get("/bookings/export", requireRole("STUDENT"), exportController.exportMyBookings);
 router.post("/bookings", bookingRateLimiter, requireRole("STUDENT"), bookingController.createBooking);
@@ -110,6 +111,11 @@ router.post(
   "/bookings/:id/attendance",
   requireRole("MENTOR"),
   bookingController.markAttendance,
+);
+router.post(
+  "/bookings/:id/strike",
+  requireRole("MENTOR"),
+  bookingController.applyManualStrike,
 );
 
 // ── Cohort (mentor) ────────────────────────────────────────────────────────

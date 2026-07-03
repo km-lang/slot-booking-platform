@@ -827,10 +827,7 @@ function ConfigTab() {
   const { data: config = {}, isLoading } = useConfig();
   const saveMutation                     = useSaveConfig();
 
-  const [deadline,     setDeadline]     = useState("");
-  const [warnAt,       setWarnAt]       = useState("");
-  const [strikeAt,     setStrikeAt]     = useState("");
-  const [warnToStrike, setWarnToStrike] = useState("");
+  const [deadline, setDeadline] = useState("");
 
   useEffect(() => {
     if (config.cv_freeze_deadline) {
@@ -838,10 +835,7 @@ function ConfigTab() {
       const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
       setDeadline(local);
     }
-    if (config.penalty_warning_minutes   !== undefined) setWarnAt(config.penalty_warning_minutes);
-    if (config.penalty_strike_minutes    !== undefined) setStrikeAt(config.penalty_strike_minutes);
-    if (config.penalty_warning_to_strike !== undefined) setWarnToStrike(config.penalty_warning_to_strike);
-  }, [config.cv_freeze_deadline, config.penalty_warning_minutes, config.penalty_strike_minutes, config.penalty_warning_to_strike]);
+  }, [config.cv_freeze_deadline]);
 
   const isBookingOpen = config.booking_open === "true";
 
@@ -892,92 +886,6 @@ function ConfigTab() {
         </button>
       </div>
 
-      {/* Penalty Thresholds */}
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <AlertTriangle size={16} className="text-amber-500" />
-          <h3 className="font-bold text-emerald-950">Cancellation Penalty Thresholds</h3>
-        </div>
-        <p className="text-xs font-semibold text-emerald-700/60 mb-5">
-          Controls when warnings and strikes are applied on late cancellations.
-        </p>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-              Warning threshold (minutes before slot)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number" min={1} value={warnAt}
-                onChange={(e) => setWarnAt(e.target.value)}
-                disabled={isLoading}
-                placeholder="60"
-                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
-              />
-              <button
-                onClick={() => saveMutation.mutate({ key: "penalty_warning_minutes", value: warnAt })}
-                disabled={!warnAt || saveMutation.isPending || isLoading}
-                className="px-4 py-2.5 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-1.5"
-              >
-                <Save size={13} /> Save
-              </button>
-            </div>
-            <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
-              Cancel ≥ this many minutes before → no penalty
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-              Strike threshold (minutes before slot)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number" min={1} value={strikeAt}
-                onChange={(e) => setStrikeAt(e.target.value)}
-                disabled={isLoading}
-                placeholder="30"
-                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
-              />
-              <button
-                onClick={() => saveMutation.mutate({ key: "penalty_strike_minutes", value: strikeAt })}
-                disabled={!strikeAt || saveMutation.isPending || isLoading}
-                className="px-4 py-2.5 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-1.5"
-              >
-                <Save size={13} /> Save
-              </button>
-            </div>
-            <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
-              Cancel &lt; this many minutes before → immediate strike
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-              Warnings before ban (count)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number" min={1} value={warnToStrike}
-                onChange={(e) => setWarnToStrike(e.target.value)}
-                disabled={isLoading}
-                placeholder="3"
-                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
-              />
-              <button
-                onClick={() => saveMutation.mutate({ key: "penalty_warning_to_strike", value: warnToStrike })}
-                disabled={!warnToStrike || saveMutation.isPending || isLoading}
-                className="px-4 py-2.5 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-1.5"
-              >
-                <Save size={13} /> Save
-              </button>
-            </div>
-            <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
-              Accumulate this many warnings → escalated to strike
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

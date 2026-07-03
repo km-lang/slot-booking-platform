@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Clock, MapPin, Video, AlertTriangle, ShieldCheck,
-  ChevronDown, XCircle, Timer,
+  ChevronDown, XCircle,
 } from "lucide-react";
 import { useMentor, useSlots, useBookSlot, useCancelBooking, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
@@ -15,12 +15,6 @@ const FOCUS_LABELS = {
 
 const fmt = (d) =>
   new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-
-const penaltyTier = (minsUntilSlot) => {
-  if (minsUntilSlot >= 60) return null;
-  if (minsUntilSlot >= 30) return "WARNING";
-  return "STRIKE";
-};
 
 // Notification-only — never auto-books. Joining just means: get emailed once if
 // this exact slot frees up; still have to come back and book it like anyone else.
@@ -107,8 +101,12 @@ export default function MentorBookingView() {
         { onSuccess: () => setSelectedSlot(null) },
       );
     } else {
+      // Stay on this mentor's page instead of bouncing to the AIG/mentor list —
+      // useCancelBooking's onSuccess already invalidates the slot list and
+      // myBookings, so this page's own re-render is enough to reflect the
+      // cancellation (the slot reopens right here).
       cancelMutation.mutate(selectedSlot.bookingId, {
-        onSuccess: () => navigate("/student"),
+        onSuccess: () => setSelectedSlot(null),
       });
     }
   };
@@ -176,8 +174,6 @@ export default function MentorBookingView() {
               const isMine      = slot.status === "BOOKED_BY_ME";
               const isAvailable = slot.status === "AVAILABLE";
               const slotTime    = `${fmt(slot.startTime)} – ${fmt(slot.endTime)}`;
-              const minsUntil   = Math.floor((new Date(slot.startTime) - Date.now()) / 60000);
-              const tier        = isMine ? penaltyTier(minsUntil) : null;
 
               return (
                 <div
@@ -239,11 +235,6 @@ export default function MentorBookingView() {
                         <span className="text-xs font-bold text-red-600 bg-red-50 group-hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
                           Cancel <XCircle size={12} />
                         </span>
-                        {minsUntil > 0 && (
-                          <span className={`text-[9px] font-bold flex items-center gap-0.5 ${tier === "STRIKE" ? "text-red-600" : tier === "WARNING" ? "text-amber-600" : "text-emerald-700/50"}`}>
-                            <Timer size={9} /> {minsUntil}m until slot
-                          </span>
-                        )}
                       </button>
                     )}
                     {slot.status === "BOOKED_BY_OTHER" && (
@@ -284,8 +275,6 @@ export default function MentorBookingView() {
 
         {selectedSlot && (() => {
           const slotTime = `${fmt(selectedSlot.startTime)} – ${fmt(selectedSlot.endTime)}`;
-          const minsUntil = Math.floor((new Date(selectedSlot.startTime) - Date.now()) / 60000);
-          const tier = sheetMode === "CANCEL" ? penaltyTier(minsUntil) : null;
 
           return (
             <div>
@@ -330,21 +319,17 @@ export default function MentorBookingView() {
                   <div className="flex items-start gap-2 bg-red-50 p-3 rounded-xl mb-6">
                     <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
                     <p className="text-[11px] font-bold text-red-900/80 leading-tight">
-                      Late cancellations (under 60 min before slot) incur warnings or strikes. No-shows result in an automatic strike.
+                      No-shows result in an automatic strike. You can cancel any time with no automatic penalty.
                     </p>
                   </div>
                 </>
               )}
 
               {sheetMode === "CANCEL" && (
-                <div className={`flex items-start gap-2 p-3 rounded-xl mb-6 border ${tier === "STRIKE" ? "bg-red-50 border-red-200" : tier === "WARNING" ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
-                  <AlertTriangle size={16} className={`shrink-0 mt-0.5 ${tier === "STRIKE" ? "text-red-500" : tier === "WARNING" ? "text-amber-500" : "text-emerald-500"}`} />
-                  <p className={`text-[11px] font-bold leading-tight ${tier === "STRIKE" ? "text-red-900/80" : tier === "WARNING" ? "text-amber-900/80" : "text-emerald-900/80"}`}>
-                    {tier === "STRIKE"
-                      ? "Warning: Cancelling now will issue a STRIKE on your record."
-                      : tier === "WARNING"
-                      ? "Heads up: Cancelling now will issue a WARNING (3 warnings = 1 strike)."
-                      : "No penalty — more than 60 minutes before your slot."}
+                <div className="flex items-start gap-2 p-3 rounded-xl mb-6 border bg-amber-50 border-amber-200">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+                  <p className="text-[11px] font-bold leading-tight text-amber-900/80">
+                    Cancelling won't automatically affect your record. Your mentor will be notified, and may apply a strike for last-minute or repeated cancellations.
                   </p>
                 </div>
               )}
