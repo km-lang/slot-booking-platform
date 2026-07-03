@@ -59,7 +59,10 @@ const STATUS_CONFIG = {
 
 function BookingCard({ booking, onCancel, isCancelling }) {
   const cfg = STATUS_CONFIG[booking.status] ?? STATUS_CONFIG.CONFIRMED;
-  const canCancel = booking.status === "CONFIRMED";
+  // Server rejects cancelling a session that's already started — mirrored here so a
+  // student can't be shown a "Cancel" button for something that already happened
+  // (e.g. a past session the mentor hasn't marked attendance on yet).
+  const canCancel = booking.status === "CONFIRMED" && new Date(booking.slotStart) > new Date();
   const initials = booking.mentorName
     .split(" ")
     .map((w) => w[0])

@@ -318,6 +318,9 @@ const cancelBooking = async (req, res, next) => {
     if (!booking) return res.status(404).json({ error: "Booking not found" });
     if (booking.studentUserId !== req.user.sub) return res.status(403).json({ error: "Not your booking" });
     if (booking.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
+    if (booking.slot.startTime <= new Date()) {
+      return res.status(400).json({ error: "Cannot cancel a session that has already started" });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.booking.update({
