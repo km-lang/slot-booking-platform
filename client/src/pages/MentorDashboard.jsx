@@ -484,6 +484,12 @@ export default function MentorDashboard() {
   };
   const clearSelection = () => { setSelectedSlotIds([]); setBulkLinkEditing(false); setBulkLinkValue(""); };
 
+  // Only offer bulk-publish when the selection actually includes a draft — every
+  // slot already published has nothing for that action to do.
+  const hasDraftSelected = selectedSlotIds.some(
+    (id) => availableSlots.find((s) => s.id === id)?.published === false,
+  );
+
   const handleBulkDelete = () => {
     if (selectedSlotIds.length === 0) return;
     if (!confirm(`Delete ${selectedSlotIds.length} selected slot${selectedSlotIds.length !== 1 ? "s" : ""}? Slots with existing bookings will be skipped.`)) return;
@@ -666,9 +672,11 @@ export default function MentorDashboard() {
                   </div>
                 ) : (
                   <>
-                    <button onClick={handleBulkPublish} disabled={bulkPublishMutation.isPending} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
-                      <Send size={12} /> {bulkPublishMutation.isPending ? "Publishing…" : "Publish"}
-                    </button>
+                    {hasDraftSelected && (
+                      <button onClick={handleBulkPublish} disabled={bulkPublishMutation.isPending} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50">
+                        <Send size={12} /> {bulkPublishMutation.isPending ? "Publishing…" : "Publish"}
+                      </button>
+                    )}
                     <button onClick={() => setBulkLinkEditing(true)} className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
                       <LinkIcon size={12} /> Set Meet Link
                     </button>
@@ -706,7 +714,9 @@ export default function MentorDashboard() {
                         {slot.cohortOnly && (
                           <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
                         )}
-                        {!slot.published && (
+                        {slot.published ? (
+                          <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Published</span>
+                        ) : (
                           <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Draft</span>
                         )}
                       </div>
