@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus } from "lucide-react";
 import { useCreateSlots } from "../hooks/useApi";
 
-const STEP_TITLES = ["When", "Format", "Options & Review"];
+const STEP_TITLES = ["Schedule", "Options & Review"];
 const TOTAL_STEPS = STEP_TITLES.length;
 
 export default function CreateSlotsFlow() {
@@ -154,11 +154,7 @@ export default function CreateSlotsFlow() {
                   <span className="text-xs font-bold text-red-600">End time must be after start time</span>
                 </div>
               )}
-            </div>
-          )}
 
-          {step === 2 && (
-            <div className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Duration Per Slot</label>
                 <div className="grid grid-cols-4 gap-2">
@@ -210,7 +206,7 @@ export default function CreateSlotsFlow() {
             </div>
           )}
 
-          {step === 3 && (
+          {step === 2 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
                 <div>
