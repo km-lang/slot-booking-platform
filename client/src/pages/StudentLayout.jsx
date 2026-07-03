@@ -12,9 +12,14 @@ export default function StudentLayout() {
 
   return (
     <div className="min-h-screen-safe app-bg font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl relative flex flex-col overflow-hidden">
-        {/* PERMANENT HEADER: Never unmounts, preventing the "flash" */}
-        <header className="absolute top-0 w-full z-50 bg-white/80 backdrop-blur-xl border-b border-emerald-900/5 px-4 header-safe-top flex items-center gap-3 transition-all duration-300">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl relative flex flex-col">
+        {/* PERMANENT HEADER: Never unmounts, preventing the "flash" — sticky (not
+            absolute) so it stays reachable while the page scrolls. absolute here
+            positioned it relative to a container that grows past one viewport with
+            content, so on any page long enough to scroll (e.g. a mentor with more
+            than a handful of slots) the header — including the back button and the
+            account menu — scrolled away and became completely unreachable. */}
+        <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-xl border-b border-emerald-900/5 px-4 header-safe-top flex items-center gap-3 transition-all duration-300">
           {!isRoot ? (
             <button
               onClick={() => navigate(-1)}
@@ -52,8 +57,11 @@ export default function StudentLayout() {
           )}
         </header>
 
-        {/* DYNAMIC CONTENT: Pages render inside here */}
-        <div className={`flex-1 overflow-y-auto ${isRoot ? "pt-[76px]" : "pt-[60px]"} pb-8 relative`}>
+        {/* DYNAMIC CONTENT: Pages render inside here. Sticky header above already
+            occupies its own space in normal flow, so no manual top-padding
+            compensation is needed here (that was only ever working around the
+            header being pulled out of flow via `absolute`). */}
+        <div className="flex-1 pb-8 relative">
           <Outlet />
         </div>
       </div>
