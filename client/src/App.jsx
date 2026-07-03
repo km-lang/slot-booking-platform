@@ -6,6 +6,8 @@ import StudentMyBookings from "./pages/StudentMyBookings";
 import MentorBookingView from "./pages/MentorBookingView";
 import MentorDashboard from "./pages/MentorDashboard";
 import MentorCohortDetails from "./pages/MentorCohortDetails";
+import CreateSlotsFlow from "./pages/CreateSlotsFlow";
+import RescheduleSlot from "./pages/RescheduleSlot";
 import AigAdminDashboard from "./pages/AigAdminDashboard";
 import AigMentorDetail from "./pages/AigMentorDetail";
 import AdminStudentDetail from "./pages/AdminStudentDetail";
@@ -38,6 +40,8 @@ function App() {
       <Route element={<RequireRole role="MENTOR" />}>
         <Route path="/mentor" element={<MentorDashboard />} />
         <Route path="/mentor/cohort" element={<MentorCohortDetails />} />
+        <Route path="/mentor/slots/new" element={<CreateSlotsFlow />} />
+        <Route path="/mentor/slots/:slotId/reschedule" element={<RescheduleSlot />} />
       </Route>
 
       {/* Static /admin/placements* must be declared before dynamic /admin/:aigSlug */}
