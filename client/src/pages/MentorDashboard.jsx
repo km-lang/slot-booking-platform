@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
-  Clock, Mail, ChevronDown, Link as LinkIcon, Pencil, X,
+  Clock, Mail, Link as LinkIcon, Pencil, X,
   Send, UserPlus, Search, ShieldAlert,
 } from "lucide-react";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
+import CollapsibleSection from "../components/CollapsibleSection";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -388,6 +389,34 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
   );
 }
 
+// ── History Session Row ───────────────────────────────────────────────────────
+function HistorySessionRow({ session }) {
+  const attended = session.status === "ATTENDED";
+  return (
+    <div className="p-4 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="font-bold text-sm text-emerald-950 truncate">{session.student.name}</h3>
+        <p className="text-[11px] font-bold text-emerald-700/60 mt-0.5">
+          {session.student.pgp}
+          <span className="text-emerald-900/20 mx-1">|</span>
+          {session.date} · {session.time}
+          <span className="text-emerald-900/20 mx-1">|</span>
+          {FOCUS_LABELS[session.focus] ?? session.focus}
+        </p>
+      </div>
+      <span
+        className={`shrink-0 flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-1.5 rounded-lg border
+          ${attended
+            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+            : "bg-red-50 text-red-600 border-red-200"}`}
+      >
+        {attended ? <CheckCircle size={12} /> : <XCircle size={12} />}
+        {attended ? "Attended" : "No Show"}
+      </span>
+    </div>
+  );
+}
+
 // ── Cancelled Session Row ─────────────────────────────────────────────────────
 // A booking the student cancelled themselves. Cancelling is never auto-penalised —
 // this is the mentor's one chance to review it and, at their own discretion,
@@ -441,6 +470,7 @@ export default function MentorDashboard() {
   const bookedSessions    = data?.bookedSessions ?? [];
   const availableSlots    = data?.availableSlots ?? [];
   const cancelledSessions = data?.cancelledSessions ?? [];
+  const historySessions   = data?.historySessions ?? [];
   const cohortStats       = data?.cohortStats ?? { totalMentees: 0, totalSlotsTaken: 0 };
 
   const attendanceMutation  = useMarkAttendance();
@@ -581,17 +611,11 @@ export default function MentorDashboard() {
           )}
 
           {/* Upcoming Sessions */}
-          <div>
-            <div className="flex items-center justify-between mb-2 px-1">
-              <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
-                Upcoming Sessions
-              </h2>
-              {bookedSessions.length > 0 && (
-                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                  {bookedSessions.length}
-                </span>
-              )}
-            </div>
+          <CollapsibleSection
+            title="Upcoming Sessions"
+            count={bookedSessions.length}
+            badgeClassName="bg-emerald-100 text-emerald-700"
+          >
             <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5 relative">
               {isLoading ? (
                 <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
@@ -610,20 +634,14 @@ export default function MentorDashboard() {
                 ))
               )}
             </div>
-          </div>
+          </CollapsibleSection>
 
           {/* Cancelled Sessions — review & optionally strike */}
-          <div>
-            <div className="flex items-center justify-between mb-2 px-1">
-              <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
-                Cancelled Sessions
-              </h2>
-              {cancelledSessions.length > 0 && (
-                <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                  {cancelledSessions.length}
-                </span>
-              )}
-            </div>
+          <CollapsibleSection
+            title="Cancelled Sessions"
+            count={cancelledSessions.length}
+            badgeClassName="bg-amber-100 text-amber-700"
+          >
             <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
               {isLoading ? (
                 <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
@@ -637,20 +655,42 @@ export default function MentorDashboard() {
                 ))
               )}
             </div>
-          </div>
+          </CollapsibleSection>
+
+          {/* History — past sessions already marked Attended / No Show */}
+          <CollapsibleSection
+            title="History"
+            count={historySessions.length}
+            badgeClassName="bg-slate-200 text-slate-600"
+          >
+            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+              {isLoading ? (
+                <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
+              ) : historySessions.length === 0 ? (
+                <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">
+                  No sessions marked Attended or No Show yet
+                </div>
+              ) : (
+                historySessions.map((session) => (
+                  <HistorySessionRow key={session.bookingId} session={session} />
+                ))
+              )}
+            </div>
+          </CollapsibleSection>
 
           {/* Open Slots */}
-          <div>
-            <div className="flex items-center justify-between mb-2 px-1">
-              <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
-                Open Slots
-              </h2>
-              {availableSlots.length > 0 && (
+          <CollapsibleSection
+            title="Open Slots"
+            count={availableSlots.length}
+            badgeClassName="bg-emerald-100 text-emerald-700"
+          >
+            {availableSlots.length > 0 && (
+              <div className="flex justify-end mb-2 px-1">
                 <button onClick={toggleSelectAll} className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900">
                   {selectedSlotIds.length === availableSlots.length ? "Deselect all" : "Select all"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
             {selectedSlotIds.length > 0 && (
               <div className="bg-emerald-900 text-white rounded-xl p-3 mb-3 flex flex-wrap items-center gap-2">
@@ -742,7 +782,7 @@ export default function MentorDashboard() {
                 ))
               )}
             </div>
-          </div>
+          </CollapsibleSection>
 
           {allocateSlotTarget && (
             <AllocateSheet slot={allocateSlotTarget} onClose={() => setAllocateSlotTarget(null)} />

@@ -240,11 +240,6 @@ export default function MentorBookingView() {
                     {slot.status === "BOOKED_BY_OTHER" && (
                       <WaitlistButton slot={slot} mentorId={mentorId} />
                     )}
-                    {slot.status === "COHORT_RESTRICTED" && (
-                      <div className="text-[10px] font-bold text-amber-700/70 uppercase tracking-widest px-2 text-right">
-                        Restricted
-                      </div>
-                    )}
                   </div>
                 </div>
               );

@@ -33,18 +33,20 @@ const DEV_TO = process.env.DEV_EMAIL_OVERRIDE ?? null;
 // icalEvent: { method: "REQUEST" | "CANCEL", content: <ics string> } — passed straight
 // through to nodemailer, which renders it as a real calendar invite with native
 // Accept/Decline UI in Gmail/Outlook/Apple Calendar (not just a generic attachment).
-const send = async ({ to, subject, html, text, icalEvent }) => {
+const send = async ({ to, cc, subject, html, text, icalEvent }) => {
   const effectiveTo = DEV_TO ?? to;
+  const effectiveCc = DEV_TO ? undefined : cc;
   const t = getTransport();
   if (!t) {
     // No SMTP configured — log to console
     console.log(`\n[EMAIL] To: ${effectiveTo}${DEV_TO && DEV_TO !== to ? ` (override; original: ${to})` : ""}`);
+    if (effectiveCc) console.log(`[EMAIL] Cc: ${effectiveCc}`);
     console.log(`[EMAIL] Subject: ${subject}`);
     console.log(`[EMAIL] Body: ${text ?? html}`);
     console.log(icalEvent ? `[EMAIL] Calendar invite (${icalEvent.method}) attached\n` : "");
     return;
   }
-  await t.sendMail({ from: FROM, to: effectiveTo, subject, html, text, ...(icalEvent && { icalEvent }) });
+  await t.sendMail({ from: FROM, to: effectiveTo, ...(effectiveCc && { cc: effectiveCc }), subject, html, text, ...(icalEvent && { icalEvent }) });
 };
 
 // ── Templates ──────────────────────────────────────────────────────────────────
@@ -265,13 +267,17 @@ const sendWaitlistSlotAvailable = ({ studentEmail, studentName, mentorName, firm
   });
 
 /**
- * Sent to a student when their mentor marks a slot as running late.
+ * Sent to every student with a confirmed booking on a slot the mentor has just
+ * marked as running late — one email covering the whole slot (all students in
+ * To:, mentor in Cc:) rather than a separate email per student.
  */
-const sendDelayNotification = ({ studentEmail, studentName, mentorName, date, time, venue, delayMinutes }) =>
-  send({
-    to:      studentEmail,
+const sendDelayNotification = ({ students, mentorName, mentorEmail, date, time, venue, delayMinutes }) => {
+  const names = students.map((s) => s.name).join(", ");
+  return send({
+    to:      students.map((s) => s.email).join(", "),
+    cc:      mentorEmail || undefined,
     subject: `Your session with ${mentorName} is running ${delayMinutes} min late`,
-    text:    `Hi ${studentName}, your ${time} session on ${date} with ${mentorName} at ${venue} is running approximately ${delayMinutes} minutes late. Please wait — the session is still on.`,
+    text:    `Hi ${names}, your ${time} session on ${date} with ${mentorName} at ${venue} is running approximately ${delayMinutes} minutes late. Please wait — the session is still on.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Running a bit late ⏱</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Session update from ${mentorName}</p>
@@ -279,9 +285,10 @@ const sendDelayNotification = ({ studentEmail, studentName, mentorName, date, ti
         <b style="color:#92400E">Running ~${delayMinutes} minutes late</b><br>
         <span style="color:#92400E;font-size:13px">${date} · ${time} · ${venue}</span>
       </div>
-      <p style="font-size:14px;color:#064E3B">Hi ${studentName}, your mentor will be with you shortly. The session is still happening — please wait at the venue.</p>
+      <p style="font-size:14px;color:#064E3B">Hi ${names}, your mentor will be with you shortly. The session is still happening — please wait at the venue.</p>
     `),
   });
+};
 
 /**
  * Sent to a student when their mentor manually applies a strike to a

@@ -2,11 +2,12 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, CalendarCheck, Clock, MapPin, CheckCircle2,
-  XCircle, AlertCircle, Hourglass, AlertTriangle, Download, Video,
+  XCircle, AlertCircle, AlertTriangle, Download, Video,
 } from "lucide-react";
 import { useMyBookings, useCancelBooking } from "../hooks/useApi";
 import { getToken, API_BASE } from "../lib/apiClient";
 import AppFooter from "../components/AppFooter";
+import CollapsibleSection from "../components/CollapsibleSection";
 
 const downloadCsv = async (url, filename) => {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -198,10 +199,12 @@ export default function StudentMyBookings() {
           )}
 
           {/* Upcoming */}
-          <section>
-            <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
-              <Hourglass size={12} /> Upcoming
-            </h2>
+          <CollapsibleSection
+            title="Upcoming"
+            count={upcoming.length}
+            badgeClassName="bg-emerald-100 text-emerald-700"
+            defaultOpen
+          >
             {isLoading ? (
               <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center text-xs font-bold text-emerald-800/30">
                 Loading…
@@ -226,34 +229,37 @@ export default function StudentMyBookings() {
                 ))}
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Past */}
-          <section className="pb-8">
-            <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
-              <CheckCircle2 size={12} /> History
-            </h2>
-            {isLoading ? (
-              <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center text-xs font-bold text-emerald-800/30">
-                Loading…
-              </div>
-            ) : past.length === 0 ? (
-              <div className="bg-white border border-emerald-900/10 rounded-2xl p-6 text-center text-xs font-bold text-emerald-800/30">
-                No past sessions yet
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {past.map((b) => (
-                  <BookingCard
-                    key={b.id}
-                    booking={b}
-                    onCancel={handleCancel}
-                    isCancelling={cancelMutation.isPending}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
+          <div className="pb-8">
+            <CollapsibleSection
+              title="History"
+              count={past.length}
+              badgeClassName="bg-slate-200 text-slate-600"
+            >
+              {isLoading ? (
+                <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center text-xs font-bold text-emerald-800/30">
+                  Loading…
+                </div>
+              ) : past.length === 0 ? (
+                <div className="bg-white border border-emerald-900/10 rounded-2xl p-6 text-center text-xs font-bold text-emerald-800/30">
+                  No past sessions yet
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {past.map((b) => (
+                    <BookingCard
+                      key={b.id}
+                      booking={b}
+                      onCancel={handleCancel}
+                      isCancelling={cancelMutation.isPending}
+                    />
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+          </div>
         </main>
         <div className="pb-safe">
           <AppFooter />

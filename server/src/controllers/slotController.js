@@ -138,27 +138,30 @@ const listSlots = async (req, res, next) => {
     });
 
     res.json(
-      slots.map((slot) => {
-        const myBooking = slot.bookings.find((b) => b.studentUserId === req.user.sub);
-        const cohortOnly = slot.release?.cohortOnly ?? false;
-        let status = "AVAILABLE";
-        if (myBooking) status = "BOOKED_BY_ME";
-        else if (slot.capacity && slot.capacity.current >= slot.capacity.max) status = "BOOKED_BY_OTHER";
-        else if (cohortOnly && !isCohortMember) status = "COHORT_RESTRICTED";
+      slots
+        // Cohort-restricted slots aren't just unbookable for non-members — they shouldn't
+        // appear in their list at all, so filter them out before mapping to the response.
+        .filter((slot) => !(slot.release?.cohortOnly ?? false) || isCohortMember)
+        .map((slot) => {
+          const myBooking = slot.bookings.find((b) => b.studentUserId === req.user.sub);
+          const cohortOnly = slot.release?.cohortOnly ?? false;
+          let status = "AVAILABLE";
+          if (myBooking) status = "BOOKED_BY_ME";
+          else if (slot.capacity && slot.capacity.current >= slot.capacity.max) status = "BOOKED_BY_OTHER";
 
-        return {
-          id: slot.id,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          venue: slot.venue,
-          cohortOnly,
-          status,
-          delayMinutes: slot.delayMinutes ?? 0,
-          onWaitlist: slot.waitlist.length > 0,
-          // Only reveal the meeting link once the student has actually booked it.
-          ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus, meetingLink: slot.meetingLink ?? null }),
-        };
-      }),
+          return {
+            id: slot.id,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            venue: slot.venue,
+            cohortOnly,
+            status,
+            delayMinutes: slot.delayMinutes ?? 0,
+            onWaitlist: slot.waitlist.length > 0,
+            // Only reveal the meeting link once the student has actually booked it.
+            ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus, meetingLink: slot.meetingLink ?? null }),
+          };
+        }),
     );
   } catch (err) {
     next(err);
@@ -462,6 +465,33 @@ const listMentorOwnSlots = async (req, res, next) => {
       },
     }));
 
+    // Past sessions the mentor has already marked ATTENDED or NO_SHOW — capped like
+    // cancelledBookings above since this list only grows over time.
+    const historyBookings = await prisma.booking.findMany({
+      where: { mentorProfileId: mentorProfile.id, status: { in: ["ATTENDED", "NO_SHOW"] } },
+      include: {
+        slot: { select: { startTime: true, endTime: true, venue: true } },
+        student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
+      },
+      orderBy: { slot: { startTime: "desc" } },
+      take: 50,
+    });
+    const historySessions = historyBookings.map((b) => ({
+      bookingId: b.id,
+      startTime: b.slot.startTime,
+      endTime:   b.slot.endTime,
+      date:      new Date(b.slot.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      time:      fmtTime(b.slot.startTime),
+      venue:     b.slot.venue,
+      status:    b.status,
+      focus:     b.focus,
+      student: {
+        name:  b.student?.name ?? "—",
+        email: b.student?.email ?? null,
+        pgp:   b.student?.studentProfile?.pgpId ?? "N/A",
+      },
+    }));
+
     // Cohort aggregate stats
     let cohortStats = { totalMentees: 0, totalSlotsTaken: 0 };
     if (mentorProfile.cohortId) {
@@ -482,7 +512,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
     }
 
-    res.json({ bookedSessions, availableSlots, cancelledSessions, cohortStats });
+    res.json({ bookedSessions, availableSlots, cancelledSessions, historySessions, cohortStats });
   } catch (err) {
     next(err);
   }
@@ -507,34 +537,39 @@ const setSlotDelay = async (req, res, next) => {
       data:  { delayMinutes: delay },
     });
 
-    // Email all students with a CONFIRMED booking on this slot
+    // Email every student with a CONFIRMED booking on this slot in one combined
+    // message (all students in To:, mentor in Cc:) instead of one email each.
     if (delay > 0) {
       const bookedSlot = await prisma.slot.findUnique({
         where:   { id: slot.id },
         include: {
-          mentorProfile: { include: { user: { select: { name: true } } } },
+          mentorProfile: { include: { user: { select: { name: true, email: true } } } },
           bookings: {
             where:   { status: "CONFIRMED" },
             include: { student: { select: { name: true, email: true } } },
           },
         },
       });
-      const mentorName = bookedSlot?.mentorProfile?.user?.name ?? "Your mentor";
+      const mentorName  = bookedSlot?.mentorProfile?.user?.name ?? "Your mentor";
+      const mentorEmail = bookedSlot?.mentorProfile?.user?.email ?? null;
       const fmtDate = (d) =>
         new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
       const fmtTime = (d) =>
         new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
-      for (const booking of (bookedSlot?.bookings ?? [])) {
-        if (!booking.student?.email) continue;
+      const students = (bookedSlot?.bookings ?? [])
+        .filter((b) => b.student?.email)
+        .map((b) => ({ name: b.student.name ?? b.student.email, email: b.student.email }));
+
+      if (students.length > 0) {
         mailer.sendDelayNotification({
-          studentEmail:  booking.student.email,
-          studentName:   booking.student.name ?? booking.student.email,
+          students,
           mentorName,
-          date:          fmtDate(slot.startTime),
-          time:          fmtTime(slot.startTime),
-          venue:         slot.venue,
-          delayMinutes:  delay,
+          mentorEmail,
+          date:         fmtDate(slot.startTime),
+          time:         fmtTime(slot.startTime),
+          venue:        slot.venue,
+          delayMinutes: delay,
         }).catch(() => {});
       }
     }

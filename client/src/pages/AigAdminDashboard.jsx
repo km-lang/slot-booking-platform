@@ -4,6 +4,7 @@ import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronR
 import { useAigOverview } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
+import CollapsibleSection from "../components/CollapsibleSection";
 import { getToken, API_BASE } from "../lib/apiClient";
 
 const downloadCsv = async (url, filename) => {
@@ -138,42 +139,44 @@ export default function AigAdminDashboard() {
           {/* Intervention Required */}
           {(isLoading || atRisk.length > 0) && (
             <section className="mb-8" ref={interventionRef}>
-              <h2 className="text-lg font-black text-emerald-950 mb-3 flex items-center gap-2">
-                <AlertTriangle size={18} className="text-amber-500" /> Intervention Required
-              </h2>
-              {isLoading ? (
-                <div className="text-xs font-bold text-emerald-800/40 px-1">Loading…</div>
-              ) : (
-                <div className="space-y-3">
-                  {atRisk.slice(0, 20).map((student, idx) => (
-                    <div key={idx} className="bg-white border border-amber-200/60 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-[14px] text-emerald-950 leading-tight">{student.name}</h3>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className="bg-amber-50 text-amber-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-amber-200/50">
-                            {student.reason}
-                          </span>
-                          <span className="text-[10px] font-bold text-emerald-700/60">{student.cohortLabel}</span>
-                          {student.daysRemaining !== null && (
-                            <span className="text-[10px] font-bold text-red-600">{student.daysRemaining}d left</span>
-                          )}
+              <CollapsibleSection
+                title={
+                  <span className="flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-amber-500" /> Intervention Required
+                  </span>
+                }
+                count={atRisk.length}
+                badgeClassName="bg-amber-100 text-amber-700"
+              >
+                {isLoading ? (
+                  <div className="text-xs font-bold text-emerald-800/40 px-1">Loading…</div>
+                ) : (
+                  <div className="space-y-3">
+                    {atRisk.map((student, idx) => (
+                      <div key={idx} className="bg-white border border-amber-200/60 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-[14px] text-emerald-950 leading-tight">{student.name}</h3>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="bg-amber-50 text-amber-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border border-amber-200/50">
+                              {student.reason}
+                            </span>
+                            <span className="text-[10px] font-bold text-emerald-700/60">{student.cohortLabel}</span>
+                            {student.daysRemaining !== null && (
+                              <span className="text-[10px] font-bold text-red-600">{student.daysRemaining}d left</span>
+                            )}
+                          </div>
                         </div>
+                        <a
+                          href={`mailto:${student.email}`}
+                          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 w-10 h-10 rounded-full flex items-center justify-center transition-colors border border-emerald-200 shrink-0"
+                        >
+                          <Mail size={16} />
+                        </a>
                       </div>
-                      <a
-                        href={`mailto:${student.email}`}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 w-10 h-10 rounded-full flex items-center justify-center transition-colors border border-emerald-200 shrink-0"
-                      >
-                        <Mail size={16} />
-                      </a>
-                    </div>
-                  ))}
-                  {atRisk.length > 20 && (
-                    <p className="text-center text-xs font-bold text-emerald-700/50 py-2">
-                      +{atRisk.length - 20} more students need attention
-                    </p>
-                  )}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </CollapsibleSection>
             </section>
           )}
 
