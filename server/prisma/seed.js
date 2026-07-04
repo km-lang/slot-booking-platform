@@ -22,27 +22,32 @@ const AIG_DEFS = [
 ];
 
 // Mentors with no AIG affiliation at all — current PGP2 students mentoring
-// independently of any Committee/Club/AIG structure.
-const NON_AIG_MENTOR_COUNT = 5;
+// independently of any Committee/Club/AIG structure. Real roster (not dummy
+// placeholders) — matches production as of the pre-launch cleanup.
+const NON_AIG_MENTORS = [
+  { name: "Hrishikesh Kumar",    email: "pgp41137@iiml.ac.in", slug: "hrishikesh-kumar-41137", firm: "American Express", domain: "Product Management" },
+  { name: "Madhugogul P",        email: "pgp41144@iiml.ac.in", slug: "madhugogul-p",           firm: "IIM Lucknow",      domain: "General CV Review"  },
+  { name: "Rama Krishna Dokina", email: "pgp41189@iiml.ac.in", slug: "rama-krishna-dokina",    firm: "IIM Lucknow",      domain: "General CV Review"  },
+];
 
 // Real Disha mentors — cohortLabel maps to the Q1–Q17 cohorts created in Phase 4
 const DISHA_MENTORS = [
-  { name: "Adit",        email: "pgp41259@iiml.ac.in", cohortLabel: "Q1",  slug: "disha-adit",        firm: "McKinsey & Co.",      domain: "General Management"     },
+  { name: "Adit",        email: "pgp41259@iiml.ac.in", cohortLabel: "Q1",  slug: "disha-adit",        firm: "IIM Lucknow",         domain: "General Mentoring"      },
   { name: "Anandu",      email: "pgp41294@iiml.ac.in", cohortLabel: "Q2",  slug: "disha-anandu",      firm: "BCG",                 domain: "Strategy Consulting"    },
-  { name: "Chetan",      email: "pgp41302@iiml.ac.in", cohortLabel: "Q3",  slug: "disha-chetan",      firm: "Bain & Co.",          domain: "Finance"                },
+  { name: "Chetan",      email: "pgp41302@iiml.ac.in", cohortLabel: "Q3",  slug: "disha-chetan",      firm: "IIM Lucknow",         domain: "General Mentoring"      },
   { name: "Darsh",       email: "pgp41247@iiml.ac.in", cohortLabel: "Q4",  slug: "disha-darsh",       firm: "Goldman Sachs",       domain: "Investment Banking"     },
   { name: "Deepansh",    email: "pgp41250@iiml.ac.in", cohortLabel: "Q5",  slug: "disha-deepansh",    firm: "JP Morgan",           domain: "Operations"             },
   { name: "Gayathri",    email: "pgp41191@iiml.ac.in", cohortLabel: "Q6",  slug: "disha-gayathri",    firm: "Deloitte",            domain: "Analytics"              },
   { name: "Krishnanshu", email: "abm22011@iiml.ac.in", cohortLabel: "Q7",  slug: "disha-krishnanshu", firm: "EY",                  domain: "Human Resources"        },
   { name: "Lohhit",      email: "pgp41485@iiml.ac.in", cohortLabel: "Q8",  slug: "disha-lohhit",      firm: "KPMG",                domain: "Technology"             },
   { name: "Manav",       email: "pgp41263@iiml.ac.in", cohortLabel: "Q9",  slug: "disha-manav",       firm: "Amazon",              domain: "Product Management"     },
-  { name: "Manjari",     email: "pgp41020@iiml.ac.in", cohortLabel: "Q10", slug: "disha-manjari",     firm: "ITC",                 domain: "Marketing"              },
+  { name: "Manjari",     email: "pgp41020@iiml.ac.in", cohortLabel: "Q10", slug: "disha-manjari",     firm: "IIM Lucknow",         domain: "General Mentoring"      },
   { name: "Riddhi",      email: "pgp41437@iiml.ac.in", cohortLabel: "Q11", slug: "disha-riddhi",      firm: "HUL",                 domain: "FMCG"                   },
   { name: "Sarang",      email: "pgp41392@iiml.ac.in", cohortLabel: "Q12", slug: "disha-sarang",      firm: "Samsung India",       domain: "Entrepreneurship"       },
   { name: "Saumyaa",     email: "pgp41222@iiml.ac.in", cohortLabel: "Q13", slug: "disha-saumyaa",     firm: "TCS",                 domain: "Fintech"                },
-  { name: "Sreeraj",     email: "pgp41052@iiml.ac.in", cohortLabel: "Q14", slug: "disha-sreeraj",     firm: "Reliance Industries", domain: "E-Commerce"             },
+  { name: "Sreeraj",     email: "pgp41052@iiml.ac.in", cohortLabel: "Q14", slug: "disha-sreeraj",     firm: "IIM Lucknow",         domain: "General Mentoring"      },
   { name: "Sristi",      email: "pgp41447@iiml.ac.in", cohortLabel: "Q15", slug: "disha-sristi",      firm: "Infosys",             domain: "Sustainability"         },
-  { name: "Tanmay",      email: "pgp41227@iiml.ac.in", cohortLabel: "Q16", slug: "disha-tanmay",      firm: "Accenture",           domain: "Digital Transformation" },
+  { name: "Tanmay",      email: "pgp41227@iiml.ac.in", cohortLabel: "Q16", slug: "disha-tanmay",      firm: "IIM Lucknow",         domain: "General Mentoring"      },
   { name: "Urvee",       email: "pgp41515@iiml.ac.in", cohortLabel: "Q17", slug: "disha-urvee",       firm: "PwC",                 domain: "Consulting"             },
 ];
 
@@ -82,8 +87,8 @@ async function main() {
   await prisma.ban.deleteMany({});
   await prisma.studentProfile.deleteMany({});
   await prisma.mentorProfile.deleteMany({});
-  await prisma.user.deleteMany({ where: { email: { not: "pgp41137@iiml.ac.in" } } });
-  await prisma.accessWhitelist.deleteMany({ where: { email: { not: "pgp41137@iiml.ac.in" } } });
+  await prisma.user.deleteMany({});
+  await prisma.accessWhitelist.deleteMany({});
   await prisma.cohort.deleteMany({});
   console.log("         ✓ cleared");
 
@@ -179,16 +184,12 @@ async function main() {
   }
 
   // Non-AIG mentors — PGP2 students mentoring with no Committee/Club/AIG affiliation
-  for (let i = 1; i <= NON_AIG_MENTOR_COUNT; i++) {
-    const n     = String(i).padStart(2, "0");
-    const email = `independent.mentor.${n}@iiml.ac.in`;
-    const name  = `Independent Mentor ${n}`;
-    const slug  = `independent-mentor-${n}`;
-    wlMentors.push({ email, role: "MENTOR", aigId: null, addedBy: "seed" });
-    usrMentors.push({ email, name, role: "MENTOR" });
+  for (const m of NON_AIG_MENTORS) {
+    wlMentors.push({ email: m.email, role: "MENTOR", aigId: null, addedBy: "seed" });
+    usrMentors.push({ email: m.email, name: m.name, role: "MENTOR" });
     profMeta.push({
-      email, slug,
-      firm: "PGP2 Peer Mentor", domain: "General CV Review",
+      email: m.email, slug: m.slug,
+      firm: m.firm, domain: m.domain,
       aigId: null, cohortId: null, mentorType: "PGP2_STUDENT",
     });
   }
@@ -205,6 +206,7 @@ async function main() {
   await prisma.mentorProfile.createMany({
     data: profMeta.map((m) => ({
       userId:     mEmail2Id[m.email],
+      pgpId:      m.email.split("@")[0].toUpperCase(),
       slug:       m.slug,
       firm:       m.firm,
       domain:     m.domain,
@@ -214,7 +216,7 @@ async function main() {
     })),
   });
   const AIG_DUMMY_COUNT = (AIG_DEFS.length - 1) * 15; // all non-Disha AIGs × 15 each
-  console.log(`         ✓ ${DISHA_MENTORS.length} Disha (real) + ${AIG_DUMMY_COUNT} AIG (dummy) + ${NON_AIG_MENTOR_COUNT} non-AIG (dummy) = ${DISHA_MENTORS.length + AIG_DUMMY_COUNT + NON_AIG_MENTOR_COUNT} total`);
+  console.log(`         ✓ ${DISHA_MENTORS.length} Disha (real) + ${AIG_DUMMY_COUNT} AIG (dummy) + ${NON_AIG_MENTORS.length} non-AIG (real) = ${DISHA_MENTORS.length + AIG_DUMMY_COUNT + NON_AIG_MENTORS.length} total`);
 
   // ── Phase 6: Students (17 × 20 = 340) ────────────────────────────────────
   console.log("\nPhase 6  Students (340 total, 20 per Disha cohort)...");
@@ -228,7 +230,7 @@ async function main() {
     const n        = String(i).padStart(3, "0");
     const email    = `student.${n}@iiml.ac.in`;
     const name     = `Student ${n}`;
-    const pgpId    = `25${n}`;
+    const pgpId    = `PGP25${n}`;
     const cohort   = dishaCohortList[Math.floor((i - 1) / STUDENTS_PER_COHORT)];
 
     wlStudents.push({ email, role: "STUDENT", cohortId: cohort.id, addedBy: "seed" });
@@ -255,14 +257,9 @@ async function main() {
   console.log(`         ✓ ${STUDENT_COUNT} students (${STUDENTS_PER_COHORT} per cohort)`);
 
   // ── Phase 7: Dev/test accounts ────────────────────────────────────────────
+  // Note: pgp41137@iiml.ac.in is no longer a special-cased dev SuperADMIN — in
+  // production it's a real independent mentor (see NON_AIG_MENTORS in Phase 5).
   console.log("\nPhase 7  Dev test accounts...");
-
-  // SuperADMIN — never deleted, just ensure name is set
-  await prisma.user.upsert({
-    where:  { email: "pgp41137@iiml.ac.in" },
-    update: { name: "Hrishikesh Kumar" },
-    create: { email: "pgp41137@iiml.ac.in", name: "Hrishikesh Kumar", role: "SuperADMIN" },
-  });
 
   // STUDENT test alias — placed in Q1 cohort (alongside Student 001–020)
   const q1Cohort = dishaCohorts["Q1"];
@@ -279,33 +276,9 @@ async function main() {
   const existingStuProfile = await prisma.studentProfile.findUnique({ where: { userId: hriStu.id } });
   if (!existingStuProfile) {
     await prisma.studentProfile.create({
-      data: { userId: hriStu.id, pgpId: "41137", cohortId: q1Cohort.id },
+      data: { userId: hriStu.id, pgpId: "PGP41137", cohortId: q1Cohort.id },
     });
   }
-
-  // MENTOR test alias — Disha, Q1 cohort
-  await prisma.accessWhitelist.upsert({
-    where:  { email: "hrishikesh.mentor@iiml.ac.in" },
-    update: { aigId: aigs.disha.id },
-    create: { email: "hrishikesh.mentor@iiml.ac.in", role: "MENTOR", aigId: aigs.disha.id, addedBy: "seed" },
-  });
-  const hriMen = await prisma.user.upsert({
-    where:  { email: "hrishikesh.mentor@iiml.ac.in" },
-    update: { name: "Hrishikesh Kumar" },
-    create: { email: "hrishikesh.mentor@iiml.ac.in", name: "Hrishikesh Kumar", role: "MENTOR" },
-  });
-  await prisma.mentorProfile.upsert({
-    where:  { userId: hriMen.id },
-    update: { cohortId: q1Cohort.id },
-    create: {
-      userId:   hriMen.id,
-      slug:     "hrishikesh-kumar",
-      firm:     "— Test Account —",
-      domain:   "All Domains",
-      aigId:    aigs.disha.id,
-      cohortId: q1Cohort.id,
-    },
-  });
 
   // AIGs/disha test alias
   await prisma.accessWhitelist.upsert({
@@ -319,7 +292,7 @@ async function main() {
     create: { email: "hrishikesh.aig@iiml.ac.in", name: "Hrishikesh Kumar", role: "AIGs" },
   });
 
-  console.log("         ✓ 4 dev accounts ready");
+  console.log("         ✓ 2 dev accounts ready");
 
   // ── Summary ───────────────────────────────────────────────────────────────
   const [users, mentors, students, whitelist, cohorts] = await Promise.all([
@@ -333,7 +306,7 @@ async function main() {
   console.log("\n── Summary ─────────────────────────────────────────────────────");
   console.log(`  Org units        ${AIG_DEFS.length}  (1 Committee: Disha, ${AIG_DEFS.length - 1} AIGs)`);
   console.log(`  Cohorts          ${cohorts}  (Disha: Q1–Q17)`);
-  console.log(`  MentorProfiles   ${mentors}  (17 real Disha + ${AIG_DUMMY_COUNT} AIG dummy + ${NON_AIG_MENTOR_COUNT} non-AIG dummy + 1 test)`);
+  console.log(`  MentorProfiles   ${mentors}  (17 real Disha + ${AIG_DUMMY_COUNT} AIG dummy + ${NON_AIG_MENTORS.length} non-AIG real)`);
   console.log(`  StudentProfiles  ${students}`);
   console.log(`  Users            ${users}`);
   console.log(`  Whitelist        ${whitelist}`);
@@ -344,9 +317,8 @@ async function main() {
   }
 
   console.log("\n── Dev login reference ──────────────────────────────────────────");
-  console.log("  pgp41137@iiml.ac.in           SuperADMIN   /admin/placements");
+  console.log("  pgp41137@iiml.ac.in           MENTOR       /mentor   (independent, non-AIG)");
   console.log("  hrishikesh.student@iiml.ac.in STUDENT      /student  (Q1 cohort)");
-  console.log("  hrishikesh.mentor@iiml.ac.in  MENTOR       /mentor   (Q1 cohort)");
   console.log("  hrishikesh.aig@iiml.ac.in     AIGs/disha   /admin/disha");
   console.log("  disha-admin@iiml.ac.in        AIGs/disha   /admin/disha");
   console.log("  student.001@iiml.ac.in        STUDENT      /student  (Q1 cohort)");

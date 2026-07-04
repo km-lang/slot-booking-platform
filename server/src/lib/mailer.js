@@ -46,7 +46,15 @@ const send = async ({ to, cc, subject, html, text, icalEvent }) => {
     console.log(icalEvent ? `[EMAIL] Calendar invite (${icalEvent.method}) attached\n` : "");
     return;
   }
-  await t.sendMail({ from: FROM, to: effectiveTo, ...(effectiveCc && { cc: effectiveCc }), subject, html, text, ...(icalEvent && { icalEvent }) });
+  try {
+    await t.sendMail({ from: FROM, to: effectiveTo, ...(effectiveCc && { cc: effectiveCc }), subject, html, text, ...(icalEvent && { icalEvent }) });
+  } catch (err) {
+    // A wedged connection (e.g. after a transient SMTP error) can leave this
+    // cached transport permanently broken — drop it so the next send rebuilds
+    // a fresh one instead of failing forever until the process restarts.
+    transport = null;
+    throw err;
+  }
 };
 
 // ── Templates ──────────────────────────────────────────────────────────────────

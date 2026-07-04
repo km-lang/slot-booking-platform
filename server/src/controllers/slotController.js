@@ -299,6 +299,91 @@ const deleteSlot = async (req, res, next) => {
   }
 };
 
+// Salvages the leftover time on an unbooked slot that already started (an "expired"
+// slot — see listMentorOwnSlots) by releasing a fresh, bookable slot covering
+// whatever's left between now and the original endTime, then retiring the old row.
+// Same shape as releaseSlots/deleteSlot, just fused into one action so the mentor
+// doesn't have to manually copy the venue/link and pick a new time themselves.
+const releaseRemainingTime = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slot = await prisma.slot.findUnique({
+      where: { id: req.params.id },
+      include: { bookings: true, release: { select: { cohortOnly: true } } },
+    });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your slot" });
+    if (slot.bookings.length > 0) {
+      return res.status(409).json({ error: "This slot has booking history — nothing to release" });
+    }
+
+    // Small buffer so the new slot's startTime is still comfortably in the future
+    // by the time this request is processed (releaseSlots-equivalent logic requires
+    // strictly-future starts) — see the same buffer rationale below at the check.
+    const start = new Date(Date.now() + 5000);
+    if (slot.endTime <= start) {
+      return res.status(400).json({ error: "This slot has no remaining time left to release" });
+    }
+    const remainingMinutes = Math.max(1, Math.round((slot.endTime - start) / 60000));
+
+    const created = await prisma.$transaction(async (tx) => {
+      // Delete the original first — it has no bookings (checked above) and its time
+      // range would otherwise still be "occupied" and trip the slot_no_overlap_per_mentor
+      // exclusion constraint against the new slot below (same mentor, overlapping range).
+      await tx.slotCapacity.deleteMany({ where: { slotId: slot.id } });
+      await tx.slot.delete({ where: { id: slot.id } });
+
+      const newRelease = await tx.bookingRelease.create({
+        data: {
+          mentorProfileId: mentorProfile.id,
+          startTime: start,
+          endTime: slot.endTime,
+          slotDuration: remainingMinutes,
+          venue: slot.venue,
+          cohortOnly: slot.release?.cohortOnly ?? false,
+          meetingLink: slot.meetingLink ?? null,
+        },
+      });
+      const newSlot = await tx.slot.create({
+        data: {
+          releaseId: newRelease.id,
+          mentorProfileId: mentorProfile.id,
+          startTime: start,
+          endTime: slot.endTime,
+          venue: slot.venue,
+          meetingLink: slot.meetingLink ?? null,
+          published: true,
+        },
+      });
+      await tx.slotCapacity.create({ data: { slotId: newSlot.id, max: 1, current: 0 } });
+
+      await tx.auditEvent.create({
+        data: {
+          userId: req.user.sub,
+          action: "SLOT_RERELEASED",
+          entity: "Slot",
+          entityId: newSlot.id,
+          meta: JSON.stringify({ fromSlotId: slot.id, remainingMinutes }),
+        },
+      });
+
+      return newSlot;
+    });
+
+    const withCapacity = await prisma.slot.findUnique({ where: { id: created.id }, include: { capacity: true } });
+    res.status(201).json({ slot: withCapacity });
+  } catch (err) {
+    // DB-enforced by the slot_no_overlap_per_mentor GiST exclusion constraint —
+    // Prisma surfaces this as an untyped error, so match on the constraint name.
+    if (err.message?.includes("slot_no_overlap_per_mentor")) {
+      return res.status(409).json({ error: "This time range overlaps with one of your existing slots" });
+    }
+    next(err);
+  }
+};
+
 const getMentorCohort = async (req, res, next) => {
   try {
     const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
@@ -441,6 +526,33 @@ const listMentorOwnSlots = async (req, res, next) => {
         published: s.published,
       }));
 
+    // Slots that started (or fully passed) with nobody having booked them — once
+    // startTime is in the past they drop out of every booking-facing list (students
+    // can no longer book, availableSlots above only looks forward) and previously
+    // just vanished with no way for the mentor to see or clean them up. Surfaced
+    // here instead, capped like cancelledBookings/historyBookings below.
+    const expired = await prisma.slot.findMany({
+      where: {
+        mentorProfileId: mentorProfile.id,
+        startTime: { lt: now },
+        bookings: { none: { status: { not: "CANCELLED" } } },
+      },
+      include: { release: { select: { cohortOnly: true } } },
+      orderBy: { startTime: "desc" },
+      take: 50,
+    });
+    const expiredSlots = expired.map((s) => ({
+      id: s.id,
+      time: fmtSlotTime(s.startTime, s.endTime),
+      venue: s.venue,
+      cohortOnly: s.release?.cohortOnly ?? false,
+      reason: "Unbooked",
+      // Raw endTime (rather than a pre-computed boolean) so the client can decide
+      // remaining-time eligibility live, without needing another round trip as
+      // minutes tick by.
+      endTime: s.endTime,
+    }));
+
     // Bookings the mentor's students cancelled — surfaced here so the mentor can
     // review each one and optionally apply a strike (the only way a cancellation
     // now results in a strike; see bookingController.applyManualStrike).
@@ -522,7 +634,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
     }
 
-    res.json({ bookedSessions, ongoingSessions, availableSlots, cancelledSessions, historySessions, cohortStats });
+    res.json({ bookedSessions, ongoingSessions, availableSlots, expiredSlots, cancelledSessions, historySessions, cohortStats });
   } catch (err) {
     next(err);
   }
@@ -858,6 +970,7 @@ module.exports = {
   listMentorOwnSlots,
   releaseSlots,
   deleteSlot,
+  releaseRemainingTime,
   setSlotDelay,
   setSlotMeetingLink,
   setSlotReschedule,

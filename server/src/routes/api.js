@@ -46,6 +46,11 @@ router.delete(
   requireRole("MENTOR"),
   slotController.deleteSlot,
 );
+router.post(
+  "/slots/:id/re-release",
+  requireRole("MENTOR"),
+  slotController.releaseRemainingTime,
+);
 router.patch(
   "/slots/:id/delay",
   requireRole("MENTOR"),

@@ -4,14 +4,14 @@ import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
-  Send, UserPlus, Search, ShieldAlert,
+  Send, UserPlus, Search, ShieldAlert, RefreshCw,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance,
   useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
   useBulkDeleteSlots, useBulkSetMeetingLink,
   useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
-  useApplyStrike,
+  useApplyStrike, useReleaseRemainingTime,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -470,12 +470,14 @@ export default function MentorDashboard() {
   const bookedSessions    = data?.bookedSessions ?? [];
   const ongoingSessions   = data?.ongoingSessions ?? [];
   const availableSlots    = data?.availableSlots ?? [];
+  const expiredSlots      = data?.expiredSlots ?? [];
   const cancelledSessions = data?.cancelledSessions ?? [];
   const historySessions   = data?.historySessions ?? [];
   const cohortStats       = data?.cohortStats ?? { totalMentees: 0, totalSlotsTaken: 0 };
 
   const attendanceMutation  = useMarkAttendance();
   const deleteSlotMutation  = useDeleteSlot();
+  const releaseRemainingMutation = useReleaseRemainingTime();
   const bulkDeleteMutation  = useBulkDeleteSlots();
   const bulkLinkMutation    = useBulkSetMeetingLink();
   const bulkPublishMutation = useBulkPublishSlots();
@@ -503,6 +505,12 @@ export default function MentorDashboard() {
 
   const handleDeleteSlot = (slotId) => {
     deleteSlotMutation.mutate(slotId, {
+      onError: (err) => alert(err.message),
+    });
+  };
+
+  const handleReleaseRemainingTime = (slotId) => {
+    releaseRemainingMutation.mutate(slotId, {
       onError: (err) => alert(err.message),
     });
   };
@@ -808,6 +816,62 @@ export default function MentorDashboard() {
                     </button>
                   </div>
                 ))
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Expired Slots — released but nobody booked before the start time passed */}
+          <CollapsibleSection
+            title="Expired Slots"
+            count={expiredSlots.length}
+            badgeClassName="bg-slate-200 text-slate-600"
+          >
+            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+              {isLoading ? (
+                <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
+              ) : expiredSlots.length === 0 ? (
+                <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">
+                  No expired slots
+                </div>
+              ) : (
+                expiredSlots.map((slot) => {
+                  // The server (releaseRemainingTime) has its own 5s-buffer check and
+                  // will 400 if this races past the true deadline — this is just the
+                  // UI hint for whether the action makes sense to offer at all.
+                  const hasRemainingTime = new Date(slot.endTime) > new Date();
+                  return (
+                    <div key={slot.id} className="p-4 flex items-start gap-3">
+                      <Clock size={16} className="mt-1 text-slate-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+                          <span className="text-emerald-700/60">{slot.venue}</span>
+                          {slot.cohortOnly && (
+                            <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
+                          )}
+                          <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{slot.reason}</span>
+                        </div>
+                      </div>
+                      {hasRemainingTime && (
+                        <button
+                          onClick={() => handleReleaseRemainingTime(slot.id)}
+                          disabled={releaseRemainingMutation.isPending}
+                          className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                          title="Release the remaining time as a new bookable slot"
+                        >
+                          <RefreshCw size={16} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteSlot(slot.id)}
+                        disabled={deleteSlotMutation.isPending}
+                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </CollapsibleSection>

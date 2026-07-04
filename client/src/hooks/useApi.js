@@ -246,6 +246,16 @@ export const useDeleteSlot = () => {
   });
 };
 
+// Salvages the leftover time on an expired (unbooked) slot into a fresh bookable
+// slot running from now until the original endTime — see releaseRemainingTime.
+export const useReleaseRemainingTime = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (slotId) => apiFetch(`/slots/${slotId}/re-release`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
 export const useSetSlotDelay = () => {
   const qc = useQueryClient();
   return useMutation({
