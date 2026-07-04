@@ -56,7 +56,7 @@ export default function RescheduleSlot() {
 
   return (
     <div className="min-h-screen-safe app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen-safe bg-[var(--color-bg)] shadow-2xl flex flex-col">
         <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 header-safe-top pb-3 flex items-center gap-3">
           <button
             onClick={() => navigate("/mentor")}
@@ -79,30 +79,30 @@ export default function RescheduleSlot() {
             <div>
               <p className="text-[10px] font-bold text-emerald-800/60 uppercase mb-1">New Start</p>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Day</label>
                   <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                    className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Time</label>
                   <input type="time" value={start} onChange={(e) => setStart(e.target.value)}
-                    className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                    className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
                 </div>
               </div>
             </div>
             <div>
               <p className="text-[10px] font-bold text-emerald-800/60 uppercase mb-1">New End</p>
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Day</label>
                   <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                    className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Time</label>
                   <input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
-                    className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                    className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
                 </div>
               </div>
               {endDate !== startDate && (

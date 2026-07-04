@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Clock, MapPin, Video, AlertTriangle, ShieldCheck,
-  ChevronDown, XCircle,
+  ChevronDown, XCircle, Phone, MessageCircle, Mail,
 } from "lucide-react";
 import { useMentor, useSlots, useBookSlot, useCancelBooking, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
@@ -15,6 +15,12 @@ const FOCUS_LABELS = {
 
 const fmt = (d) =>
   new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+const fmtDate = (d) =>
+  new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+
+// wa.me needs digits only (no "+", spaces, or dashes).
+const toWhatsAppDigits = (phone) => phone.replace(/[^0-9]/g, "");
 
 // Notification-only — never auto-books. Joining just means: get emailed once if
 // this exact slot frees up; still have to come back and book it like anyone else.
@@ -143,10 +149,10 @@ export default function MentorBookingView() {
       {/* Profile Header */}
       <div className="flex flex-col items-center text-center py-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="relative mb-4">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center font-black text-3xl text-emerald-800 border-4 border-[#F5F7FA] shadow-lg">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 flex items-center justify-center font-black text-3xl text-emerald-800 border-4 border-[var(--color-bg)] shadow-lg">
             {displayName.split(" ").map((n) => n[0]).join("").substring(0, 2)}
           </div>
-          <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-[#F5F7FA] flex items-center justify-center animate-pulse" />
+          <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-[var(--color-bg)] flex items-center justify-center animate-pulse" />
         </div>
         <h2 className="text-2xl font-black text-emerald-950 leading-tight">{displayName}</h2>
         {mentor?.firm && (
@@ -184,6 +190,9 @@ export default function MentorBookingView() {
                   {isMine && <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500" />}
 
                   <div className="flex-1">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-emerald-700/50 mb-0.5">
+                      {fmtDate(slot.startTime)}
+                    </div>
                     <div className={`font-bold text-[16px] mb-1 ${isMine ? "text-emerald-700" : "text-emerald-950"}`}>
                       {slotTime}
                     </div>
@@ -218,6 +227,38 @@ export default function MentorBookingView() {
                       >
                         <Video size={10} /> Join Google Meet
                       </a>
+                    )}
+                    {isMine && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                        {slot.mentorPhone ? (
+                          <>
+                            <a
+                              href={`tel:${slot.mentorPhone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+                            >
+                              <Phone size={10} /> Call
+                            </a>
+                            <a
+                              href={`https://wa.me/${toWhatsAppDigits(slot.mentorPhone)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+                            >
+                              <MessageCircle size={10} /> WhatsApp
+                            </a>
+                          </>
+                        ) : slot.mentorEmail && (
+                          <a
+                            href={`mailto:${slot.mentorEmail}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+                          >
+                            <Mail size={10} /> Email Mentor
+                          </a>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -269,7 +310,7 @@ export default function MentorBookingView() {
         <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6" />
 
         {selectedSlot && (() => {
-          const slotTime = `${fmt(selectedSlot.startTime)} – ${fmt(selectedSlot.endTime)}`;
+          const slotTime = `${fmtDate(selectedSlot.startTime)}, ${fmt(selectedSlot.startTime)} – ${fmt(selectedSlot.endTime)}`;
 
           return (
             <div>
@@ -278,7 +319,7 @@ export default function MentorBookingView() {
               </h3>
               <p className="text-sm font-semibold text-emerald-700/70 mb-6">with {displayName}</p>
 
-              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[#F5F7FA] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
+              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[var(--color-bg)] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
                 <div className={`flex items-center gap-3 mb-3 pb-3 border-b ${sheetMode === "BOOK" ? "border-emerald-900/5" : "border-red-900/5"}`}>
                   <Clock className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
                   <span className="font-bold text-emerald-950">{slotTime}</span>

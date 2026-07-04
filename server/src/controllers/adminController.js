@@ -601,15 +601,22 @@ const listMentorStats = async (_req, res, next) => {
       }),
       // One query for every mentor's booking counts instead of N+1 per-mentor queries.
       prisma.booking.findMany({
-        select: { status: true, slot: { select: { mentorProfileId: true } } },
+        select: { status: true, slot: { select: { mentorProfileId: true, endTime: true } } },
       }),
     ]);
+
+    const now = new Date();
 
     const statsByMentor = {};
     for (const b of allBookings) {
       const mid = b.slot.mentorProfileId;
       const s = statsByMentor[mid] ?? (statsByMentor[mid] = { completed: 0, attended: 0, noShow: 0, cancelled: 0 });
-      if (b.status === "CONFIRMED" || b.status === "ATTENDED") s.completed += 1;
+      // A CONFIRMED booking whose slot has already ended has an unknown outcome —
+      // the mentor never marked it — so it shouldn't count as "completed" alongside
+      // genuinely ATTENDED sessions. Still-upcoming CONFIRMED bookings do count,
+      // since the slot is legitimately utilized even though the session hasn't run yet.
+      const overdueUnmarked = b.status === "CONFIRMED" && b.slot.endTime <= now;
+      if (b.status === "ATTENDED" || (b.status === "CONFIRMED" && !overdueUnmarked)) s.completed += 1;
       if (b.status === "ATTENDED") s.attended += 1;
       if (b.status === "NO_SHOW") s.noShow += 1;
       if (b.status === "CANCELLED") s.cancelled += 1;

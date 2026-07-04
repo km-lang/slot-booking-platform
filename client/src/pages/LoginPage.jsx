@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shield, Heart } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useAuth } from "../context/useAuth";
 import { getRoleHome } from "../lib/roleHome";
+import psLogo from "../assets/PSLogo.png";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -74,9 +75,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen app-bg flex items-center justify-center px-4">
       <div className="text-center w-full max-w-xs">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-900 flex items-center justify-center text-emerald-400 mx-auto mb-6">
-          <Shield size={32} />
-        </div>
+        <img src={psLogo} alt="Parthsaarthi" className="w-28 h-28 mx-auto mb-4 object-contain" />
         <h1 className="text-2xl font-black text-emerald-950 mb-1">Parthsaarthi</h1>
         <p className="text-sm font-semibold text-emerald-700/60 mb-8">
           by Team SynapsE · IIM Lucknow
@@ -94,7 +93,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 transition-colors"
+                className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 transition-colors"
               />
               {error && (
                 <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">

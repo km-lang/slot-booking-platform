@@ -115,7 +115,10 @@ const listSlots = async (req, res, next) => {
     const { mentorSlug } = req.query;
     if (!mentorSlug) return res.status(400).json({ error: "mentorSlug query param is required" });
 
-    const mentor = await prisma.mentorProfile.findUnique({ where: { slug: mentorSlug } });
+    const mentor = await prisma.mentorProfile.findUnique({
+      where: { slug: mentorSlug },
+      include: { user: { select: { email: true } } },
+    });
     if (!mentor) return res.status(404).json({ error: "Mentor not found" });
 
     // Eligibility for cohort-only slots — surfaced as a distinct status below so the UI can
@@ -161,8 +164,17 @@ const listSlots = async (req, res, next) => {
             status,
             delayMinutes: slot.delayMinutes ?? 0,
             onWaitlist: slot.waitlist.length > 0,
-            // Only reveal the meeting link once the student has actually booked it.
-            ...(myBooking && { bookingId: myBooking.id, focus: myBooking.focus, meetingLink: slot.meetingLink ?? null }),
+            // Only reveal the meeting link and mentor contact details once the student
+            // has actually booked it — same gating as meetingLink, extended to phone/email
+            // so Call/WhatsApp on the student side doesn't leak a mentor's personal number
+            // to every student browsing, only to the one they've actually booked with.
+            ...(myBooking && {
+              bookingId: myBooking.id,
+              focus: myBooking.focus,
+              meetingLink: slot.meetingLink ?? null,
+              mentorPhone: mentor.phone ?? null,
+              mentorEmail: mentor.user.email,
+            }),
           };
         }),
     );
@@ -463,13 +475,13 @@ const listMentorOwnSlots = async (req, res, next) => {
       return `${date}, ${fmtTime(start)} – ${fmtTime(end)}`;
     };
 
-    // All booked slots not yet finished (still in progress or fully upcoming) —
-    // endTime bound (rather than startTime) so an in-progress session stays visible
-    // here instead of dropping off the dashboard before its attendance is marked.
+    // All slots with a CONFIRMED booking — no endTime bound, so a session whose
+    // time has passed without attendance being marked stays visible here instead
+    // of silently disappearing with no way to ever mark it (it naturally drops out
+    // once the mentor marks ATTENDED/NO_SHOW, since it's no longer CONFIRMED).
     const upcomingBooked = await prisma.slot.findMany({
       where: {
         mentorProfileId: mentorProfile.id,
-        endTime: { gte: now },
         bookings: { some: { status: "CONFIRMED" } },
       },
       include: {

@@ -425,6 +425,20 @@ Per-view changes:
 
 ---
 
+### ✅ Phase 17 — Cancellation Redesign, Slot-Creation UX & Pre-Launch Stabilization
+**Status: Complete**
+
+- **Cancellation policy overhaul**: automatic time-based cancellation penalties replaced with mentor-reviewed strikes — a mentor now decides whether a late/no-show cancellation warrants a strike, instead of the system auto-applying one from a fixed time threshold
+- **Slot creation UX rework**: the mentor slot-creation and reschedule popups were replaced with dedicated full pages; the creation flow was then further merged from a 3-step wizard down to 2 steps; bulk "Publish" action now hides itself when the current selection has no draft slots
+- **Data-integrity fixes**: mentors can no longer create or reschedule a slot that overlaps another of their own slots (DB-level GiST exclusion constraint); PGP/ABM ID format normalized across mentors and students, with `MentorProfile.pgpId` added and a "Committee" label applied to Disha
+- **Visibility & lifecycle**: slots are now cohort-scoped by default (cohort-only visibility), expired slots remain visible with remaining-time-based re-release instead of silently disappearing, and a new collapsible "Ongoing sessions" view was added to dashboards; Team Disha is now surfaced first in the AIG list
+- **Bug fixes**: cancelling a session that has already started is now blocked; the student header stays reachable while scrolling on mobile; non-AIG mentors are surfaced correctly on the student dashboard; the mailer's SMTP transport caching bug (stale/broken transport reused across sends) was fixed; delay notifications to multiple students were consolidated into one combined email per slot
+- **Mobile**: a dedicated pass optimized the student booking flow for iOS/Android and laptop breakpoints
+- **Branding**: replaced the default Vite favicon with the product's own icon (`Parthsaarthi.ico`)
+- Several `chore: DB snapshot before …` commits accompanied schema-affecting or data-deleting changes in this phase, following the `README.deployment.md` rule of a timestamped snapshot before any DB-touching change
+
+---
+
 ## Environment Variables Reference
 
 | Variable | Where | Description |
@@ -651,22 +665,30 @@ Go through every item before switching traffic to production.
 
 #### Feature failures — runs but key flows break
 
-| # | What | Why it matters |
-|---|------|---------------|
-| 8 | No rate limit on `POST /api/auth/google` | Attacker can enumerate which emails are in the whitelist (403 vs. success) |
-| 9 | Attendance marking has no time gate | Mentors can mark NO_SHOW days or weeks after a session — no protection against retroactive penalties |
-| 10 | JWT expires in 8h, no refresh | Student mid-booking at the 8h mark gets a 401, loses their slot claim, and is redirected to login |
-| 11 | Token in `sessionStorage` | Session lost when the browser tab closes — users re-login every time they reopen the browser (especially painful on mobile) |
+| # | What | Status |
+|---|------|--------|
+| 8 | Rate limit on `POST /api/auth/google` | ✅ Done — `rateLimiter.js` applies a limiter to `/api/auth/google` and `/api/auth/refresh` |
+| 9 | Attendance marking has no time gate | ⚠️ Partial — `markAttendance` now blocks marking before the session starts, but still has no *upper* bound; a mentor can still mark NO_SHOW arbitrarily long after a session |
+| 10 | JWT expires in 8h, no refresh | ✅ Done — `POST /api/auth/refresh` (rate-limited) + client-side silent refresh added in Phase "persistent session" work |
+| 11 | Token in `sessionStorage` | ✅ Done — moved to `localStorage` so sessions survive tab close/browser restart |
 
 #### Reliability
 
+| # | What | Status |
+|---|------|--------|
+| 12 | No SIGTERM handler | ✅ Done — `server/src/index.js` closes the server and disconnects Prisma on `SIGTERM` |
+| 13 | No React error boundaries | ✅ Done — `client/src/main.jsx` wraps `<App />` in an `ErrorBoundary` |
+| 14 | Email failures are fully silent | ⚠️ Needs re-verification — `mailer.js` grew substantially in Phase 17 (transport-caching fix, combined delay email); confirm failure logging still applies to every send path before launch |
+| 15 | `node-cron` runs in-process | ❌ Still open — a restart at 07:59 IST still skips that day's digest until the next run |
+| 16 | `dev.db` tracked in git | ⚠️ Fixed for the nested copy — `server/prisma/prisma/dev.db` (a stray duplicate-path file, unrelated to the app's actual SQLite dev DB) has been untracked and `.gitignore` broadened to catch any `**/dev.db` going forward. The real dev DB was never tracked. Note: production now runs Postgres exclusively (`schema.prisma` provider), so this file was dead weight, not a live data source. |
+
+#### New since Phase 16 — worth tracking
+
 | # | What | Why it matters |
 |---|------|---------------|
-| 12 | No SIGTERM handler | PM2 restarts kill in-flight DB transactions — SlotCapacity can drift out of sync with Booking rows |
-| 13 | No React error boundaries | Any uncaught component error (bad API response shape, `.map()` on null) renders a blank white screen with no way to recover |
-| 14 | Email failures are fully silent | `.catch(() => {})` on booking/cancel emails means SMTP failures produce no log entry and no retry |
-| 15 | `node-cron` runs in-process | If the server restarts at 07:59 IST, the 8 AM digest is skipped until the next day |
-| 16 | `dev.db` tracked in git | Binary file with real seed email addresses; grows with every seed run |
+| 17 | No automated tests, no CI | The two worst production incidents to date (Phase 13 overbooking race, Phase 14 booking-limit race) were both concurrency bugs — exactly the class of bug that regresses silently without test coverage on the OCC/capacity/overlap/booking-limit paths |
+| 18 | `main` is ~50 commits behind `new_design` | All Phase 9–17 work has landed on `new_design` only; no merge/release plan exists yet for getting it into `main` |
+| 19 | `server/public_backups/` not actually gitignored | The existing pattern (`server/public_backup_*/`) doesn't match the directory this backup process actually creates (`server/public_backups/<timestamp>/`) — fixed in `.gitignore`, but any already-committed backups from before this fix should be checked for |
 
 #### Quick fixes for items 12, 13, 14
 

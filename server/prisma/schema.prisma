@@ -104,6 +104,7 @@ model MentorProfile {
   slug       String     @unique // e.g. "evelyn-vance" — server-generated at profile creation
   firm       String
   domain     String
+  phone      String?    // optional mobile number, mentor-editable — used for the student-facing Call/WhatsApp actions
   aigId      String?    // null = no org affiliation (e.g. a PGP2-student mentor)
   cohortId   String?
   mentorType MentorType @default(ALUMNI)

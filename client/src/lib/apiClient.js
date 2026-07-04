@@ -92,3 +92,33 @@ export async function apiFetch(path, options = {}) {
   if (res.status === 204) return null;
   return res.json();
 }
+
+// CSV export endpoints return a file body, not JSON — separate from apiFetch but
+// shares its auth handling (silent refresh, 401 → logout) so an export doesn't fail
+// just because the token happened to be near expiry.
+export async function downloadFile(path, filename) {
+  const token = await getValidToken();
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { headers });
+
+  if (res.status === 401) {
+    clearSession();
+    window.location.hash = "#/login";
+    throw new Error("Session expired");
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Export failed (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement("a"), { href, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
+}

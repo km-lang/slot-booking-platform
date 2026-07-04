@@ -2,24 +2,11 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, CalendarCheck, Clock, MapPin, CheckCircle2,
-  XCircle, AlertCircle, AlertTriangle, Download, Video,
+  XCircle, AlertCircle, AlertTriangle, Download, Video, Loader2,
 } from "lucide-react";
-import { useMyBookings, useCancelBooking } from "../hooks/useApi";
-import { getToken, API_BASE } from "../lib/apiClient";
+import { useMyBookings, useCancelBooking, useExportCsv } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
-
-const downloadCsv = async (url, filename) => {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-  if (!res.ok) return;
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href, download: filename });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
-};
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -106,7 +93,7 @@ function BookingCard({ booking, onCancel, isCancelling }) {
         </div>
       )}
 
-      <div className="bg-[#F5F7FA] rounded-xl p-3 space-y-1.5 mb-3 border border-emerald-900/5">
+      <div className="bg-[var(--color-bg)] rounded-xl p-3 space-y-1.5 mb-3 border border-emerald-900/5">
         <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800">
           <Clock size={13} className="text-emerald-600 shrink-0" />
           {booking.slotLabel}
@@ -149,6 +136,7 @@ export default function StudentMyBookings() {
   const navigate = useNavigate();
   const { data, isLoading, error } = useMyBookings();
   const cancelMutation = useCancelBooking(null);
+  const exportMutation = useExportCsv();
 
   const ongoing  = data?.ongoing  ?? [];
   const upcoming = data?.upcoming ?? [];
@@ -161,9 +149,16 @@ export default function StudentMyBookings() {
     });
   };
 
+  const handleExport = () => {
+    exportMutation.mutate(
+      { path: "/bookings/export", filename: "my-bookings.csv" },
+      { onSettled: () => setTimeout(() => exportMutation.reset(), 2500) },
+    );
+  };
+
   return (
     <div className="min-h-screen-safe app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[var(--color-bg)] shadow-2xl flex flex-col">
 
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 header-safe-top pb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -183,12 +178,20 @@ export default function StudentMyBookings() {
             </div>
           </div>
           <button
-            onClick={() => downloadCsv(`${API_BASE}/bookings/export`, "my-bookings.csv")}
-            disabled={isLoading || (upcoming.length === 0 && past.length === 0)}
+            onClick={handleExport}
+            disabled={exportMutation.isPending || isLoading || (upcoming.length === 0 && past.length === 0)}
             className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-3 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
-            title="Export my booking history (CSV)"
+            title={
+              exportMutation.isPending ? "Exporting…"
+              : exportMutation.isSuccess ? "Downloaded"
+              : exportMutation.isError ? (exportMutation.error?.message ?? "Export failed")
+              : "Export my booking history (CSV)"
+            }
           >
-            <Download size={20} />
+            {exportMutation.isPending ? <Loader2 size={20} className="animate-spin" />
+              : exportMutation.isSuccess ? <CheckCircle2 size={20} className="text-emerald-600" />
+              : exportMutation.isError ? <XCircle size={20} className="text-red-600" />
+              : <Download size={20} />}
           </button>
         </header>
 

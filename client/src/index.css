@@ -2,9 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Forest & Brass theme tokens, referenced from inline styles and arbitrary
+     Tailwind classes that can't use the emerald-* utility scale directly. */
+  --color-bg: #faf6ed;
+  --color-heading: #12332b;
+  --color-primary: #5c7c6a;
+  --color-primary-light: #c7d3cb;
+  --color-primary-lighter: #e3dcc7;
+  --color-muted: #a9a38c;
+}
+
 @layer utilities {
   .glass-panel {
-    @apply bg-[#F5F7FA]/80 backdrop-blur-xl border border-emerald-900/10 shadow-sm;
+    @apply bg-[var(--color-bg)]/80 backdrop-blur-xl border border-emerald-900/10 shadow-sm;
   }
 
   .glass-card {
@@ -13,7 +24,7 @@
 
   /* Page-level shell background: flat theme color, no image. */
   .app-bg {
-    background-color: #F5F7FA;
+    background-color: var(--color-bg);
   }
 
   /* 100vh with a 100dvh override where supported — avoids iOS Safari's
@@ -46,9 +57,9 @@
 }
 
 body {
-  @apply bg-[#F5F7FA] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
+  @apply bg-[var(--color-bg)] text-emerald-950 antialiased selection:bg-emerald-200 selection:text-emerald-900;
   scrollbar-width: thin;
-  scrollbar-color: #dce6ec #F5F7FA;
+  scrollbar-color: #e3dcc7 var(--color-bg);
 }
 
 ::-webkit-scrollbar {
@@ -56,10 +67,10 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-[#F5F7FA];
+  @apply bg-[var(--color-bg)];
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-emerald-200 rounded-full border-2 border-[#F5F7FA];
+  @apply bg-emerald-200 rounded-full border-2 border-[var(--color-bg)];
 }
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gem-accent;

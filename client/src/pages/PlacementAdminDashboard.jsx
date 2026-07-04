@@ -4,7 +4,7 @@ import {
   Activity, Users, CalendarCheck, Ban, Download, Shield, AlertTriangle,
   ActivitySquare, Lock, List, Settings, Plus, Trash2, Save, ShieldOff, Search,
   Building2, History as HistoryIcon, GraduationCap, ChevronDown, ChevronRight,
-  CalendarDays, ChevronLeft,
+  CalendarDays, ChevronLeft, CheckCircle, XCircle, Loader2,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -13,24 +13,12 @@ import {
   useAdminBatch, useWhitelist, useAigs, useConfig, useBans,
   useAddWhitelist, useRemoveWhitelist, useSaveConfig, useLiftBan,
   useOrgStats, useMentorStats, useStudentSearch, useStudentDetail, useAdminCalendar,
+  useExportCsv,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
-import { getToken, API_BASE } from "../lib/apiClient";
 
-const COLORS = ["#2E3A46", "#5B7C99", "#8FB0C2", "#A8C3D1"];
-
-const downloadCsv = async (url, filename) => {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-  if (!res.ok) return;
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), { href, download: filename });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
-};
+const COLORS = ["var(--color-heading)", "var(--color-primary)", "var(--color-primary-light)", "var(--color-primary-lighter)"];
 
 const ACTION_LABEL = {
   BOOKING_CREATED:    "Booking Created",
@@ -159,7 +147,7 @@ function OverviewTab() {
                     <Pie data={purposeDistribution} innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value">
                       {purposeDistribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "#2E3A46", fontWeight: "bold" }} />
+                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} itemStyle={{ color: "var(--color-heading)", fontWeight: "bold" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -186,11 +174,11 @@ function OverviewTab() {
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={mentorUtilization} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 12, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: "rgba(91,124,153,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
-                  <Bar dataKey="offered" name="Slots Offered" fill="#A8C3D1" radius={[4, 4, 0, 0]} barSize={24} />
-                  <Bar dataKey="completed" name="Completed" fill="#5B7C99" radius={[4, 4, 0, 0]} barSize={24} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 12, fontWeight: 600 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 12 }} />
+                  <Tooltip cursor={{ fill: "rgba(92,124,106,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
+                  <Bar dataKey="offered" name="Slots Offered" fill="var(--color-primary-lighter)" radius={[4, 4, 0, 0]} barSize={24} />
+                  <Bar dataKey="completed" name="Completed" fill="var(--color-primary)" radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -210,13 +198,13 @@ function OverviewTab() {
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data.trends} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#A8C3D1" opacity={0.3} />
-                <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 11 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "#2E3A46", fontSize: 11 }} allowDecimals={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-primary-lighter)" opacity={0.3} />
+                <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 11 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 11 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
-                <Line type="monotone" dataKey="created" name="Created" stroke="#5B7C99" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="attended" name="Attended" stroke="#2E3A46" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="noShow" name="No-Show" stroke="#A8C3D1" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="created" name="Created" stroke="var(--color-primary)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="attended" name="Attended" stroke="var(--color-heading)" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="noShow" name="No-Show" stroke="var(--color-primary-lighter)" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -732,11 +720,11 @@ function WhitelistTab() {
           <input
             type="email" placeholder="email@iiml.ac.in" value={addEmail}
             onChange={(e) => setAddEmail(e.target.value)} required
-            className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
+            className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500"
           />
           <div className="flex flex-col sm:flex-row gap-3">
             <select value={addRole} onChange={(e) => { setAddRole(e.target.value); setAddAigSlug(""); }}
-              className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+              className="flex-1 bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
               <option value="STUDENT">STUDENT</option>
               <option value="MENTOR">MENTOR</option>
               <option value="AIGs">AIGs</option>
@@ -744,7 +732,7 @@ function WhitelistTab() {
             </select>
             {addRole === "AIGs" && (
               <select value={addAigSlug} onChange={(e) => setAddAigSlug(e.target.value)} required
-                className="flex-1 bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
+                className="flex-1 bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold outline-none appearance-none">
                 <option value="">Select AIG…</option>
                 {aigs.map((a) => <option key={a.id} value={a.slug}>{a.name}</option>)}
               </select>
@@ -775,7 +763,7 @@ function WhitelistTab() {
               placeholder="Search email or role…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
+              className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500"
             />
           </div>
         </div>
@@ -874,7 +862,7 @@ function ConfigTab() {
         <input
           type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)}
           disabled={isLoading}
-          className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
+          className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 mb-3"
         />
         <button
           onClick={() => saveMutation.mutate({ key: "cv_freeze_deadline", value: new Date(deadline).toISOString() })}
@@ -997,6 +985,14 @@ function SyncBadge() {
 
 export default function PlacementAdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
+  const exportMutation = useExportCsv();
+
+  const handleExport = () => {
+    exportMutation.mutate(
+      { path: "/admin/export/roster", filename: "batch-roster.csv" },
+      { onSettled: () => setTimeout(() => exportMutation.reset(), 2500) },
+    );
+  };
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans pb-12">
@@ -1019,10 +1015,20 @@ export default function PlacementAdminDashboard() {
           <p className="text-sm font-semibold text-emerald-700/70">PGP &amp; ABM Cohorts · Academic Year 2026</p>
         </div>
         <button
-          onClick={() => downloadCsv(`${API_BASE}/admin/export/roster`, "batch-roster.csv")}
-          className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-2.5 px-5 rounded-xl transition-colors shadow-md flex items-center gap-2 text-sm"
+          onClick={handleExport}
+          disabled={exportMutation.isPending}
+          className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-2.5 px-5 rounded-xl transition-colors shadow-md flex items-center gap-2 text-sm disabled:opacity-60"
+          title={exportMutation.isError ? (exportMutation.error?.message ?? "Export failed") : undefined}
         >
-          <Download size={16} /> Export Full Roster CSV
+          {exportMutation.isPending ? (
+            <><Loader2 size={16} className="animate-spin" /> Exporting…</>
+          ) : exportMutation.isSuccess ? (
+            <><CheckCircle size={16} className="text-emerald-300" /> Downloaded</>
+          ) : exportMutation.isError ? (
+            <><XCircle size={16} className="text-red-300" /> Export Failed</>
+          ) : (
+            <><Download size={16} /> Export Full Roster CSV</>
+          )}
         </button>
       </header>
 

@@ -4,10 +4,10 @@ const prisma = require("../lib/prisma");
 
 // PATCH /profile
 // Name is locked to Google account (set at login, never editable).
-// MENTOR only: update firm and domain.
+// MENTOR only: update firm, domain, and phone.
 const updateProfile = async (req, res, next) => {
   try {
-    const { firm, domain } = req.body;
+    const { firm, domain, phone } = req.body;
 
     const user = await prisma.user.findUnique({
       where:  { id: req.user.sub },
@@ -15,10 +15,11 @@ const updateProfile = async (req, res, next) => {
     });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (user.role === "MENTOR" && (firm !== undefined || domain !== undefined)) {
+    if (user.role === "MENTOR" && (firm !== undefined || domain !== undefined || phone !== undefined)) {
       const mentorUpdates = {};
       if (firm   && typeof firm   === "string") mentorUpdates.firm   = firm.trim();
       if (domain && typeof domain === "string") mentorUpdates.domain = domain.trim();
+      if (typeof phone === "string") mentorUpdates.phone = phone.trim() || null;
 
       if (Object.keys(mentorUpdates).length > 0) {
         await prisma.mentorProfile.update({
@@ -31,7 +32,7 @@ const updateProfile = async (req, res, next) => {
     const mp = user.role === "MENTOR"
       ? await prisma.mentorProfile.findUnique({
           where:  { userId: req.user.sub },
-          select: { firm: true, domain: true, slug: true },
+          select: { firm: true, domain: true, phone: true, slug: true },
         })
       : null;
 
@@ -55,7 +56,7 @@ const getProfile = async (req, res, next) => {
     if (user.role === "MENTOR") {
       const mp = await prisma.mentorProfile.findUnique({
         where:  { userId: req.user.sub },
-        select: { firm: true, domain: true, slug: true },
+        select: { firm: true, domain: true, phone: true, slug: true },
       });
       return res.json({ ...user, ...(mp ?? {}) });
     }

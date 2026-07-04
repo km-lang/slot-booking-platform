@@ -1,23 +1,10 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight, Download } from "lucide-react";
-import { useAigOverview } from "../hooks/useApi";
+import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight, Download, XCircle, Loader2 } from "lucide-react";
+import { useAigOverview, useExportCsv } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
-import { getToken, API_BASE } from "../lib/apiClient";
-
-const downloadCsv = async (url, filename) => {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-  if (!res.ok) return;
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href, download: filename });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
-};
 
 const getCountdown = (deadline) => {
   if (!deadline) return null;
@@ -35,10 +22,18 @@ export default function AigAdminDashboard() {
   const interventionRef = React.useRef(null);
 
   const { data, isLoading, error } = useAigOverview(aigSlug);
+  const exportMutation = useExportCsv();
 
   const aigName =
     data?.aigName ??
     aigSlug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+  const handleExport = () => {
+    exportMutation.mutate(
+      { path: `/admin/aig/${aigSlug}/export`, filename: `aig-${aigSlug}-roster.csv` },
+      { onSettled: () => setTimeout(() => exportMutation.reset(), 2500) },
+    );
+  };
 
   const filteredCohorts = (data?.cohorts ?? []).filter(
     (c) =>
@@ -53,7 +48,7 @@ export default function AigAdminDashboard() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans pb-24">
-      <div className="max-w-md md:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative">
+      <div className="max-w-md md:max-w-4xl mx-auto min-h-screen bg-[var(--color-bg)] shadow-2xl relative">
 
         {/* Sticky Header */}
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-4">
@@ -71,12 +66,20 @@ export default function AigAdminDashboard() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
-                onClick={() => downloadCsv(`${API_BASE}/admin/aig/${aigSlug}/export`, `aig-${aigSlug}-roster.csv`)}
-                disabled={isLoading}
+                onClick={handleExport}
+                disabled={exportMutation.isPending || isLoading}
                 className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-40"
-                title="Export roster CSV"
+                title={
+                  exportMutation.isPending ? "Exporting…"
+                  : exportMutation.isSuccess ? "Downloaded"
+                  : exportMutation.isError ? (exportMutation.error?.message ?? "Export failed")
+                  : "Export roster CSV"
+                }
               >
-                <Download size={16} />
+                {exportMutation.isPending ? <Loader2 size={16} className="animate-spin" />
+                  : exportMutation.isSuccess ? <CheckCircle size={16} className="text-emerald-600" />
+                  : exportMutation.isError ? <XCircle size={16} className="text-red-600" />
+                  : <Download size={16} />}
               </button>
               <button
                 onClick={() => interventionRef.current?.scrollIntoView({ behavior: "smooth" })}

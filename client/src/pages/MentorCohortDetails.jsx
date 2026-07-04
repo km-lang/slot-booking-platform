@@ -1,29 +1,24 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle } from "lucide-react";
-import { useMentorCohort } from "../hooks/useApi";
-import { getToken, API_BASE } from "../lib/apiClient";
+import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle, XCircle, Loader2 } from "lucide-react";
+import { useMentorCohort, useExportCsv } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
-
-const downloadCsv = async (url, filename) => {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-  if (!res.ok) return;
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href, download: filename });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
-};
 
 export default function MentorCohortDetails() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data, isLoading, error } = useMentorCohort();
+  const exportMutation = useExportCsv();
   const cohort  = data?.cohort  ?? null;
   const members = data?.members ?? [];
+
+  const handleExport = () => {
+    exportMutation.mutate(
+      { path: "/cohort/export", filename: `cohort-${cohort?.label ?? "export"}.csv` },
+      { onSettled: () => setTimeout(() => exportMutation.reset(), 2500) },
+    );
+  };
 
   const filteredMembers = searchQuery.trim()
     ? members.filter(
@@ -41,7 +36,7 @@ export default function MentorCohortDetails() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl relative flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[var(--color-bg)] shadow-2xl relative flex flex-col">
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -56,12 +51,20 @@ export default function MentorCohortDetails() {
             </div>
           </div>
           <button
-            onClick={() => downloadCsv(`${API_BASE}/cohort/export`, `cohort-${cohort?.label ?? "export"}.csv`)}
-            disabled={isLoading || !cohort}
+            onClick={handleExport}
+            disabled={exportMutation.isPending || isLoading || !cohort}
             className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
-            title="Download cohort CSV"
+            title={
+              exportMutation.isPending ? "Exporting…"
+              : exportMutation.isSuccess ? "Downloaded"
+              : exportMutation.isError ? (exportMutation.error?.message ?? "Export failed")
+              : "Download cohort CSV"
+            }
           >
-            <Download size={16} />
+            {exportMutation.isPending ? <Loader2 size={16} className="animate-spin" />
+              : exportMutation.isSuccess ? <CheckCircle2 size={16} className="text-emerald-600" />
+              : exportMutation.isError ? <XCircle size={16} className="text-red-600" />
+              : <Download size={16} />}
           </button>
         </header>
 
@@ -119,7 +122,7 @@ export default function MentorCohortDetails() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mb-3 bg-[#F5F7FA] rounded-xl p-3 border border-emerald-900/5">
+                    <div className="grid grid-cols-2 gap-2 mb-3 bg-[var(--color-bg)] rounded-xl p-3 border border-emerald-900/5">
                       <div>
                         <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-0.5">Slots Taken</div>
                         <div className="font-black text-sm text-emerald-950">

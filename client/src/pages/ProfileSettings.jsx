@@ -13,12 +13,14 @@ export default function ProfileSettings() {
 
   const [firm,   setFirm]   = useState("");
   const [domain, setDomain] = useState("");
+  const [phone,  setPhone]  = useState("");
   const [saved,  setSaved]  = useState(false);
 
   useEffect(() => {
     if (profile) {
       setFirm(profile.firm ?? "");
       setDomain(profile.domain ?? "");
+      setPhone(profile.phone ?? "");
     }
   }, [profile]);
 
@@ -31,6 +33,7 @@ export default function ProfileSettings() {
     if (isMentor) {
       if (firm.trim())   body.firm   = firm.trim();
       if (domain.trim()) body.domain = domain.trim();
+      if (phone.trim())  body.phone  = phone.trim();
     }
     mutation.mutate(body, {
       onSuccess: (updated) => {
@@ -49,7 +52,7 @@ export default function ProfileSettings() {
 
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[#F5F7FA] shadow-2xl flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[var(--color-bg)] shadow-2xl flex flex-col">
 
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
           <button
@@ -181,7 +184,7 @@ export default function ProfileSettings() {
                       value={firm}
                       onChange={(e) => setFirm(e.target.value)}
                       placeholder="e.g. McKinsey & Co."
-                      className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                      className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
                     />
                   </div>
                   <div>
@@ -193,8 +196,23 @@ export default function ProfileSettings() {
                       value={domain}
                       onChange={(e) => setDomain(e.target.value)}
                       placeholder="e.g. Strategy Consulting"
-                      className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                      className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
+                      Mobile Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="e.g. +91 98765 43210"
+                      className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
+                    />
+                    <p className="text-[10px] font-semibold text-emerald-800/40 mt-1.5">
+                      Shown to students as Call / WhatsApp once they've booked a session with you. Include the country code.
+                    </p>
                   </div>
                 </div>
 

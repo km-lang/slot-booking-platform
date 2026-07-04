@@ -79,7 +79,7 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
       </button>
 
       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="bg-[#F5F7FA] border-t border-emerald-900/5 p-3">
+        <div className="bg-[var(--color-bg)] border-t border-emerald-900/5 p-3">
           {isLoading ? (
             <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading mentors…</div>
           ) : mentors.length > 0 ? (

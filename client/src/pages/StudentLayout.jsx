@@ -12,7 +12,7 @@ export default function StudentLayout() {
 
   return (
     <div className="min-h-screen-safe app-bg font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl relative flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto min-h-screen-safe bg-[var(--color-bg)] shadow-2xl relative flex flex-col">
         {/* PERMANENT HEADER: Never unmounts, preventing the "flash" — sticky (not
             absolute) so it stays reachable while the page scrolls. absolute here
             positioned it relative to a container that grows past one viewport with

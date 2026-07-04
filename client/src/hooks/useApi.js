@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "../lib/apiClient";
+import { apiFetch, downloadFile } from "../lib/apiClient";
 
 // ── Stable query keys ─────────────────────────────────────────────────────────
 // Centralised here so invalidation in mutations always matches the right cache.
@@ -395,3 +395,12 @@ export const useLiftBan = () => {
     },
   });
 };
+
+// ── CSV export ─────────────────────────────────────────────────────────────────
+// Shared by every "Export CSV" button (student bookings, mentor cohort, AIG roster,
+// batch roster) — gives each one isPending/isSuccess/isError instead of the
+// download either silently working or silently doing nothing on failure.
+export const useExportCsv = () =>
+  useMutation({
+    mutationFn: ({ path, filename }) => downloadFile(path, filename),
+  });

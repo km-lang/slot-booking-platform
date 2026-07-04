@@ -4,27 +4,36 @@ export default {
   theme: {
     extend: {
       colors: {
-        // "Soft Sky & Slate" theme: light cool-toned neutrals -> muted slate blue -> slate charcoal.
+        // "Forest & Brass" theme: warm ivory -> muted sage -> deep forest green, with a brass gold accent.
         emerald: {
-          50: "#eff3f6",
-          100: "#dce6ec",
-          200: "#a8c3d1", // powder blue accent
-          300: "#8fb0c2",
-          400: "#739cb3",
-          500: "#5b7c99", // primary (muted slate blue)
-          600: "#4d6883",
-          700: "#3f5469",
-          800: "#34465a",
-          900: "#2e3a46", // slate charcoal (headings)
-          950: "#1c242c", // deepest slate (near-black, never pure black)
+          50: "#faf6ed",
+          100: "#f3efe1",
+          200: "#e3dcc7",
+          300: "#c7d3cb",
+          400: "#9fb2a7",
+          500: "#5c7c6a", // primary (forest sage)
+          600: "#45614f",
+          700: "#3b463f",
+          800: "#24312b",
+          900: "#12332b", // deep forest green (headings)
+          950: "#0b211b", // deepest forest (near-black, never pure black)
         },
         gem: {
-          950: "#1c242c",
-          900: "#2e3a46",
-          800: "#34465a",
-          accent: "#5b7c99",
-          light: "#a8c3d1",
+          950: "#0b211b",
+          900: "#12332b",
+          800: "#24312b",
+          accent: "#c9a24b", // brass gold
+          light: "#f3ecd8",
         },
+      },
+      fontFamily: {
+        display: ["Fraunces", "ui-serif", "serif"],
+      },
+      boxShadow: {
+        elevated: "0 4px 20px -4px rgba(18, 51, 43, 0.12)",
+      },
+      backdropBlur: {
+        glass: "24px",
       },
       animation: {
         "pulse-fast": "pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite",

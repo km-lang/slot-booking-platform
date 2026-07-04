@@ -73,7 +73,7 @@ function RunningLateSheet({ session, onClose }) {
               className={`py-2.5 rounded-xl text-sm font-bold border transition-colors
                 ${!useCustom && delayMins === m
                   ? "bg-amber-100 border-amber-400 text-amber-800"
-                  : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-800 hover:bg-amber-50"}`}
+                  : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-800 hover:bg-amber-50"}`}
             >
               {m}m
             </button>
@@ -89,7 +89,7 @@ function RunningLateSheet({ session, onClose }) {
             value={custom}
             onChange={(e) => { setCustom(e.target.value); setUseCustom(true); }}
             onFocus={() => setUseCustom(true)}
-            className={`flex-1 bg-[#F5F7FA] border rounded-xl px-4 py-2.5 text-sm font-bold outline-none
+            className={`flex-1 bg-[var(--color-bg)] border rounded-xl px-4 py-2.5 text-sm font-bold outline-none
               ${useCustom ? "border-amber-400" : "border-emerald-900/10"}`}
           />
           <span className="text-xs font-bold text-emerald-700/60">minutes</span>
@@ -169,7 +169,7 @@ function AllocateSheet({ slot, onClose }) {
               <input
                 type="text" placeholder="Search by PGP ID or name…" value={query} autoFocus
                 onChange={(e) => handleQueryChange(e.target.value)}
-                className="w-full bg-[#F5F7FA] border border-emerald-900/10 rounded-xl pl-9 pr-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+                className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl pl-9 pr-4 py-3 text-sm font-bold text-emerald-950 outline-none"
               />
             </div>
 
@@ -200,7 +200,7 @@ function AllocateSheet({ slot, onClose }) {
             <div className="grid grid-cols-3 gap-2">
               {Object.entries(FOCUS_LABELS).map(([key, label]) => (
                 <button key={key} type="button" onClick={() => setFocus(key)}
-                  className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${focus === key ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[#F5F7FA] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                  className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${focus === key ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
                   {label}
                 </button>
               ))}
@@ -298,6 +298,9 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
   // Server rejects attendance marking before the session starts — mirrored here so
   // mentors see a disabled state instead of tapping the button and hitting an alert().
   const hasStarted = new Date(session.startTime) <= new Date();
+  // Session time has fully passed with no attendance marked yet — distinguishes a
+  // genuinely-in-progress session from backlog that needs the mentor's attention.
+  const isOverdue = new Date(session.endTime) < new Date();
 
   return (
     <div className="relative">
@@ -307,7 +310,12 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
           <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700/50">
             {session.date}
           </span>
-          {session.delayMinutes > 0 && (
+          {isOverdue && (
+            <span className="flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+              <Clock size={9} /> Overdue — mark attendance
+            </span>
+          )}
+          {!isOverdue && session.delayMinutes > 0 && (
             <span className="flex items-center gap-1 bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
               <Clock size={9} /> Running {session.delayMinutes}m late
             </span>
@@ -559,7 +567,7 @@ export default function MentorDashboard() {
 
   return (
     <div className="min-h-screen-safe app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen-safe bg-[#F5F7FA] shadow-2xl relative flex flex-col">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen-safe bg-[var(--color-bg)] shadow-2xl relative flex flex-col">
 
         {/* Header — identity bar only; stays put while the page scrolls beneath it */}
         <header className="sticky top-0 z-30 bg-emerald-900 px-5 header-safe-top pb-4 shadow-lg flex items-center justify-between gap-2">
