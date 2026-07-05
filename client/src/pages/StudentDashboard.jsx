@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Search, ChevronDown, Shield, Briefcase, TrendingUp, CalendarCheck, Users } from "lucide-react";
 import { useAigs, useAigMentors, useAllMentors, useMyBookings } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
+import Card from "../components/ui/Card";
+import { SkeletonCard } from "../components/ui/Skeleton";
 
 const AIG_ICON = {
   disha:      <Shield size={20} />,
@@ -81,7 +83,9 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
       <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
         <div className="bg-[var(--color-bg)] border-t border-emerald-900/5 p-3">
           {isLoading ? (
-            <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading mentors…</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {[0, 1].map((i) => <SkeletonCard key={i} padding="p-4" />)}
+            </div>
           ) : mentors.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {mentors.map((mentor) => (
@@ -167,9 +171,11 @@ export default function StudentDashboard() {
           <h2 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest mb-3 px-1">
             Search Results{allMentors && ` (${filteredMentors.length})`}
           </h2>
-          <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden p-3">
+          <Card padding="p-3" className="overflow-hidden">
             {!allMentors ? (
-              <div className="p-8 text-center text-emerald-800/40 text-sm font-semibold">Loading…</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {[0, 1, 2].map((i) => <SkeletonCard key={i} padding="p-4" />)}
+              </div>
             ) : filteredMentors.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {filteredMentors.map((mentor) => (
@@ -181,7 +187,7 @@ export default function StudentDashboard() {
                 No mentors found matching "{searchQuery}"
               </div>
             )}
-          </div>
+          </Card>
         </div>
       ) : (
         <div className="animate-in fade-in duration-200">
@@ -189,11 +195,11 @@ export default function StudentDashboard() {
             Preparation Groups
           </h2>
           {aigsLoading ? (
-            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm p-8 text-center text-emerald-800/40 text-sm font-semibold">
-              Loading groups…
+            <div className="space-y-3">
+              {[0, 1, 2].map((i) => <SkeletonCard key={i} />)}
             </div>
           ) : (
-            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+            <Card padding="p-0" className="overflow-hidden divide-y divide-emerald-900/5">
               {aigs.map((aig) => (
                 <AigRow
                   key={aig.id}
@@ -202,7 +208,7 @@ export default function StudentDashboard() {
                   onToggle={() => setExpandedAig((prev) => (prev === aig.id ? null : aig.id))}
                 />
               ))}
-            </div>
+            </Card>
           )}
         </div>
       )}

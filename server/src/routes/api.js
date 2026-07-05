@@ -3,7 +3,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { verifySession, requireRole, requireAigScope } = require("../middleware/auth");
+const { verifySession, requireRole, requireAigScope, requireMentorAigScope } = require("../middleware/auth");
 const { bookingRateLimiter } = require("../middleware/rateLimiter");
 
 const slotController    = require("../controllers/slotController");
@@ -45,11 +45,6 @@ router.delete(
   "/slots/:id",
   requireRole("MENTOR"),
   slotController.deleteSlot,
-);
-router.post(
-  "/slots/:id/re-release",
-  requireRole("MENTOR"),
-  slotController.releaseRemainingTime,
 );
 router.patch(
   "/slots/:id/delay",
@@ -143,6 +138,7 @@ router.get(
 router.get(
   "/admin/mentor/:mentorSlug",
   requireRole("AIGs", "SuperADMIN"),
+  requireMentorAigScope("mentorSlug"),
   adminController.getMentorSessionDetail,
 );
 

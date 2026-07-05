@@ -14,9 +14,9 @@ export function SkeletonText({ lines = 1, className = "" }) {
   );
 }
 
-export function SkeletonCard({ className = "" }) {
+export function SkeletonCard({ padding = "p-5", className = "" }) {
   return (
-    <div className={`bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm ${className}`}>
+    <div className={`bg-white border border-emerald-900/10 rounded-2xl ${padding} shadow-sm ${className}`}>
       <Skeleton className="h-3 w-1/3 mb-3" />
       <Skeleton className="h-5 w-2/3 mb-2" />
       <Skeleton className="h-3 w-1/2" />

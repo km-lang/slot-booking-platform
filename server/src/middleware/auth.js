@@ -1,6 +1,7 @@
 "use strict";
 
-const jwt = require("jsonwebtoken");
+const jwt    = require("jsonwebtoken");
+const prisma = require("../lib/prisma");
 
 const verifySession = (req, res, next) => {
   const header = req.headers.authorization || "";
@@ -33,4 +34,30 @@ const requireAigScope = (slugParam) =>
     next();
   };
 
-module.exports = { verifySession, requireRole, requireAigScope };
+// Like requireAigScope, but for routes keyed by a mentor's slug rather than an
+// AIG's — the AIG to scope against has to be resolved from the mentor first.
+// SuperADMIN bypasses (no AIG scope applies to that role); a mentor with no AIG
+// (independent mentor) is out of scope for every AIGs-role user by construction.
+const requireMentorAigScope = (mentorSlugParam) =>
+  async (req, res, next) => {
+    if (!req.user) return res.status(403).json({ error: "Forbidden" });
+    if (req.user.role !== "AIGs") return next();
+
+    try {
+      const mentor = await prisma.mentorProfile.findUnique({
+        where:  { slug: req.params[mentorSlugParam] },
+        select: { aig: { select: { slug: true } } },
+      });
+      // Let a nonexistent mentor fall through to the route's own 404, rather
+      // than masking it behind a 403.
+      if (!mentor) return next();
+      if (mentor.aig?.slug !== req.user.aigSlug) {
+        return res.status(403).json({ error: "Forbidden — outside your AIG scope" });
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+
+module.exports = { verifySession, requireRole, requireAigScope, requireMentorAigScope };

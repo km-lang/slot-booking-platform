@@ -17,6 +17,9 @@ import {
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
+import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
+import Toggle from "../components/ui/Toggle";
 
 const COLORS = ["var(--color-heading)", "var(--color-primary)", "var(--color-primary-light)", "var(--color-primary-lighter)"];
 
@@ -42,6 +45,16 @@ const ACTION_BADGE = {
 
 const fmtTime = (d) =>
   new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+// Audit events can span many days, so the log needs the date, not just the
+// time — shown as dd-mm-yyyy for consistency with the rest of the app's dates.
+const fmtDateTime = (d) => {
+  const date = new Date(d);
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  return `${dd}-${mm}-${yyyy} ${fmtTime(d)}`;
+};
 
 const parseMeta = (action, metaStr) => {
   if (!metaStr) return null;
@@ -118,7 +131,7 @@ function OverviewTab() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((kpi, i) => (
-          <div key={i} className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+          <Card key={i} className="relative overflow-hidden">
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-800/60 uppercase tracking-widest mb-3">
               {kpi.icon} {kpi.label}
             </div>
@@ -127,12 +140,12 @@ function OverviewTab() {
             <div className="absolute bottom-0 left-0 w-full h-1 bg-slate-100">
               <div className={`h-full ${kpi.barColor}`} style={{ width: `${kpi.barPct}%` }} />
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+        <Card>
           <h3 className="font-bold text-emerald-950 mb-1">Milestone Focus</h3>
           <p className="text-xs font-semibold text-emerald-700/60 mb-6">Booking purpose distribution</p>
           {purposeDistribution.length === 0 ? (
@@ -161,9 +174,9 @@ function OverviewTab() {
               </div>
             </>
           )}
-        </div>
+        </Card>
 
-        <div className="lg:col-span-2 bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+        <Card className="lg:col-span-2">
           <h3 className="font-bold text-emerald-950 mb-1">Mentor Utilization</h3>
           <p className="text-xs font-semibold text-emerald-700/60 mb-6">Slots offered vs. completed per mentor</p>
           {mentorUtilization.length === 0 ? (
@@ -183,11 +196,11 @@ function OverviewTab() {
               </ResponsiveContainer>
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* 30-day trend */}
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+      <Card>
         <h3 className="font-bold text-emerald-950 mb-1">30-Day Trend</h3>
         <p className="text-xs font-semibold text-emerald-700/60 mb-6">Bookings created vs. attended vs. no-show, by day</p>
         {!data?.trends || data.trends.length === 0 ? (
@@ -209,10 +222,10 @@ function OverviewTab() {
             </ResponsiveContainer>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Cohort breakdown */}
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm overflow-hidden">
+      <Card className="overflow-hidden">
         <h3 className="font-bold text-emerald-950 mb-1">Cohort Breakdown</h3>
         <p className="text-xs font-semibold text-emerald-700/60 mb-4">Coverage by cohort, across every org unit</p>
         <div className="overflow-x-auto max-h-72 overflow-y-auto">
@@ -248,10 +261,10 @@ function OverviewTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Audit log */}
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-emerald-950 flex items-center gap-2">
             <ActivitySquare size={18} className="text-emerald-600" /> Recent Activity
@@ -290,7 +303,7 @@ function OverviewTab() {
                           {ACTION_LABEL[e.action] ?? e.action}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-semibold text-emerald-700/60 text-xs">{fmtTime(e.createdAt)}</td>
+                      <td className="py-3 px-4 font-semibold text-emerald-700/60 text-xs whitespace-nowrap">{fmtDateTime(e.createdAt)}</td>
                       <td className="py-3 px-4 font-semibold text-emerald-950 text-xs truncate max-w-[140px]">{e.userEmail}</td>
                       <td className="py-3 px-4">
                         <span className="font-mono text-xs bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-700">{e.entity}</span>
@@ -305,7 +318,7 @@ function OverviewTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -320,7 +333,7 @@ function OrgCard({ title, stats, loading, accent }) {
   }[accent] ?? "text-emerald-700 bg-emerald-50 border-emerald-200";
 
   return (
-    <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+    <Card>
       <div className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded mb-3 border ${accentCls}`}>
         {title}
       </div>
@@ -341,13 +354,13 @@ function OrgCard({ title, stats, loading, accent }) {
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
 function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
   return (
-    <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden">
+    <Card padding="p-0" className="overflow-hidden">
       <button
         onClick={onToggle}
         className={`w-full p-4 flex items-center gap-3 transition-colors ${isExpanded ? "bg-emerald-50/50" : "hover:bg-emerald-50/30"}`}
@@ -391,7 +404,7 @@ function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -520,7 +533,7 @@ function HistoryTab() {
         />
       </div>
 
-      <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
+      <Card padding="p-0" className="overflow-hidden divide-y divide-emerald-900/5">
         {!query.trim() ? (
           <div className="p-8 text-center text-xs font-bold text-emerald-800/30">Start typing to search</div>
         ) : mode === "mentor" ? (
@@ -560,7 +573,7 @@ function HistoryTab() {
             </button>
           ))
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -675,11 +688,11 @@ function CalendarTab() {
 
 // ── Whitelist Tab ─────────────────────────────────────────────────────────────
 
-const ROLE_BADGE = {
-  SuperADMIN: "bg-purple-100 text-purple-800 border-purple-200",
-  AIGs:       "bg-amber-100 text-amber-800 border-amber-200",
-  MENTOR:     "bg-emerald-100 text-emerald-800 border-emerald-200",
-  STUDENT:    "bg-slate-100 text-slate-700 border-slate-200",
+const ROLE_TONE = {
+  SuperADMIN: "purple",
+  AIGs:       "warning",
+  MENTOR:     "success",
+  STUDENT:    "neutral",
 };
 
 function WhitelistTab() {
@@ -712,7 +725,7 @@ function WhitelistTab() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+      <Card>
         <h3 className="font-bold text-emerald-950 mb-4 flex items-center gap-2">
           <Plus size={16} className="text-emerald-600" /> Add to Whitelist
         </h3>
@@ -748,9 +761,9 @@ function WhitelistTab() {
             {addMutation.isPending ? "Adding…" : "Add User"}
           </button>
         </form>
-      </div>
+      </Card>
 
-      <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden">
+      <Card padding="p-0" className="overflow-hidden">
         <div className="px-5 py-4 border-b border-emerald-900/5 flex items-center gap-3">
           <h3 className="font-bold text-emerald-950 shrink-0">
             Approved Users{" "}
@@ -785,9 +798,9 @@ function WhitelistTab() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm text-emerald-950 truncate">{entry.email}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${ROLE_BADGE[entry.role] ?? ROLE_BADGE.STUDENT}`}>
+                    <Badge tone={ROLE_TONE[entry.role] ?? "neutral"} pill={false} className="text-[9px]">
                       {entry.role}
-                    </span>
+                    </Badge>
                     {entry.aigName && (
                       <span className="text-[10px] font-bold text-emerald-700/60">{entry.aigName}</span>
                     )}
@@ -804,7 +817,7 @@ function WhitelistTab() {
             ))
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -829,7 +842,7 @@ function ConfigTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+      <Card>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-bold text-emerald-950">Booking Window</h3>
@@ -838,20 +851,19 @@ function ConfigTab() {
           {isLoading ? (
             <div className="w-12 h-6 bg-slate-100 rounded-full animate-pulse" />
           ) : (
-            <div
-              onClick={() => saveMutation.mutate({ key: "booking_open", value: String(!isBookingOpen) })}
-              className={`w-12 h-6 rounded-full ${isBookingOpen ? "bg-emerald-500" : "bg-slate-300"} relative cursor-pointer transition-colors ${saveMutation.isPending ? "opacity-60 pointer-events-none" : ""}`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${isBookingOpen ? "left-7" : "left-1"}`} />
-            </div>
+            <Toggle
+              checked={isBookingOpen}
+              onChange={() => saveMutation.mutate({ key: "booking_open", value: String(!isBookingOpen) })}
+              disabled={saveMutation.isPending}
+            />
           )}
         </div>
         <p className={`text-[10px] font-black uppercase tracking-widest mt-3 ${isBookingOpen ? "text-emerald-600" : "text-red-500"}`}>
           {isLoading ? "—" : isBookingOpen ? "Open — students can book" : "Closed — bookings paused"}
         </p>
-      </div>
+      </Card>
 
-      <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+      <Card>
         <div className="flex items-center gap-2 mb-4">
           <Lock size={16} className="text-red-500" />
           <h3 className="font-bold text-emerald-950">CV Freeze Deadline</h3>
@@ -872,7 +884,7 @@ function ConfigTab() {
           <Save size={15} />
           {saveMutation.isPending ? "Saving…" : "Save Deadline"}
         </button>
-      </div>
+      </Card>
 
     </div>
   );
@@ -891,14 +903,20 @@ function BansTab() {
     });
   };
 
-  const fmtExpiry = (d) =>
-    d
-      ? new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-      : "Permanent";
+  // dd-mm-yyyy, consistent with the rest of the app's date formatting.
+  const fmtExpiry = (d) => {
+    if (!d) return "Permanent";
+    const date = new Date(d);
+    const dd = String(date.getDate()).padStart(2, "0");
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const yyyy = date.getFullYear();
+    const time = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    return `${dd}-${mm}-${yyyy} ${time}`;
+  };
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden">
+      <Card padding="p-0" className="overflow-hidden">
         <div className="px-5 py-4 border-b border-emerald-900/5 flex items-center justify-between">
           <h3 className="font-bold text-emerald-950 flex items-center gap-2">
             <Ban size={16} className="text-red-500" /> Active Bans
@@ -943,7 +961,7 @@ function BansTab() {
             ))
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

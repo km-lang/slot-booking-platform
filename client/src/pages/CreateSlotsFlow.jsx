@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCreateSlots } from "../hooks/useApi";
+import AppShell from "../components/ui/AppShell";
+import PageHeader from "../components/ui/PageHeader";
+import Toggle from "../components/ui/Toggle";
+import Button from "../components/ui/Button";
 
 const STEP_TITLES = ["Schedule", "Options & Review"];
 const TOTAL_STEPS = STEP_TITLES.length;
@@ -74,25 +78,24 @@ export default function CreateSlotsFlow() {
     const h12 = h % 12 === 0 ? 12 : h % 12;
     return `${h12}:${String(m).padStart(2, "0")} ${period}`;
   };
+  // startDate/endDate are raw YYYY-MM-DD strings from <input type="date"> —
+  // shown as dd-mm-yyyy instead of dumping the ISO string straight into the UI.
+  const fmtDateDMY = (d) => {
+    const [y, m, day] = d.split("-");
+    return `${day}-${m}-${y}`;
+  };
 
   return (
-    <div className="min-h-screen-safe app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen-safe bg-[var(--color-bg)] shadow-2xl flex flex-col">
-        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 header-safe-top pb-3 flex items-center gap-3">
-          <button
-            onClick={handleBack}
-            className="p-3 -ml-3 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-black text-lg leading-tight text-emerald-950 truncate">Release New Slots</h1>
-            <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
-              Step {step} of {TOTAL_STEPS} · {STEP_TITLES[step - 1]}
-            </p>
-          </div>
-        </header>
-
+    <AppShell
+      maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl"
+      header={
+        <PageHeader
+          title="Release New Slots"
+          subtitle={`Step ${step} of ${TOTAL_STEPS} · ${STEP_TITLES[step - 1]}`}
+          onBack={handleBack}
+        />
+      }
+    >
         <div className="flex items-center gap-1.5 px-4 pt-4">
           {STEP_TITLES.map((_, i) => (
             <div
@@ -213,10 +216,7 @@ export default function CreateSlotsFlow() {
                   <div className="text-sm font-bold text-emerald-950">Reserve for Cohort</div>
                   <div className="text-[10px] font-bold text-emerald-700/60 mt-0.5">Only your mentees can book this block</div>
                 </div>
-                <div onClick={() => setCohortOnly(!cohortOnly)}
-                  className={`w-12 h-6 rounded-full ${cohortOnly ? "bg-emerald-500" : "bg-slate-300"} relative cursor-pointer transition-colors shrink-0`}>
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${cohortOnly ? "left-7" : "left-1"}`} />
-                </div>
+                <Toggle checked={cohortOnly} onChange={setCohortOnly} />
               </div>
 
               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
@@ -226,10 +226,7 @@ export default function CreateSlotsFlow() {
                     {publishNow ? "Visible and bookable as soon as it's created" : "Saved as a draft — publish later when ready"}
                   </div>
                 </div>
-                <div onClick={() => setPublishNow(!publishNow)}
-                  className={`w-12 h-6 rounded-full ${publishNow ? "bg-emerald-500" : "bg-slate-300"} relative cursor-pointer transition-colors shrink-0`}>
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${publishNow ? "left-7" : "left-1"}`} />
-                </div>
+                <Toggle checked={publishNow} onChange={setPublishNow} />
               </div>
 
               <div className="bg-white border border-emerald-900/10 rounded-2xl p-4 space-y-2">
@@ -238,7 +235,7 @@ export default function CreateSlotsFlow() {
                   <>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Date</span>
-                      <span className="font-bold text-emerald-950">{startDate}</span>
+                      <span className="font-bold text-emerald-950">{fmtDateDMY(startDate)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Time</span>
@@ -249,11 +246,11 @@ export default function CreateSlotsFlow() {
                   <>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Starts</span>
-                      <span className="font-bold text-emerald-950">{startDate}, {fmtTime(startTime)}</span>
+                      <span className="font-bold text-emerald-950">{fmtDateDMY(startDate)}, {fmtTime(startTime)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Ends</span>
-                      <span className="font-bold text-emerald-950">{endDate}, {fmtTime(endTime)}</span>
+                      <span className="font-bold text-emerald-950">{fmtDateDMY(endDate)}, {fmtTime(endTime)}</span>
                     </div>
                   </>
                 )}
@@ -278,35 +275,34 @@ export default function CreateSlotsFlow() {
 
         <div className="px-4 pb-safe-6 pt-2">
           {step < TOTAL_STEPS ? (
-            <button
+            <Button
               onClick={() => setStep((s) => s + 1)}
               disabled={step === 1 && slotCount < 1}
-              className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-4 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95 transition-all"
+              className="w-full py-4 shadow-[0_8px_20px_rgba(0,0,0,0.2)]"
             >
               Continue
-            </button>
+            </Button>
           ) : (
             <>
-              <button
+              <Button
                 onClick={handleGenerateSlots}
                 disabled={isCreating || slotCount < 1}
-                className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-4 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95 transition-all flex items-center justify-center gap-2"
+                loading={isCreating}
+                className="w-full py-4 shadow-[0_8px_20px_rgba(0,0,0,0.2)]"
               >
-                {isCreating
-                  ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <><Plus size={18} /> Create {slotCount > 0 ? `${slotCount} ` : ""}Slot{slotCount !== 1 ? "s" : ""}</>}
-              </button>
-              <button
+                <Plus size={18} /> Create {slotCount > 0 ? `${slotCount} ` : ""}Slot{slotCount !== 1 ? "s" : ""}
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => setStep((s) => s - 1)}
                 disabled={isCreating}
-                className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
+                className="w-full mt-2"
               >
                 Back
-              </button>
+              </Button>
             </>
           )}
         </div>
-      </div>
-    </div>
+    </AppShell>
   );
 }

@@ -6,11 +6,14 @@ import {
 } from "lucide-react";
 import { useMentor, useSlots, useBookSlot, useCancelBooking, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
+import Sheet from "../components/ui/Sheet";
 
+// Kept consistent with StudentMyBookings.jsx and MentorDashboard.jsx — same
+// focus value should read the same wherever it's shown.
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
-  workex:  "Work Experience Optimization",
-  por:     "POR / ECA Formatting",
+  workex:  "Work Experience",
+  por:     "POR / ECA",
 };
 
 const fmt = (d) =>
@@ -74,12 +77,6 @@ export default function MentorBookingView() {
   // Any 409 on booking means the user can't book this specific slot right now —
   // show the exact server reason and swap the button to "Choose Another Slot".
   const bookConflict = sheetMode === "BOOK" && bookMutation.error?.status === 409;
-
-  useEffect(() => {
-    if (selectedSlot) document.body.style.overflow = "hidden";
-    else document.body.style.overflow = "unset";
-    return () => { document.body.style.overflow = "unset"; };
-  }, [selectedSlot]);
 
   // Reset mutation errors when the sheet closes
   useEffect(() => {
@@ -274,7 +271,7 @@ export default function MentorBookingView() {
                     {isMine && (
                       <button onClick={() => openSheet(slot, "CANCEL")} className="flex flex-col items-end gap-1 group">
                         <span className="text-xs font-bold text-red-600 bg-red-50 group-hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-                          Cancel <XCircle size={12} />
+                          Cancel Session <XCircle size={12} />
                         </span>
                       </button>
                     )}
@@ -293,22 +290,9 @@ export default function MentorBookingView() {
         <AppFooter />
       </div>
 
-      {/* Bottom Sheet Backdrop */}
-      <div
-        className={`fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-40 transition-opacity duration-300
-          ${selectedSlot ? "opacity-100 visible" : "opacity-0 invisible"}`}
-        onClick={() => !isProcessing && setSelectedSlot(null)}
-      />
-
-      {/* Bottom Sheet — fixed to the real viewport (not the scrolling content box this
-          page renders inside of), and width-clamped to match StudentLayout's shell so it
+      {/* Bottom Sheet — width-clamped to match StudentLayout's shell so it
           doesn't span the full browser window on desktop. */}
-      <div
-        className={`fixed bottom-0 left-0 right-0 mx-auto max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl bg-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 p-6 pb-safe-8 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]
-          ${selectedSlot ? "translate-y-0" : "translate-y-full"}`}
-      >
-        <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6" />
-
+      <Sheet isOpen={!!selectedSlot} onClose={() => !isProcessing && setSelectedSlot(null)}>
         {selectedSlot && (() => {
           const slotTime = `${fmtDate(selectedSlot.startTime)}, ${fmt(selectedSlot.startTime)} – ${fmt(selectedSlot.endTime)}`;
 
@@ -345,9 +329,9 @@ export default function MentorBookingView() {
                         className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 shadow-sm appearance-none cursor-pointer"
                       >
                         <option value="" disabled>Select your focus…</option>
-                        <option value="overall">Overall CV Review</option>
-                        <option value="workex">Work Experience Optimization</option>
-                        <option value="por">POR / ECA Formatting</option>
+                        {Object.entries(FOCUS_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
                       </select>
                       <ChevronDown size={18} className="absolute right-4 top-3 text-emerald-900/30 pointer-events-none" />
                     </div>
@@ -409,13 +393,13 @@ export default function MentorBookingView() {
                   onClick={() => setSelectedSlot(null)}
                   className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
                 >
-                  {sheetMode === "BOOK" ? "Cancel" : "Keep My Booking"}
+                  {sheetMode === "BOOK" ? "Not Now" : "Keep My Booking"}
                 </button>
               )}
             </div>
           );
         })()}
-      </div>
+      </Sheet>
     </div>
   );
 }

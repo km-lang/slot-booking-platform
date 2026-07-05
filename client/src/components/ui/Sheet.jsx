@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 // Generalizes MentorBookingView.jsx's bottom-sheet (backdrop fade + spring
@@ -10,6 +11,25 @@ export default function Sheet({
   children,
   maxWidthClassName = "max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl",
 }) {
+  // Every caller nulls its "target" state on close, which would otherwise blank
+  // the sheet's content mid-slide-down (children go from real data to `null`
+  // in the same render that isOpen flips false). Freezing the last real
+  // children while isOpen was true keeps the content visible through the exit
+  // animation instead of flashing empty.
+  const [content, setContent] = useState(children);
+  useEffect(() => {
+    if (isOpen) setContent(children);
+  }, [isOpen, children]);
+
+  // Body-scroll lock while open — was previously hand-rolled only in
+  // MentorBookingView; centralizing it here fixes every other sheet that
+  // didn't have it (background content scrolling behind an open sheet).
+  useEffect(() => {
+    if (!isOpen) return;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = "unset"; };
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -32,7 +52,7 @@ export default function Sheet({
             transition={{ type: "spring", damping: 32, stiffness: 300 }}
           >
             <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6" />
-            {children}
+            {content}
           </motion.div>
         </>
       )}

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
 import { useRescheduleSlot } from "../hooks/useApi";
+import AppShell from "../components/ui/AppShell";
+import PageHeader from "../components/ui/PageHeader";
+import Button from "../components/ui/Button";
 
 const toLocalHHMM = (iso) => {
   const d = new Date(iso);
@@ -55,23 +57,17 @@ export default function RescheduleSlot() {
   };
 
   return (
-    <div className="min-h-screen-safe app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen-safe bg-[var(--color-bg)] shadow-2xl flex flex-col">
-        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 header-safe-top pb-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate("/mentor")}
-            className="p-3 -ml-3 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <h1 className="font-black text-lg leading-tight text-emerald-950 truncate">Reschedule Session</h1>
-            <p className="text-[11px] font-semibold text-emerald-700/60 truncate">
-              with <span className="text-emerald-800 font-bold">{session.student.name}</span>
-            </p>
-          </div>
-        </header>
-
+    <AppShell
+      maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl"
+      header={
+        <PageHeader
+          title="Reschedule Session"
+          subtitle={<>with <span className="font-bold text-emerald-800">{session.student.name}</span></>}
+          subtitleCase="normal"
+          onBack={() => navigate("/mentor")}
+        />
+      }
+    >
         <main className="flex-1 px-4 py-6 pb-safe-6">
           <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">Currently: {session.date} · {session.time}</p>
 
@@ -124,25 +120,27 @@ export default function RescheduleSlot() {
             </p>
           )}
 
-          <button
+          <Button
             onClick={handleSubmit}
             disabled={reschedule.isPending || !isRangeValid}
-            className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-4 rounded-xl shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95 transition-all"
+            loading={reschedule.isPending}
+            loadingText="Rescheduling…"
+            className="w-full py-4 shadow-[0_8px_20px_rgba(0,0,0,0.2)]"
           >
-            {reschedule.isPending ? "Rescheduling…" : "Confirm New Time"}
-          </button>
-          <button
+            Confirm New Time
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => navigate("/mentor")}
             disabled={reschedule.isPending}
-            className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
+            className="w-full mt-2"
           >
             Keep Current Time
-          </button>
+          </Button>
           <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
             No penalty applies. {session.student.name} will get an updated calendar invite.
           </p>
         </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }

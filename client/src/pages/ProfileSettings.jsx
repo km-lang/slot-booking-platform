@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Save, CheckCircle } from "lucide-react";
+import { User, Save, CheckCircle } from "lucide-react";
 import { useProfile, useUpdateProfile } from "../hooks/useApi";
 import { useAuth } from "../context/useAuth";
+import { getRoleLabel } from "../lib/roleHome";
 import AppFooter from "../components/AppFooter";
+import AppShell from "../components/ui/AppShell";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
 
 export default function ProfileSettings() {
   const navigate    = useNavigate();
@@ -25,7 +31,7 @@ export default function ProfileSettings() {
   }, [profile]);
 
   const isMentor = profile?.role === "MENTOR";
-  const roleLabel = profile?.aigCategory === "COMMITTEE" ? "Committee" : profile?.role;
+  const roleLabel = getRoleLabel(profile);
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -51,26 +57,16 @@ export default function ProfileSettings() {
     : "/student";
 
   return (
-    <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[var(--color-bg)] shadow-2xl flex flex-col">
-
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate(backPath)}
-            className="p-2 -ml-2 rounded-full hover:bg-emerald-50 text-emerald-800 transition-colors"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <h1 className="font-black text-lg leading-tight text-emerald-950">
-              {isMentor ? "Edit Profile" : "My Profile"}
-            </h1>
-            <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">
-              {isLoading ? "Loading…" : profile?.email}
-            </p>
-          </div>
-        </header>
-
+    <AppShell
+      maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl"
+      header={
+        <PageHeader
+          title={isMentor ? "Edit Profile" : "My Profile"}
+          subtitle={isLoading ? "Loading…" : profile?.email}
+          onBack={() => navigate(backPath)}
+        />
+      }
+    >
         <main className="flex-1 px-4 py-8">
           {/* Avatar */}
           <div className="flex flex-col items-center mb-8">
@@ -92,129 +88,79 @@ export default function ProfileSettings() {
 
           <div className="space-y-4">
             {/* Read-only account info */}
-            <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm space-y-4">
+            <Card className="space-y-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700/50 -mb-1">
                 Account
               </p>
 
-              {/* Name — locked to Google account */}
-              <div>
-                <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={profile?.name ?? ""}
-                  disabled
-                  className="w-full bg-slate-50 border border-emerald-900/5 rounded-xl px-4 py-3 text-sm font-bold text-emerald-800/40 outline-none cursor-not-allowed"
-                />
-                <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
-                  Synced from your Google account — cannot be changed here
-                </p>
-              </div>
+              <Input
+                label="Full Name"
+                type="text"
+                value={profile?.name ?? ""}
+                disabled
+                hint="Synced from your Google account — cannot be changed here"
+              />
 
-              {/* Email — always locked */}
-              <div>
-                <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={profile?.email ?? ""}
-                  disabled
-                  className="w-full bg-slate-50 border border-emerald-900/5 rounded-xl px-4 py-3 text-sm font-bold text-emerald-800/40 outline-none cursor-not-allowed"
-                />
-                <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
-                  Email cannot be changed
-                </p>
-              </div>
-            </div>
+              <Input
+                label="Email"
+                type="email"
+                value={profile?.email ?? ""}
+                disabled
+                hint="Email cannot be changed"
+              />
+            </Card>
 
             {/* Student-only: cohort + Disha mentor */}
             {profile?.role === "STUDENT" && (profile?.cohort || profile?.dishaMentor) && (
-              <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm space-y-4">
+              <Card className="space-y-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700/50 -mb-1">
                   Disha Assignment
                 </p>
                 {profile?.cohort && (
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                      Cohort
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.cohort}
-                      disabled
-                      className="w-full bg-slate-50 border border-emerald-900/5 rounded-xl px-4 py-3 text-sm font-bold text-emerald-800/40 outline-none cursor-not-allowed"
-                    />
-                  </div>
+                  <Input label="Cohort" type="text" value={profile.cohort} disabled />
                 )}
                 {profile?.dishaMentor && (
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                      Your Disha Mentor
-                    </label>
-                    <input
-                      type="text"
-                      value={profile.dishaMentor}
-                      disabled
-                      className="w-full bg-slate-50 border border-emerald-900/5 rounded-xl px-4 py-3 text-sm font-bold text-emerald-800/40 outline-none cursor-not-allowed"
-                    />
-                    <p className="text-[10px] font-semibold text-emerald-700/40 mt-1 pl-1">
-                      Assigned by Disha — cannot be changed
-                    </p>
-                  </div>
+                  <Input
+                    label="Your Disha Mentor"
+                    type="text"
+                    value={profile.dishaMentor}
+                    disabled
+                    hint="Assigned by Disha — cannot be changed"
+                  />
                 )}
-              </div>
+              </Card>
             )}
 
             {/* Mentor-only: editable firm + domain */}
             {isMentor && (
               <form onSubmit={handleSave}>
-                <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm space-y-4">
+                <Card className="space-y-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700/50 -mb-1">
                     Mentor Profile
                   </p>
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                      Current Firm / Organisation
-                    </label>
-                    <input
-                      type="text"
-                      value={firm}
-                      onChange={(e) => setFirm(e.target.value)}
-                      placeholder="e.g. McKinsey & Co."
-                      className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                      Domain / Function
-                    </label>
-                    <input
-                      type="text"
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value)}
-                      placeholder="e.g. Strategy Consulting"
-                      className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase tracking-widest mb-1.5">
-                      Mobile Number
-                    </label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. +91 98765 43210"
-                      className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500"
-                    />
-                    <p className="text-[10px] font-semibold text-emerald-800/40 mt-1.5">
-                      Shown to students as Call / WhatsApp once they've booked a session with you. Include the country code.
-                    </p>
-                  </div>
-                </div>
+                  <Input
+                    label="Current Firm / Organisation"
+                    type="text"
+                    value={firm}
+                    onChange={(e) => setFirm(e.target.value)}
+                    placeholder="e.g. McKinsey & Co."
+                  />
+                  <Input
+                    label="Domain / Function"
+                    type="text"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                    placeholder="e.g. Strategy Consulting"
+                  />
+                  <Input
+                    label="Mobile Number"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +91 98765 43210"
+                    hint="Shown to students as Call / WhatsApp once they've booked a session with you. Include the country code."
+                  />
+                </Card>
 
                 {mutation.error && (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4">
@@ -229,22 +175,20 @@ export default function ProfileSettings() {
                   </div>
                 )}
 
-                <button
+                <Button
                   type="submit"
                   disabled={mutation.isPending}
-                  className="w-full mt-4 bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-4 rounded-xl shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
+                  loading={mutation.isPending}
+                  loadingText="Saving…"
+                  className="w-full mt-4 py-4 shadow-md"
                 >
-                  {mutation.isPending
-                    ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    : <Save size={16} />}
-                  {mutation.isPending ? "Saving…" : "Save Changes"}
-                </button>
+                  <Save size={16} /> Save Changes
+                </Button>
               </form>
             )}
           </div>
         </main>
         <AppFooter />
-      </div>
-    </div>
+    </AppShell>
   );
 }

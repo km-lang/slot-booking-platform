@@ -37,8 +37,8 @@ function App() {
             path="/student/:group/:mentorId"
             element={t(<MentorBookingView />)}
           />
+          <Route path="/student/bookings" element={t(<StudentMyBookings />)} />
         </Route>
-        <Route path="/student/bookings" element={t(<StudentMyBookings />)} />
       </Route>
 
       {/* Mentor flow */}

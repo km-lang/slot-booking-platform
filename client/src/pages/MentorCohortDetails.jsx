@@ -1,8 +1,12 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Download, AlertCircle, CheckCircle2, MessageCircle, XCircle, Loader2 } from "lucide-react";
+import { Search, Download, AlertCircle, CheckCircle, Mail, XCircle, Loader2 } from "lucide-react";
 import { useMentorCohort, useExportCsv } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
+import AppShell from "../components/ui/AppShell";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
+import { SkeletonCard } from "../components/ui/Skeleton";
 
 export default function MentorCohortDetails() {
   const navigate = useNavigate();
@@ -35,39 +39,34 @@ export default function MentorCohortDetails() {
     : "Cohort Tracker";
 
   return (
-    <div className="min-h-screen app-bg text-emerald-950 font-sans">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto min-h-screen bg-[var(--color-bg)] shadow-2xl relative flex flex-col">
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <AppShell
+      maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl"
+      header={
+        <PageHeader
+          title="Cohort Tracker"
+          subtitle={headerLabel}
+          onBack={() => navigate("/mentor")}
+          actions={
             <button
-              onClick={() => navigate("/mentor")}
-              className="p-2 -ml-2 rounded-full hover:bg-emerald-50 active:bg-emerald-100 text-emerald-800 transition-colors"
+              onClick={handleExport}
+              disabled={exportMutation.isPending || isLoading || !cohort}
+              className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
+              title={
+                exportMutation.isPending ? "Exporting…"
+                : exportMutation.isSuccess ? "Downloaded"
+                : exportMutation.isError ? (exportMutation.error?.message ?? "Export failed")
+                : "Download cohort CSV"
+              }
             >
-              <ArrowLeft size={20} />
+              {exportMutation.isPending ? <Loader2 size={16} className="animate-spin" />
+                : exportMutation.isSuccess ? <CheckCircle size={16} className="text-emerald-600" />
+                : exportMutation.isError ? <XCircle size={16} className="text-red-600" />
+                : <Download size={16} />}
             </button>
-            <div>
-              <h1 className="font-black text-lg leading-tight text-emerald-950">Cohort Tracker</h1>
-              <p className="text-[10px] font-bold text-emerald-700/60 uppercase tracking-widest">{headerLabel}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleExport}
-            disabled={exportMutation.isPending || isLoading || !cohort}
-            className="text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-40"
-            title={
-              exportMutation.isPending ? "Exporting…"
-              : exportMutation.isSuccess ? "Downloaded"
-              : exportMutation.isError ? (exportMutation.error?.message ?? "Export failed")
-              : "Download cohort CSV"
-            }
-          >
-            {exportMutation.isPending ? <Loader2 size={16} className="animate-spin" />
-              : exportMutation.isSuccess ? <CheckCircle2 size={16} className="text-emerald-600" />
-              : exportMutation.isError ? <XCircle size={16} className="text-red-600" />
-              : <Download size={16} />}
-          </button>
-        </header>
-
+          }
+        />
+      }
+    >
         <main className="flex-1 px-4 py-6 overflow-y-auto">
           <div className="relative mb-6">
             <Search size={18} className="absolute left-3 top-3.5 text-emerald-900/40" />
@@ -86,10 +85,13 @@ export default function MentorCohortDetails() {
             </div>
           )}
 
-          <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
-            {isLoading ? (
-              <div className="p-8 text-center text-emerald-800/40 text-sm font-bold">Loading cohort…</div>
-            ) : filteredMembers.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-3">
+              {[0, 1, 2].map((i) => <SkeletonCard key={i} />)}
+            </div>
+          ) : (
+          <Card padding="p-0" className="overflow-hidden divide-y divide-emerald-900/5">
+            {filteredMembers.length === 0 ? (
               <div className="p-8 text-center text-emerald-800/40 text-sm font-bold">
                 {searchQuery ? `No results for "${searchQuery}"` : "No cohort members found"}
               </div>
@@ -117,7 +119,7 @@ export default function MentorCohortDetails() {
                           : isReady ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                           : "bg-slate-50 text-slate-600 border-slate-200"}`}>
                         {isWarning && <AlertCircle size={10} />}
-                        {isReady   && <CheckCircle2 size={10} />}
+                        {isReady   && <CheckCircle size={10} />}
                         {mentee.status}
                       </div>
                     </div>
@@ -143,17 +145,17 @@ export default function MentorCohortDetails() {
                           ? "bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"
                           : "bg-white text-emerald-800 hover:bg-emerald-50 border-emerald-200"}`}
                     >
-                      <MessageCircle size={14} />
+                      <Mail size={14} />
                       {isWarning ? "Nudge Mentee" : "Message"}
                     </a>
                   </div>
                 );
               })
             )}
-          </div>
+          </Card>
+          )}
           <AppFooter />
         </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }

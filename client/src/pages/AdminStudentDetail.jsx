@@ -1,10 +1,16 @@
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarCheck, CheckCircle, XCircle, AlertTriangle, Ban } from "lucide-react";
+import { CalendarCheck, CheckCircle, XCircle, AlertCircle, Ban } from "lucide-react";
 import { useStudentDetail } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
+import AppShell from "../components/ui/AppShell";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
 
+// No-Show is red (worse — feeds an automatic strike) and Cancelled is amber
+// (milder — proactive, mentor-reviewed only), consistent with every other
+// status badge in the app (see StudentMyBookings.jsx's STATUS_CONFIG).
 const STATUS_BADGE = {
   CONFIRMED: { label: "Confirmed", cls: "bg-blue-100 text-blue-700" },
   ATTENDED:  { label: "Attended",  cls: "bg-emerald-100 text-emerald-700" },
@@ -55,27 +61,19 @@ export default function AdminStudentDetail() {
   const activeBan = bans.find((b) => !b.liftedAt && (!b.endsAt || new Date(b.endsAt) > new Date()));
 
   return (
-    <div className="min-h-screen app-bg">
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={() => navigate("/admin/placements")}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors shrink-0"
-          >
-            <ArrowLeft size={18} className="text-emerald-800" />
-          </button>
-          <div className="min-w-0">
-            <div className="font-black text-emerald-950 text-sm leading-tight truncate">{student.name}</div>
-            <div className="text-[11px] text-emerald-700/60 font-semibold truncate">
-              {student.pgpId} · {student.cohortLabel ?? "No Cohort"} {student.orgName ? `· ${student.orgName}` : ""}
-            </div>
-          </div>
-        </div>
-        <AvatarMenu />
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-8">
-        <section className="bg-white border border-emerald-900/10 rounded-2xl p-5 flex flex-wrap gap-4 items-start shadow-sm">
+    <AppShell
+      maxWidthClassName="max-w-4xl"
+      header={
+        <PageHeader
+          title={student.name}
+          subtitle={`${student.pgpId} · ${student.cohortLabel ?? "No Cohort"}${student.orgName ? ` · ${student.orgName}` : ""}`}
+          onBack={() => navigate("/admin/placements")}
+          actions={<AvatarMenu />}
+        />
+      }
+    >
+      <main className="px-4 py-6 space-y-8">
+        <Card className="flex flex-wrap gap-4 items-start">
           <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-black text-xl border-2 border-emerald-200 shrink-0">
             {student.name?.[0] ?? "?"}
           </div>
@@ -89,26 +87,26 @@ export default function AdminStudentDetail() {
               <Ban size={12} /> Banned: {activeBan.reason}
             </span>
           )}
-        </section>
+        </Card>
 
         <section>
           <h3 className="text-xs font-bold text-emerald-900/50 uppercase tracking-widest mb-3">Summary</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard icon={CalendarCheck} label="Total Bookings" value={stats.totalBookings} color="slate"  />
             <StatCard icon={CheckCircle}   label="Attended"       value={stats.attended}      color="emerald" />
-            <StatCard icon={AlertTriangle} label="No-Show"        value={stats.noShow}        color="amber"   />
-            <StatCard icon={XCircle}       label="Cancelled"      value={stats.cancelled}     color="red"     />
+            <StatCard icon={XCircle}       label="No-Show"        value={stats.noShow}        color="red"     />
+            <StatCard icon={AlertCircle}   label="Cancelled"      value={stats.cancelled}     color="amber"   />
           </div>
         </section>
 
         <section>
           <h3 className="text-xs font-bold text-emerald-900/50 uppercase tracking-widest mb-3">Booking History</h3>
           {bookingHistory.length === 0 ? (
-            <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center text-slate-400 text-sm shadow-sm">
+            <Card padding="p-8" className="text-center text-slate-400 text-sm">
               No sessions yet
-            </div>
+            </Card>
           ) : (
-            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-x-auto">
+            <Card padding="p-0" className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr className="border-b border-emerald-900/8">
@@ -140,11 +138,11 @@ export default function AdminStudentDetail() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
         </section>
         <AppFooter />
       </main>
-    </div>
+    </AppShell>
   );
 }

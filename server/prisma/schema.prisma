@@ -171,6 +171,10 @@ model Slot {
   meetingLink     String?  // editable independently per-slot, e.g. added after the batch was created
   icsSequence     Int      @default(0) // RFC 5545 SEQUENCE for this slot's calendar event — bumped on reschedule
   published       Boolean  @default(true) // false = draft, created but not yet visible/bookable by students
+  retired         Boolean  @default(false) // true = a dead slot with cancelled-booking history, kept (never
+                                            // hard-deleted, never time-edited) so that booking's history stays
+                                            // accurate; excluded from the no-overlap check below so its time
+                                            // range is free again for a brand new slot. See deleteSlot.
 
   release       BookingRelease @relation(fields: [releaseId], references: [id])
   mentorProfile MentorProfile  @relation(fields: [mentorProfileId], references: [id])
@@ -178,9 +182,10 @@ model Slot {
   bookings      Booking[]
   waitlist      SlotWaitlist[]
 
-  // A mentor may not have two slots with overlapping [startTime, endTime) ranges —
-  // enforced as a GiST exclusion constraint (slot_no_overlap_per_mentor) in the
-  // migration SQL, since Prisma's schema DSL can't express range-exclusion constraints.
+  // A mentor may not have two non-retired slots with overlapping [startTime, endTime)
+  // ranges — enforced as a partial GiST exclusion constraint (slot_no_overlap_per_mentor,
+  // WHERE retired = false) in the migration SQL, since Prisma's schema DSL can't express
+  // range-exclusion constraints.
 }
 
 // One-shot notification queue: when a full slot frees up, every waitlisted student

@@ -54,6 +54,14 @@ const buildSessionEvent = ({
       (a) => `ATTENDEE;CN=${escapeICS(a.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`,
     ),
     `STATUS:${status}`,
+    // Calendar clients (Google Calendar, Outlook, Apple Calendar) surface this as
+    // their own native reminder — replaces a separate 30-minute reminder email,
+    // so it only needs to be set once here rather than sent per-recipient.
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Reminder",
+    "TRIGGER:-PT30M",
+    "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",
   ];

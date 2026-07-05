@@ -86,7 +86,7 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
   return send({
     to:      studentEmail,
     subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
-    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} To cancel, use the app — cancellations less than 60 minutes before the slot incur a penalty.`,
+    text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} To cancel, use the app — cancelling is never automatically penalised, but late or repeated cancellations may result in your mentor applying a strike.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Booking Confirmed</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -99,9 +99,8 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
       ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
       ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
       <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">
-        A calendar invite is attached to this email.<br>
-        You will receive a reminder 30 minutes before the session.<br>
-        If you need to cancel, do so <b>at least 60 minutes in advance</b> to avoid a penalty.
+        A calendar invite is attached to this email — accept it and your calendar app will remind you 30 minutes before the session.<br>
+        Cancelling is never automatically penalised, but late or repeated cancellations may result in your mentor applying a strike.
       </p>
     `),
     ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
@@ -147,7 +146,7 @@ const sendBookingConfirmationCombined = ({
   return send({
     to:      toList,
     subject: `Session confirmed: ${studentName} × ${mentorName} · ${date}`,
-    text:    `This confirms the ${focusLabel} session between ${studentName} (PGP-${pgpId}) and ${mentorName} (${firm}) on ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} Students: to cancel, do so at least 60 minutes before the slot to avoid a penalty.`,
+    text:    `This confirms the ${focusLabel} session between ${studentName} (PGP-${pgpId}) and ${mentorName} (${firm}) on ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} Students: cancelling is never automatically penalised, but late or repeated cancellations may result in a mentor-applied strike.`,
     html:    wrap(`
       <h2 style="margin:0 0 8px;font-size:20px">Session Confirmed</h2>
       <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
@@ -170,8 +169,8 @@ const sendBookingConfirmationCombined = ({
       ${meetingLink ? btn(meetingLink, "Join Google Meet") : ""}
       ${calendarLink ? secondaryBtn(calendarLink, "Add to Google Calendar") : ""}
       <p style="font-size:13px;color:#064E3B99;margin:16px 0 0">
-        A calendar invite is attached — accept it to add the session to your calendar.<br>
-        Students: cancel at least <b>60 minutes in advance</b> to avoid a penalty.
+        A calendar invite is attached — accept it to add the session to your calendar and get a reminder 30 minutes before it starts.<br>
+        Students: cancelling is never automatically penalised, but late or repeated cancellations may result in a mentor-applied strike.
       </p>
     `),
     ...(icsContent && { icalEvent: { method: "REQUEST", content: icsContent } }),
@@ -325,48 +324,6 @@ const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorName, dat
   });
 };
 
-/**
- * Sent to a student 30 minutes before their booked slot.
- */
-const sendStudentReminder = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus }) => {
-  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
-  return send({
-    to:      studentEmail,
-    subject: `Reminder: Session with ${mentorName} in 30 minutes`,
-    text:    `Hi ${studentName}, just a reminder that your ${focusLabel} session with ${mentorName} (${firm}) is at ${time} on ${date} at ${venue}.`,
-    html:    wrap(`
-      <h2 style="margin:0 0 8px;font-size:20px">Session in 30 minutes 🗓</h2>
-      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
-      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
-        <b>${mentorName}</b> · ${firm}<br>
-        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span><br>
-        <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
-      </div>
-      <p style="font-size:13px;color:#064E3B99">Please arrive on time. If you need to cancel, do so now to avoid a penalty.</p>
-    `),
-  });
-};
-
-/**
- * Sent to a mentor 30 minutes before a booked session.
- */
-const sendMentorReminder = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus }) => {
-  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
-  return send({
-    to:      mentorEmail,
-    subject: `Reminder: Session with ${studentName} in 30 minutes`,
-    text:    `Hi ${mentorName}, you have a ${focusLabel} session with ${studentName} (PGP-${pgpId}) at ${time} on ${date} at ${venue}.`,
-    html:    wrap(`
-      <h2 style="margin:0 0 8px;font-size:20px">Session in 30 minutes 🗓</h2>
-      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">${focusLabel}</p>
-      <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:16px 20px;margin-bottom:20px">
-        <b>${studentName}</b> · PGP-${pgpId}<br>
-        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span><br>
-        <span style="font-size:13px;color:#064E3B99">📍 ${venue}</span>
-      </div>
-    `),
-  });
-};
 
 /**
  * Sent to an AIG admin at 8 AM daily if at-risk students exist.
@@ -413,7 +370,5 @@ module.exports = {
   sendWaitlistSlotAvailable,
   sendDelayNotification,
   sendStrikeAppliedToStudent,
-  sendStudentReminder,
-  sendMentorReminder,
   sendAigDigest,
 };

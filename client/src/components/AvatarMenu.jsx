@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { LogOut, UserCog } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import { getRoleLabel } from "../lib/roleHome";
 
 const ROLE_BADGE = {
   SuperADMIN: "bg-purple-100 text-purple-800 border-purple-200",
@@ -18,7 +19,7 @@ export default function AvatarMenu({ variant = "light" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
-  const roleLabel = user?.aigCategory === "COMMITTEE" ? "Committee" : user?.role;
+  const roleLabel = getRoleLabel(user);
 
   const initials =
     user?.name

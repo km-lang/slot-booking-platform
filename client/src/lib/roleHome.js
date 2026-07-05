@@ -11,3 +11,20 @@ export function getRoleHome(user) {
   const resolve = user && ROLE_HOME[user.role];
   return resolve ? resolve(user) : "/login";
 }
+
+// Human-readable role label — shared by AvatarMenu and ProfileSettings so a
+// user's account menu and profile page never disagree on what to call their
+// own role. Disha's admin is a "Committee" (see schema's OrgCategory), shown
+// distinctly from a regular AIG admin.
+const ROLE_LABEL = {
+  STUDENT: "Student",
+  MENTOR: "Mentor",
+  AIGs: "AIG Admin",
+  SuperADMIN: "Super Admin",
+};
+
+export function getRoleLabel(user) {
+  if (!user) return "";
+  if (user.aigCategory === "COMMITTEE") return "Committee";
+  return ROLE_LABEL[user.role] ?? user.role;
+}

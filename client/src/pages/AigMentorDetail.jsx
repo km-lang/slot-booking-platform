@@ -1,15 +1,21 @@
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, BookOpen, CheckCircle, XCircle, Clock, AlertTriangle, Users } from "lucide-react";
+import { BookOpen, CheckCircle, XCircle, Clock, AlertCircle, Users } from "lucide-react";
 import { useMentorDetail } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
+import AppShell from "../components/ui/AppShell";
+import PageHeader from "../components/ui/PageHeader";
+import Card from "../components/ui/Card";
 
+// No-Show is red (worse — feeds an automatic strike) and Cancelled is amber
+// (milder — proactive, mentor-reviewed only), consistent with every other
+// status badge in the app (see StudentMyBookings.jsx's STATUS_CONFIG).
 const STATUS_BADGE = {
   CONFIRMED: { label: "Confirmed", cls: "bg-blue-100 text-blue-700" },
   ATTENDED:  { label: "Attended",  cls: "bg-emerald-100 text-emerald-700" },
-  CANCELLED: { label: "Cancelled", cls: "bg-red-100 text-red-700" },
-  NO_SHOW:   { label: "No-Show",   cls: "bg-amber-100 text-amber-700" },
+  CANCELLED: { label: "Cancelled", cls: "bg-amber-100 text-amber-700" },
+  NO_SHOW:   { label: "No-Show",   cls: "bg-red-100 text-red-700" },
 };
 
 const STUDENT_STATUS = {
@@ -60,29 +66,20 @@ export default function AigMentorDetail() {
   const { mentor, aig, cohortLabel, stats, students = [], sessionHistory = [] } = data;
 
   return (
-    <div className="min-h-screen app-bg">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-emerald-900/10 px-4 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={() => navigate(aigSlug ? `/admin/${aigSlug}` : "/admin/placements")}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-emerald-50 transition-colors shrink-0"
-          >
-            <ArrowLeft size={18} className="text-emerald-800" />
-          </button>
-          <div className="min-w-0">
-            <div className="font-black text-emerald-950 text-sm leading-tight truncate">{mentor.name}</div>
-            <div className="text-[11px] text-emerald-700/60 font-semibold truncate">
-              {aig?.name ?? "Independent (No AIG)"} · {cohortLabel ?? "No Cohort"}
-            </div>
-          </div>
-        </div>
-        <AvatarMenu />
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 py-6 space-y-8">
+    <AppShell
+      maxWidthClassName="max-w-4xl"
+      header={
+        <PageHeader
+          title={mentor.name}
+          subtitle={`${aig?.name ?? "Independent (No AIG)"} · ${cohortLabel ?? "No Cohort"}`}
+          onBack={() => navigate(aigSlug ? `/admin/${aigSlug}` : "/admin/placements")}
+          actions={<AvatarMenu />}
+        />
+      }
+    >
+      <main className="px-4 py-6 space-y-8">
         {/* Mentor bio strip */}
-        <section className="bg-white border border-emerald-900/10 rounded-2xl p-5 flex flex-wrap gap-4 items-start shadow-sm">
+        <Card className="flex flex-wrap gap-4 items-start">
           <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-black text-xl border-2 border-emerald-200 shrink-0">
             {mentor.name?.[0] ?? "?"}
           </div>
@@ -98,7 +95,7 @@ export default function AigMentorDetail() {
               </span>
             )}
           </div>
-        </section>
+        </Card>
 
         {/* Stats */}
         <section>
@@ -107,8 +104,8 @@ export default function AigMentorDetail() {
             <StatCard icon={BookOpen}      label="Slots"      value={stats.totalSlots} color="slate"   />
             <StatCard icon={Clock}         label="Confirmed"  value={stats.confirmed}  color="blue"    />
             <StatCard icon={CheckCircle}   label="Attended"   value={stats.attended}   color="emerald" />
-            <StatCard icon={AlertTriangle} label="No-Show"    value={stats.noShow}     color="amber"   />
-            <StatCard icon={XCircle}       label="Cancelled"  value={stats.cancelled}  color="red"     />
+            <StatCard icon={XCircle}       label="No-Show"    value={stats.noShow}     color="red"     />
+            <StatCard icon={AlertCircle}   label="Cancelled"  value={stats.cancelled}  color="amber"   />
           </div>
         </section>
 
@@ -118,7 +115,7 @@ export default function AigMentorDetail() {
             <h3 className="text-xs font-bold text-emerald-900/50 uppercase tracking-widest mb-3 flex items-center gap-2">
               <Users size={14} /> Cohort Students ({students.length})
             </h3>
-            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden">
+            <Card padding="p-0" className="overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-emerald-900/8">
@@ -146,7 +143,7 @@ export default function AigMentorDetail() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           </section>
         )}
 
@@ -154,11 +151,11 @@ export default function AigMentorDetail() {
         <section>
           <h3 className="text-xs font-bold text-emerald-900/50 uppercase tracking-widest mb-3">Session History</h3>
           {sessionHistory.length === 0 ? (
-            <div className="bg-white border border-emerald-900/10 rounded-2xl p-8 text-center text-slate-400 text-sm shadow-sm">
+            <Card padding="p-8" className="text-center text-slate-400 text-sm">
               No sessions yet
-            </div>
+            </Card>
           ) : (
-            <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-x-auto">
+            <Card padding="p-0" className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr className="border-b border-emerald-900/8">
@@ -190,11 +187,11 @@ export default function AigMentorDetail() {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
         </section>
         <AppFooter />
       </main>
-    </div>
+    </AppShell>
   );
 }

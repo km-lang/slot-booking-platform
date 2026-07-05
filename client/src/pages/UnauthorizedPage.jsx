@@ -4,6 +4,7 @@ import { ShieldX } from "lucide-react";
 import AppFooter from "../components/AppFooter";
 import { useAuth } from "../context/useAuth";
 import { getRoleHome } from "../lib/roleHome";
+import Button from "../components/ui/Button";
 
 export default function UnauthorizedPage() {
   const navigate = useNavigate();
@@ -29,12 +30,9 @@ export default function UnauthorizedPage() {
           You don't have permission to view this page. Contact Team Disha if
           you believe this is an error.
         </p>
-        <button
-          onClick={goBack}
-          className="bg-emerald-900 hover:bg-emerald-800 text-white font-bold py-3 px-8 rounded-xl text-sm transition-colors shadow-md"
-        >
+        <Button onClick={goBack} className="shadow-md">
           Go Back
-        </button>
+        </Button>
         <div className="mt-10">
           <AppFooter />
         </div>

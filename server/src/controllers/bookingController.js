@@ -9,8 +9,10 @@ const ALLOWED_FOCUS = ["overall", "workex", "por"];
 // Records a strike and, if the new strike count exactly matches a seeded
 // BanPolicyTier threshold, opens a Ban for the duration that tier specifies.
 // issuedBy is the acting mentor's email — set by markAttendance's NO_SHOW path
-// and by the manual strike endpoint; mirrors Ban.liftedBy.
-const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = null) => {
+// and by the manual strike endpoint; mirrors Ban.liftedBy. actingUserId is that
+// same mentor's own user id, used only for the BAN_APPLIED audit event so it's
+// shaped the same way as adminController's BAN_LIFTED event.
+const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = null, actingUserId = null) => {
   await tx.studentWarning.create({ data: { userId, bookingId, type: "STRIKE", reason, issuedBy } });
   const strikeCount = await tx.studentWarning.count({ where: { userId, type: "STRIKE" } });
   const tier = await tx.banPolicyTier.findUnique({ where: { strikeThreshold: strikeCount } });
@@ -18,6 +20,18 @@ const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = 
   if (tier) {
     const endsAt = tier.banDurationHours ? new Date(Date.now() + tier.banDurationHours * 3600 * 1000) : null;
     ban = await tx.ban.create({ data: { userId, reason: tier.description, endsAt } });
+    // Previously only BAN_LIFTED was ever recorded — BAN_APPLIED had a label
+    // in the admin audit log but nothing wrote it, so an auto-ban never showed
+    // up there even though BAN_LIFTED for the same ban does.
+    await tx.auditEvent.create({
+      data: {
+        userId:   actingUserId,
+        action:   "BAN_APPLIED",
+        entity:   "Ban",
+        entityId: ban.id,
+        meta:     JSON.stringify({ bannedUserId: userId, strikeCount, reason: tier.description }),
+      },
+    });
   }
   return { ban };
 };
@@ -453,7 +467,7 @@ const markAttendance = async (req, res, next) => {
       await tx.booking.update({ where: { id: booking.id }, data: { status } });
 
       if (status === "NO_SHOW") {
-        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "No-show", req.user.email);
+        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "No-show", req.user.email, req.user.sub);
       }
 
       await tx.auditEvent.create({
@@ -507,7 +521,7 @@ const applyManualStrike = async (req, res, next) => {
     const { ban } = await prisma.$transaction(async (tx) => {
       const result = await applyStrikeAndMaybeBan(
         tx, booking.studentUserId, booking.id,
-        "Mentor-applied strike for cancelled session", req.user.email,
+        "Mentor-applied strike for cancelled session", req.user.email, req.user.sub,
       );
       await tx.auditEvent.create({
         data: {

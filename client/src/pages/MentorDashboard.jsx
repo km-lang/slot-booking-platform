@@ -4,18 +4,19 @@ import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
-  Send, UserPlus, Search, ShieldAlert, RefreshCw,
+  Send, UserPlus, Search, ShieldAlert,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance,
   useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
   useBulkDeleteSlots, useBulkSetMeetingLink,
   useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
-  useApplyStrike, useReleaseRemainingTime,
+  useApplyStrike,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
+import Sheet from "../components/ui/Sheet";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -34,7 +35,7 @@ const timeAgo = (iso) => {
 };
 
 // ── Running Late Sheet ────────────────────────────────────────────────────────
-function RunningLateSheet({ session, onClose }) {
+function RunningLateSheet({ session, isOpen, onClose }) {
   const [delayMins, setDelayMins] = useState(10);
   const [custom, setCustom]       = useState("");
   const [useCustom, setUseCustom] = useState(false);
@@ -51,10 +52,7 @@ function RunningLateSheet({ session, onClose }) {
   };
 
   return (
-    <>
-      <div className="fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-40" onClick={onClose} />
-      <div className="fixed bottom-0 inset-x-0 mx-auto w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-white rounded-t-3xl z-50 p-6 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.12)] max-h-[85vh] overflow-y-auto">
-        <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5" />
+    <Sheet isOpen={isOpen} onClose={onClose} maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl">
         <h3 className="text-lg font-black text-emerald-950 mb-0.5">Running Late?</h3>
         <p className="text-xs font-semibold text-emerald-700/60 mb-1">
           Session with <span className="text-emerald-800 font-bold">{session.student.name}</span>
@@ -110,8 +108,7 @@ function RunningLateSheet({ session, onClose }) {
             ? "Updating…"
             : `Notify — Running ${effectiveDelay || "?"}m Late`}
         </button>
-      </div>
-    </>
+    </Sheet>
   );
 }
 
@@ -120,7 +117,7 @@ function RunningLateSheet({ session, onClose }) {
 // a search bar (matches PGP ID, name, or email) — skips the student's own booking
 // action entirely. Same confirmation email + calendar invite goes out as a normal
 // self-service booking.
-function AllocateSheet({ slot, onClose }) {
+function AllocateSheet({ slot, isOpen, onClose }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null); // { pgpId, name, email, cohortLabel }
   const [focus, setFocus] = useState("overall");
@@ -141,7 +138,7 @@ function AllocateSheet({ slot, onClose }) {
   };
 
   const handleSubmit = () => {
-    if (!selected) return;
+    if (!selected || !slot) return;
     allocate.mutate(
       { slotId: slot.id, pgpId: selected.pgpId, focus },
       { onSuccess: onClose },
@@ -149,10 +146,9 @@ function AllocateSheet({ slot, onClose }) {
   };
 
   return (
-    <>
-      <div className="fixed inset-0 bg-emerald-950/40 backdrop-blur-sm z-40" onClick={onClose} />
-      <div className="fixed bottom-0 inset-x-0 mx-auto w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-white rounded-t-3xl z-50 p-6 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.12)] max-h-[85vh] overflow-y-auto">
-        <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5" />
+    <Sheet isOpen={isOpen} onClose={onClose} maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl">
+      {slot && (
+        <>
         <div className="flex items-start justify-between mb-0.5">
           <h3 className="text-lg font-black text-emerald-950">Allocate Slot</h3>
           <button onClick={onClose} className="text-emerald-700/40 hover:text-emerald-900 -mr-1 -mt-1 p-1" title="Close">
@@ -224,8 +220,9 @@ function AllocateSheet({ slot, onClose }) {
         <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
           Books this slot immediately — no action needed from the student. They'll get the usual confirmation email.
         </p>
-      </div>
-    </>
+        </>
+      )}
+    </Sheet>
   );
 }
 
@@ -362,7 +359,7 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
             className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
           >
             <XCircle size={14} />
-            {isPending ? "Saving…" : "No Show"}
+            {isPending ? "Saving…" : "No-Show"}
           </button>
           <button
             onClick={() => setLateSheetOpen(true)}
@@ -390,9 +387,7 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
         </div>
       </div>
 
-      {lateSheetOpen && (
-        <RunningLateSheet session={session} onClose={() => setLateSheetOpen(false)} />
-      )}
+      <RunningLateSheet session={session} isOpen={lateSheetOpen} onClose={() => setLateSheetOpen(false)} />
     </div>
   );
 }
@@ -419,7 +414,7 @@ function HistorySessionRow({ session }) {
             : "bg-red-50 text-red-600 border-red-200"}`}
       >
         {attended ? <CheckCircle size={12} /> : <XCircle size={12} />}
-        {attended ? "Attended" : "No Show"}
+        {attended ? "Attended" : "No-Show"}
       </span>
     </div>
   );
@@ -485,7 +480,6 @@ export default function MentorDashboard() {
 
   const attendanceMutation  = useMarkAttendance();
   const deleteSlotMutation  = useDeleteSlot();
-  const releaseRemainingMutation = useReleaseRemainingTime();
   const bulkDeleteMutation  = useBulkDeleteSlots();
   const bulkLinkMutation    = useBulkSetMeetingLink();
   const bulkPublishMutation = useBulkPublishSlots();
@@ -512,13 +506,8 @@ export default function MentorDashboard() {
   };
 
   const handleDeleteSlot = (slotId) => {
+    if (!confirm("Delete this slot? This can't be undone.")) return;
     deleteSlotMutation.mutate(slotId, {
-      onError: (err) => alert(err.message),
-    });
-  };
-
-  const handleReleaseRemainingTime = (slotId) => {
-    releaseRemainingMutation.mutate(slotId, {
       onError: (err) => alert(err.message),
     });
   };
@@ -701,7 +690,7 @@ export default function MentorDashboard() {
             </div>
           </CollapsibleSection>
 
-          {/* History — past sessions already marked Attended / No Show */}
+          {/* History — past sessions already marked Attended / No-Show */}
           <CollapsibleSection
             title="History"
             count={historySessions.length}
@@ -712,7 +701,7 @@ export default function MentorDashboard() {
                 <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
               ) : historySessions.length === 0 ? (
                 <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">
-                  No sessions marked Attended or No Show yet
+                  No sessions marked Attended or No-Show yet
                 </div>
               ) : (
                 historySessions.map((session) => (
@@ -842,51 +831,34 @@ export default function MentorDashboard() {
                   No expired slots
                 </div>
               ) : (
-                expiredSlots.map((slot) => {
-                  // The server (releaseRemainingTime) has its own 5s-buffer check and
-                  // will 400 if this races past the true deadline — this is just the
-                  // UI hint for whether the action makes sense to offer at all.
-                  const hasRemainingTime = new Date(slot.endTime) > new Date();
-                  return (
-                    <div key={slot.id} className="p-4 flex items-start gap-3">
-                      <Clock size={16} className="mt-1 text-slate-400 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
-                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                          <span className="text-emerald-700/60">{slot.venue}</span>
-                          {slot.cohortOnly && (
-                            <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
-                          )}
-                          <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{slot.reason}</span>
-                        </div>
+                expiredSlots.map((slot) => (
+                  <div key={slot.id} className="p-4 flex items-start gap-3">
+                    <Clock size={16} className="mt-1 text-slate-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+                        <span className="text-emerald-700/60">{slot.venue}</span>
+                        {slot.cohortOnly && (
+                          <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
+                        )}
+                        <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{slot.reason}</span>
                       </div>
-                      {hasRemainingTime && (
-                        <button
-                          onClick={() => handleReleaseRemainingTime(slot.id)}
-                          disabled={releaseRemainingMutation.isPending}
-                          className="p-2 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
-                          title="Release the remaining time as a new bookable slot"
-                        >
-                          <RefreshCw size={16} />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteSlot(slot.id)}
-                        disabled={deleteSlotMutation.isPending}
-                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
-                      >
-                        <Trash2 size={16} />
-                      </button>
                     </div>
-                  );
-                })
+                    <button
+                      onClick={() => handleDeleteSlot(slot.id)}
+                      disabled={deleteSlotMutation.isPending}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                      title={slot.reason === "Cancelled" ? "Clear this slot (its cancelled booking stays in history)" : "Delete this slot"}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
               )}
             </div>
           </CollapsibleSection>
 
-          {allocateSlotTarget && (
-            <AllocateSheet slot={allocateSlotTarget} onClose={() => setAllocateSlotTarget(null)} />
-          )}
+          <AllocateSheet slot={allocateSlotTarget} isOpen={!!allocateSlotTarget} onClose={() => setAllocateSlotTarget(null)} />
           <AppFooter />
         </main>
       </div>

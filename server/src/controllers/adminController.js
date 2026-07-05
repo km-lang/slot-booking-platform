@@ -2,7 +2,9 @@
 
 const prisma = require("../lib/prisma");
 
-const FOCUS_DISPLAY = { overall: "Overall CV", workex: "Work Experience", por: "POR / ECA" };
+// Kept consistent with mailer.js and exportController.js's FOCUS_DISPLAY —
+// same booking focus should read the same everywhere it's displayed.
+const FOCUS_DISPLAY = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" };
 
 // Cohort labels are "Q1".."Q17" — plain string sort puts Q10-Q17 before Q2-Q9.
 // Sort by the embedded number first, falling back to a string compare for ties
@@ -134,7 +136,17 @@ const getBatchOverview = async (_req, res, next) => {
       }),
       prisma.slot.count(),
       prisma.booking.count({ where: { status: "NO_SHOW" } }),
-      prisma.booking.count({ where: { status: { in: ["CONFIRMED", "ATTENDED"] } } }),
+      // A CONFIRMED booking whose slot has already ended and was never marked has an
+      // unknown outcome — it shouldn't count as "utilized" alongside real ATTENDED
+      // bookings (same reasoning as listMentorStats's overdueUnmarked exclusion).
+      prisma.booking.count({
+        where: {
+          OR: [
+            { status: "ATTENDED" },
+            { status: "CONFIRMED", slot: { endTime: { gt: now } } },
+          ],
+        },
+      }),
       prisma.ban.count({
         where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
       }),
@@ -209,7 +221,10 @@ const getBatchOverview = async (_req, res, next) => {
           const completed = await prisma.booking.count({
             where: {
               slot: { mentorProfileId: m.id },
-              status: { in: ["CONFIRMED", "ATTENDED"] },
+              OR: [
+                { status: "ATTENDED" },
+                { status: "CONFIRMED", slot: { endTime: { gt: now } } },
+              ],
             },
           });
           return { name: m.user.name?.split(" ")[0] ?? "—", offered: m._count.slots, completed };
@@ -333,10 +348,17 @@ const getConfig = async (_req, res, next) => {
   }
 };
 
+// Same discipline as addToWhitelist's role enum check — restrict to the keys the
+// app actually reads, so this endpoint can't be used to write arbitrary rows.
+const VALID_CONFIG_KEYS = ["cv_freeze_deadline", "booking_open"];
+
 const setConfig = async (req, res, next) => {
   try {
     const { key } = req.params;
     const { value } = req.body;
+    if (!VALID_CONFIG_KEYS.includes(key)) {
+      return res.status(400).json({ error: `Invalid config key. Must be one of: ${VALID_CONFIG_KEYS.join(", ")}` });
+    }
     if (value === undefined) return res.status(400).json({ error: "value is required" });
     const row = await prisma.systemConfig.upsert({
       where: { key },
@@ -440,10 +462,7 @@ const getMentorSessionDetail = async (req, res, next) => {
 
     if (!mentorProfile) return res.status(404).json({ error: "Mentor not found" });
 
-    // AIG scope check for AIGs role
-    if (req.user.role === "AIGs" && mentorProfile.aig?.slug !== req.user.aigSlug) {
-      return res.status(403).json({ error: "Forbidden — outside your AIG scope" });
-    }
+    // AIG scope already enforced by requireMentorAigScope middleware (routes/api.js)
 
     // All bookings for this mentor's slots
     const bookings = await prisma.booking.findMany({
@@ -516,6 +535,7 @@ const getMentorSessionDetail = async (req, res, next) => {
 
 const getOrgStats = async (_req, res, next) => {
   try {
+    const now = new Date();
     const orgUnits = await prisma.aIG.findMany({
       include: { mentorProfiles: { include: { _count: { select: { slots: true } } } } },
       orderBy: { name: "asc" },
@@ -524,9 +544,17 @@ const getOrgStats = async (_req, res, next) => {
     const statsFor = async (mentorProfiles) => {
       const mentorIds = mentorProfiles.map((m) => m.id);
       const slotsOffered = mentorProfiles.reduce((sum, m) => sum + m._count.slots, 0);
+      // Same overdueUnmarked exclusion as listMentorStats/getBatchOverview — an
+      // unmarked CONFIRMED booking past its slot's endTime has an unknown outcome.
       const completed = mentorIds.length
         ? await prisma.booking.count({
-            where: { slot: { mentorProfileId: { in: mentorIds } }, status: { in: ["CONFIRMED", "ATTENDED"] } },
+            where: {
+              slot: { mentorProfileId: { in: mentorIds } },
+              OR: [
+                { status: "ATTENDED" },
+                { status: "CONFIRMED", slot: { endTime: { gt: now } } },
+              ],
+            },
           })
         : 0;
       return {

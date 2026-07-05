@@ -4,6 +4,7 @@ const TONES = {
   warning: "bg-amber-100 text-amber-800 border-amber-200",
   danger: "bg-red-100 text-red-800 border-red-200",
   gold: "bg-[#f3ecd8] text-[#5b4e27] border-[#e3dcc7]",
+  purple: "bg-purple-100 text-purple-800 border-purple-200",
 };
 
 // One tone-driven API meant to replace the ROLE_BADGE / ACTION_BADGE / ad hoc

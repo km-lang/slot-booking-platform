@@ -5,6 +5,9 @@ import { useAigOverview, useExportCsv } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
+import AppShell from "../components/ui/AppShell";
+import Card from "../components/ui/Card";
+import { SkeletonCard } from "../components/ui/Skeleton";
 
 const getCountdown = (deadline) => {
   if (!deadline) return null;
@@ -47,11 +50,10 @@ export default function AigAdminDashboard() {
   const atRisk = data?.atRiskStudents ?? [];
 
   return (
-    <div className="min-h-screen app-bg text-emerald-950 font-sans pb-24">
-      <div className="max-w-md md:max-w-4xl mx-auto min-h-screen bg-[var(--color-bg)] shadow-2xl relative">
-
-        {/* Sticky Header */}
-        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-4">
+    <AppShell
+      maxWidthClassName="max-w-md md:max-w-4xl"
+      header={
+        <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-emerald-900/10 px-4 py-4">
           <div className="flex justify-between items-center gap-3 mb-4">
             <div className="flex items-center gap-2 font-bold text-emerald-950 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400 shrink-0">
@@ -112,7 +114,8 @@ export default function AigAdminDashboard() {
             </div>
           </div>
         </header>
-
+      }
+    >
         <main className="px-4 py-6">
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700 mb-6">
@@ -126,7 +129,7 @@ export default function AigAdminDashboard() {
               <h2 className="text-lg font-black text-emerald-950">Batch Readiness</h2>
               <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">PGP1 2026</span>
             </div>
-            <div className="bg-white border border-emerald-900/10 rounded-2xl p-5 shadow-sm">
+            <Card>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-3xl font-black text-emerald-950">{isLoading ? "—" : `${pct}%`}</span>
                 <span className="text-xs font-bold text-emerald-700/60">
@@ -136,7 +139,7 @@ export default function AigAdminDashboard() {
               <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
               </div>
-            </div>
+            </Card>
           </section>
 
           {/* Intervention Required */}
@@ -152,9 +155,13 @@ export default function AigAdminDashboard() {
                 badgeClassName="bg-amber-100 text-amber-700"
               >
                 {isLoading ? (
-                  <div className="text-xs font-bold text-emerald-800/40 px-1">Loading…</div>
+                  <div className="space-y-3">
+                    {[0, 1].map((i) => <SkeletonCard key={i} padding="p-4" />)}
+                  </div>
                 ) : (
                   <div className="space-y-3">
+                    {/* Distinct amber border (not the standard Card recipe) is a
+                        deliberate semantic cue — this list is specifically urgent. */}
                     {atRisk.map((student, idx) => (
                       <div key={idx} className="bg-white border border-amber-200/60 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
                         <div className="flex-1">
@@ -198,7 +205,9 @@ export default function AigAdminDashboard() {
             </div>
 
             {isLoading ? (
-              <div className="text-xs font-bold text-emerald-800/40 px-1">Loading cohorts…</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[0, 1].map((i) => <SkeletonCard key={i} padding="p-4" />)}
+              </div>
             ) : filteredCohorts.length === 0 ? (
               <div className="text-xs font-bold text-emerald-800/40 px-1">
                 {(data?.cohorts?.length ?? 0) === 0
@@ -210,9 +219,10 @@ export default function AigAdminDashboard() {
                 {filteredCohorts.map((cohort) => {
                   const canDrill = !!cohort.mentorSlug;
                   return (
-                    <div
+                    <Card
                       key={cohort.id}
-                      className={`bg-white border border-emerald-900/10 rounded-2xl p-4 shadow-sm transition-shadow ${canDrill ? "cursor-pointer hover:shadow-md hover:border-emerald-400/40" : ""}`}
+                      padding="p-4"
+                      className={`transition-shadow ${canDrill ? "cursor-pointer hover:shadow-md hover:border-emerald-400/40" : ""}`}
                       onClick={() => canDrill && navigate(`/admin/${aigSlug}/mentor/${cohort.mentorSlug}`)}
                     >
                       <div className="flex justify-between items-start mb-3">
@@ -237,7 +247,7 @@ export default function AigAdminDashboard() {
                           style={{ width: `${cohort.total > 0 ? Math.round((cohort.reviewed / cohort.total) * 100) : 0}%` }}
                         />
                       </div>
-                    </div>
+                    </Card>
                   );
                 })}
               </div>
@@ -245,7 +255,6 @@ export default function AigAdminDashboard() {
           </section>
           <AppFooter />
         </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }
