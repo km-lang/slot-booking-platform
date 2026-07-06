@@ -104,6 +104,19 @@ const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUse
   }).catch((e) => console.error("[mailer] student lookup:", e.message));
 };
 
+// Shared by every path that grants a student a booking (fresh, allocated, or
+// reassigned) — a ban suspends all of them equally, not just self-service.
+const hasActiveBan = (userId) =>
+  prisma.ban
+    .findFirst({
+      where: {
+        userId,
+        liftedAt: null,
+        OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
+      },
+    })
+    .then(Boolean);
+
 // The single source of truth for "give this student this slot" — used by both
 // self-service booking (createBooking) and mentor-initiated allocation
 // (allocateSlot). Returns a result object rather than throwing, so both callers
@@ -118,14 +131,9 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempot
     return { ok: true, replay: true, booking: existing };
   }
 
-  const activeBan = await prisma.ban.findFirst({
-    where: {
-      userId: studentUserId,
-      liftedAt: null,
-      OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }],
-    },
-  });
-  if (activeBan) return { ok: false, status: 403, error: "This student's booking access is currently suspended" };
+  if (await hasActiveBan(studentUserId)) {
+    return { ok: false, status: 403, error: "This student's booking access is currently suspended" };
+  }
 
   const bookingOpenConfig = await prisma.systemConfig.findUnique({ where: { key: "booking_open" } });
   if (bookingOpenConfig && bookingOpenConfig.value !== "true") {
@@ -308,6 +316,339 @@ const allocateSlot = async (req, res, next) => {
     });
 
     return res.status(201).json(result.booking);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Gives an existing CONFIRMED booking to a different student, same slot/time —
+// e.g. the original student dropped out and someone else is taking their place.
+// The old student's booking simply disappears from their list (no cancelled
+// artifact left behind) — they're notified by email only, same as the new
+// student gets a normal confirmation email. Neither SlotCapacity nor the slot
+// itself is touched, so occupancy stays 1/1 throughout.
+const reassignBooking = async (req, res, next) => {
+  try {
+    const { pgpId } = req.body;
+    if (!pgpId) return res.status(400).json({ error: "pgpId is required" });
+
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: {
+        slot: { include: { release: true } },
+        student: { select: { name: true, email: true } },
+      },
+    });
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    if (booking.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your booking" });
+    if (booking.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
+    if (booking.slot.endTime <= new Date()) {
+      return res.status(400).json({ error: "This session has already ended" });
+    }
+
+    const newStudentProfile = await prisma.studentProfile.findUnique({
+      where: { pgpId: String(pgpId).trim() },
+      include: { user: { select: { id: true, name: true, email: true } } },
+    });
+    if (!newStudentProfile) return res.status(404).json({ error: "No student found with that PGP ID" });
+    if (newStudentProfile.userId === booking.studentUserId) {
+      return res.status(400).json({ error: "This booking is already assigned to that student" });
+    }
+
+    if (await hasActiveBan(newStudentProfile.userId)) {
+      return res.status(403).json({ error: "This student's booking access is currently suspended" });
+    }
+
+    const bookingOpenConfig = await prisma.systemConfig.findUnique({ where: { key: "booking_open" } });
+    if (bookingOpenConfig && bookingOpenConfig.value !== "true") {
+      return res.status(403).json({ error: "Booking is currently closed" });
+    }
+
+    if (booking.slot.release.cohortOnly && newStudentProfile.cohortId !== mentorProfile.cohortId) {
+      return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
+    }
+
+    const conflict = await prisma.booking.findFirst({
+      where: { studentUserId: newStudentProfile.userId, mentorProfileId: mentorProfile.id, status: "CONFIRMED" },
+    });
+    if (conflict) {
+      return res
+        .status(409)
+        .json({ error: "This student already has an active booking with this mentor — use Swap instead" });
+    }
+
+    const oldStudent = booking.student;
+
+    const [updatedBooking] = await prisma.$transaction([
+      prisma.booking.update({
+        where: { id: booking.id },
+        data: { studentUserId: newStudentProfile.userId, allocatedBy: req.user.email },
+      }),
+      prisma.auditEvent.create({
+        data: {
+          userId: req.user.sub,
+          action: "BOOKING_REASSIGNED",
+          entity: "Booking",
+          entityId: booking.id,
+          meta: JSON.stringify({ oldStudentUserId: booking.studentUserId, newStudentUserId: newStudentProfile.userId }),
+        },
+      }),
+    ]);
+
+    (async () => {
+      const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) =>
+        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      const mentorName = mentorProfile.user?.name ?? "your mentor";
+      const newStudentName = newStudentProfile.user?.name ?? newStudentProfile.user?.email ?? "your mentee";
+      const oldStudentName = oldStudent?.name ?? oldStudent?.email ?? "the student";
+      const date = fmtDate(booking.slot.startTime);
+      const time = fmtTime(booking.slot.startTime);
+      const sequence = booking.slot.icsSequence + 1; // must exceed any prior reschedule/cancel's sequence
+
+      if (newStudentProfile.user?.email) {
+        const newIcs = buildSessionEvent({
+          uid: booking.id,
+          sequence,
+          method: "REQUEST",
+          status: "CONFIRMED",
+          startTime: booking.slot.startTime,
+          endTime: booking.slot.endTime,
+          summary: `CV Review: ${newStudentName} × ${mentorName}`,
+          description: "CV Review session via Parthsaarthi.",
+          location: booking.slot.venue,
+          meetingLink: booking.slot.meetingLink ?? null,
+          organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+          organizerName: "Parthsaarthi",
+          attendees: [
+            { email: newStudentProfile.user.email, name: newStudentName },
+            ...(mentorProfile.user?.email ? [{ email: mentorProfile.user.email, name: mentorName }] : []),
+          ],
+        });
+        const newCalendarLink = buildGoogleCalendarLink({
+          summary: `CV Review: ${newStudentName} × ${mentorName}`,
+          description: "CV Review session via Parthsaarthi.",
+          location: booking.slot.venue,
+          startTime: booking.slot.startTime,
+          endTime: booking.slot.endTime,
+        });
+        mailer.sendBookingConfirmation({
+          studentEmail: newStudentProfile.user.email,
+          studentName: newStudentName,
+          mentorName,
+          firm: mentorProfile.firm,
+          date,
+          time,
+          venue: booking.slot.venue,
+          focus: updatedBooking.focus,
+          meetingLink: booking.slot.meetingLink ?? null,
+          icsContent: newIcs,
+          calendarLink: newCalendarLink,
+        }).catch((e) => console.error("[mailer] reassign confirmation to new student:", e.message));
+      }
+
+      if (oldStudent?.email) {
+        const oldIcs = buildSessionEvent({
+          uid: booking.id,
+          sequence,
+          method: "CANCEL",
+          status: "CANCELLED",
+          startTime: booking.slot.startTime,
+          endTime: booking.slot.endTime,
+          summary: `CV Review: ${oldStudentName} × ${mentorName}`,
+          description: "This session was reassigned to another student via Parthsaarthi.",
+          location: booking.slot.venue,
+          organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+          organizerName: "Parthsaarthi",
+          attendees: [{ email: oldStudent.email, name: oldStudentName }],
+        });
+        mailer.sendBookingReassignedToStudent({
+          studentEmail: oldStudent.email,
+          studentName: oldStudentName,
+          mentorName,
+          date,
+          time,
+          icsContent: oldIcs,
+        }).catch((e) => console.error("[mailer] reassign notice to old student:", e.message));
+      }
+    })().catch((e) => console.error("[mailer] reassign notification:", e.message));
+
+    res.json({ id: updatedBooking.id, studentUserId: updatedBooking.studentUserId });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Trades which student sits on which of the mentor's own two confirmed
+// bookings — e.g. two students both want to swap their session times. Deletes
+// and recreates both Booking rows rather than updating studentUserId in place:
+// both rows share the same mentorProfileId, and booking_one_active_per_mentor
+// (a plain, non-deferrable partial unique index on (studentUserId,
+// mentorProfileId) WHERE status='CONFIRMED') would transiently collide if
+// updated one at a time — row A would briefly duplicate row B's still-unswapped
+// student before the second update lands. Deleting both first removes the
+// conflicting index entries before either new row is inserted, so there's no
+// intermediate colliding state. StudentWarning.bookingId has no DB-level FK
+// (schema.prisma), so deleting a Booking row is safe. SlotCapacity is never
+// touched — both slots stay at 1/1 occupancy throughout.
+const swapBookings = async (req, res, next) => {
+  try {
+    const { bookingIdA, bookingIdB } = req.body;
+    if (!bookingIdA || !bookingIdB) {
+      return res.status(400).json({ error: "bookingIdA and bookingIdB are required" });
+    }
+    if (bookingIdA === bookingIdB) return res.status(400).json({ error: "Cannot swap a booking with itself" });
+
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const include = {
+      slot: { include: { release: true } },
+      student: { select: { id: true, name: true, email: true } },
+    };
+    const [bookingA, bookingB] = await Promise.all([
+      prisma.booking.findUnique({ where: { id: bookingIdA }, include }),
+      prisma.booking.findUnique({ where: { id: bookingIdB }, include }),
+    ]);
+    if (!bookingA || !bookingB) return res.status(404).json({ error: "Booking not found" });
+    for (const b of [bookingA, bookingB]) {
+      if (b.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your booking" });
+      if (b.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
+      if (b.slot.endTime <= new Date()) return res.status(400).json({ error: "This session has already ended" });
+    }
+
+    const [studentAProfile, studentBProfile] = await Promise.all([
+      prisma.studentProfile.findUnique({ where: { userId: bookingA.studentUserId } }),
+      prisma.studentProfile.findUnique({ where: { userId: bookingB.studentUserId } }),
+    ]);
+    if (await hasActiveBan(bookingA.studentUserId) || await hasActiveBan(bookingB.studentUserId)) {
+      return res.status(403).json({ error: "One of these students' booking access is currently suspended" });
+    }
+    // Cohort restrictions are set per BookingRelease batch, not per mentor, so
+    // slot A and slot B can legitimately have different cohortOnly settings
+    // even though they're the same mentor's own slots.
+    if (bookingA.slot.release.cohortOnly && studentBProfile?.cohortId !== mentorProfile.cohortId) {
+      return res.status(403).json({ error: "One of these slots is reserved for the mentor's cohort" });
+    }
+    if (bookingB.slot.release.cohortOnly && studentAProfile?.cohortId !== mentorProfile.cohortId) {
+      return res.status(403).json({ error: "One of these slots is reserved for the mentor's cohort" });
+    }
+
+    const now = Date.now();
+    const [newBookingAtSlotA, newBookingAtSlotB] = await prisma.$transaction([
+      prisma.booking.delete({ where: { id: bookingA.id } }),
+      prisma.booking.delete({ where: { id: bookingB.id } }),
+      prisma.booking.create({
+        data: {
+          slotId: bookingA.slotId,
+          studentUserId: bookingB.studentUserId,
+          mentorProfileId: mentorProfile.id,
+          focus: bookingB.focus,
+          idempotencyKey: `swap-${bookingA.slotId}-${bookingB.studentUserId}-${now}`,
+          status: "CONFIRMED",
+          allocatedBy: req.user.email,
+        },
+      }),
+      prisma.booking.create({
+        data: {
+          slotId: bookingB.slotId,
+          studentUserId: bookingA.studentUserId,
+          mentorProfileId: mentorProfile.id,
+          focus: bookingA.focus,
+          idempotencyKey: `swap-${bookingB.slotId}-${bookingA.studentUserId}-${now}`,
+          status: "CONFIRMED",
+          allocatedBy: req.user.email,
+        },
+      }),
+      prisma.auditEvent.create({
+        data: {
+          userId: req.user.sub,
+          action: "BOOKING_SWAPPED",
+          entity: "Booking",
+          entityId: bookingA.id,
+          meta: JSON.stringify({
+            oldBookingAId: bookingA.id, oldBookingBId: bookingB.id,
+            studentAUserId: bookingA.studentUserId, studentBUserId: bookingB.studentUserId,
+          }),
+        },
+      }),
+    ]).then((results) => [results[2], results[3]]);
+
+    (async () => {
+      const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) =>
+        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      const mentorName = mentorProfile.user?.name ?? "your mentor";
+      const studentAName = bookingA.student?.name ?? bookingA.student?.email ?? "the student";
+      const studentBName = bookingB.student?.name ?? bookingB.student?.email ?? "the student";
+      // Reuse each student's OLD booking id as the ICS uid — their calendar app then
+      // recognises this as an update to the event they already have, not a stray new one.
+      const sequence = Math.max(bookingA.slot.icsSequence, bookingB.slot.icsSequence) + 1;
+
+      const buildMoveIcs = (uid, studentEmail, name, otherName, fromSlot, toSlot) => ({
+        icsContent: buildSessionEvent({
+          uid, sequence, method: "REQUEST", status: "CONFIRMED",
+          startTime: toSlot.startTime, endTime: toSlot.endTime,
+          summary: `CV Review: ${name} × ${otherName}`,
+          description: "This session's time was swapped with another student's via Parthsaarthi.",
+          location: toSlot.venue, meetingLink: toSlot.meetingLink ?? null,
+          organizerEmail: CALENDAR_ORGANIZER_EMAIL, organizerName: "Parthsaarthi",
+          attendees: [
+            ...(studentEmail ? [{ email: studentEmail, name }] : []),
+            ...(mentorProfile.user?.email ? [{ email: mentorProfile.user.email, name: mentorName }] : []),
+          ],
+        }),
+        calendarLink: buildGoogleCalendarLink({
+          summary: `CV Review: ${name} × ${otherName}`,
+          description: "This session's time was swapped with another student's.",
+          location: toSlot.venue, startTime: toSlot.startTime, endTime: toSlot.endTime,
+        }),
+        shared: {
+          oldDate: fmtDate(fromSlot.startTime), oldTime: fmtTime(fromSlot.startTime),
+          newDate: fmtDate(toSlot.startTime), newTime: fmtTime(toSlot.startTime),
+          venue: toSlot.venue, meetingLink: toSlot.meetingLink ?? null,
+        },
+      });
+
+      const eventA = buildMoveIcs(bookingA.id, bookingA.student?.email, studentAName, mentorName, bookingA.slot, bookingB.slot);
+      const eventB = buildMoveIcs(bookingB.id, bookingB.student?.email, studentBName, mentorName, bookingB.slot, bookingA.slot);
+
+      if (bookingA.student?.email) {
+        mailer.sendRescheduleNotification({
+          to: bookingA.student.email, recipientName: studentAName, otherPartyName: mentorName,
+          ...eventA.shared, icsContent: eventA.icsContent, calendarLink: eventA.calendarLink,
+        }).catch((e) => console.error("[mailer] swap to student A:", e.message));
+      }
+      if (bookingB.student?.email) {
+        mailer.sendRescheduleNotification({
+          to: bookingB.student.email, recipientName: studentBName, otherPartyName: mentorName,
+          ...eventB.shared, icsContent: eventB.icsContent, calendarLink: eventB.calendarLink,
+        }).catch((e) => console.error("[mailer] swap to student B:", e.message));
+      }
+      if (mentorProfile.user?.email) {
+        mailer.sendRescheduleNotification({
+          to: mentorProfile.user.email, recipientName: mentorName, otherPartyName: studentAName,
+          ...eventA.shared, icsContent: eventA.icsContent, calendarLink: eventA.calendarLink,
+        }).catch((e) => console.error("[mailer] swap to mentor (A):", e.message));
+        mailer.sendRescheduleNotification({
+          to: mentorProfile.user.email, recipientName: mentorName, otherPartyName: studentBName,
+          ...eventB.shared, icsContent: eventB.icsContent, calendarLink: eventB.calendarLink,
+        }).catch((e) => console.error("[mailer] swap to mentor (B):", e.message));
+      }
+    })().catch((e) => console.error("[mailer] swap notification:", e.message));
+
+    res.json({ bookingAtSlotA: newBookingAtSlotA.id, bookingAtSlotB: newBookingAtSlotB.id });
   } catch (err) {
     next(err);
   }
@@ -623,4 +964,5 @@ const getMyBookings = async (req, res, next) => {
 module.exports = {
   createBooking, allocateSlot, searchStudentsForAllocation, cancelBooking,
   markAttendance, applyManualStrike, getMyBookings,
+  reassignBooking, swapBookings,
 };

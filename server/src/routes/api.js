@@ -103,6 +103,8 @@ router.delete(
 // DELETE /api/bookings/:id/release  student: cancel booking (never penalised)
 // POST   /api/bookings/:id/attendance  mentor: mark attended / no-show
 // POST   /api/bookings/:id/strike      mentor: manually strike a cancelled booking
+// POST   /api/bookings/:id/reassign    mentor: give this booking to a different student
+// POST   /api/bookings/swap            mentor: trade students between two of their own bookings
 router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
 router.get("/bookings/export", requireRole("STUDENT"), exportController.exportMyBookings);
 router.post("/bookings", bookingRateLimiter, requireRole("STUDENT"), bookingController.createBooking);
@@ -116,6 +118,16 @@ router.post(
   "/bookings/:id/strike",
   requireRole("MENTOR"),
   bookingController.applyManualStrike,
+);
+router.post(
+  "/bookings/:id/reassign",
+  requireRole("MENTOR"),
+  bookingController.reassignBooking,
+);
+router.post(
+  "/bookings/swap",
+  requireRole("MENTOR"),
+  bookingController.swapBookings,
 );
 
 // ── Cohort (mentor) ────────────────────────────────────────────────────────

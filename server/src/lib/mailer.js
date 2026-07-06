@@ -201,6 +201,30 @@ const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName
   });
 
 /**
+ * Sent to a student when a mentor reassigns their confirmed booking to a
+ * different student — the slot itself isn't cancelled, just no longer theirs.
+ * No penalty implied; distinct copy from sendCancelConfirmationToStudent so it
+ * doesn't read as "you cancelled this."
+ */
+const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
+  send({
+    to:      studentEmail,
+    subject: `Your session with ${mentorName} on ${date} is no longer available`,
+    text:    `Hi ${studentName}, your mentor ${mentorName} has moved the ${date} at ${time} session to another student. This wasn't something you did — reach out to your mentor if you'd like to rebook.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Session No Longer Available</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Reassigned by your mentor</p>
+      <div style="background:#FEF9F0;border:1px solid #FDE68A;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b>${mentorName}</b><br>
+        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
+      </div>
+      <p style="font-size:14px;color:#064E3B">Your mentor has moved this session to another student. This is not something you did, and no strike or penalty applies.</p>
+      <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time. The calendar event has been cancelled.</p>
+    `),
+    ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
+  });
+
+/**
  * Sent to a mentor whenever a student cancels a booking — keeps the mentor's
  * calendar in sync, and is also their cue to review the cancellation and
  * optionally apply a strike from the dashboard.
@@ -365,6 +389,7 @@ module.exports = {
   sendBookingConfirmationToMentor,
   sendBookingConfirmationCombined,
   sendCancelConfirmationToStudent,
+  sendBookingReassignedToStudent,
   sendBookingCancelledToMentor,
   sendRescheduleNotification,
   sendWaitlistSlotAvailable,

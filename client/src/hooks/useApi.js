@@ -326,6 +326,24 @@ export const useAllocateSlot = () => {
   });
 };
 
+export const useReassignBooking = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingId, pgpId }) =>
+      apiFetch(`/bookings/${bookingId}/reassign`, { method: "POST", body: JSON.stringify({ pgpId }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useSwapBookings = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bookingIdA, bookingIdB }) =>
+      apiFetch("/bookings/swap", { method: "POST", body: JSON.stringify({ bookingIdA, bookingIdB }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
 export const useJoinWaitlist = (mentorSlug) => {
   const qc = useQueryClient();
   return useMutation({

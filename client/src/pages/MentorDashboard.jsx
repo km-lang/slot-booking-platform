@@ -4,14 +4,14 @@ import {
   Shield, Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
-  Send, UserPlus, Search, ShieldAlert,
+  Send, UserPlus, Search, ShieldAlert, UserCog, ArrowLeftRight,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance,
   useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
   useBulkDeleteSlots, useBulkSetMeetingLink,
   useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
-  useApplyStrike,
+  useApplyStrike, useReassignBooking, useSwapBookings,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -226,6 +226,191 @@ function AllocateSheet({ slot, isOpen, onClose }) {
   );
 }
 
+// ── Reassign Sheet ───────────────────────────────────────────────────────────────
+// Gives an already-booked session to a different student, found the same way as
+// AllocateSheet (search by PGP ID/name/email). Same slot/time — just a new occupant.
+function ReassignSheet({ booking, isOpen, onClose }) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null); // { pgpId, name, email, cohortLabel }
+  const reassign = useReassignBooking();
+
+  const { data: results = [], isLoading: searching } = useAllocateStudentSearch(selected ? "" : query);
+
+  const handlePick = (student) => {
+    setSelected(student);
+    setQuery(`${student.name} · ${student.pgpId}`);
+  };
+
+  const handleQueryChange = (value) => {
+    setQuery(value);
+    if (selected) setSelected(null);
+  };
+
+  const handleSubmit = () => {
+    if (!selected || !booking) return;
+    reassign.mutate(
+      { bookingId: booking.bookingId, pgpId: selected.pgpId },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <Sheet isOpen={isOpen} onClose={onClose} maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl">
+      {booking && (
+        <>
+        <div className="flex items-start justify-between mb-0.5">
+          <h3 className="text-lg font-black text-emerald-950">Reassign Session</h3>
+          <button onClick={onClose} className="text-emerald-700/40 hover:text-emerald-900 -mr-1 -mt-1 p-1" title="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">
+          Currently {booking.student.name} · {booking.date} · {booking.time}
+        </p>
+
+        <div className="relative mb-5">
+          <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">New Student</label>
+          <div className="relative">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-900/30" />
+            <input
+              type="text" placeholder="Search by PGP ID or name…" value={query} autoFocus
+              onChange={(e) => handleQueryChange(e.target.value)}
+              className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl pl-9 pr-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+            />
+          </div>
+
+          {!selected && query.trim() && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-emerald-900/10 rounded-xl shadow-lg z-10 max-h-56 overflow-y-auto">
+              {searching ? (
+                <div className="px-4 py-3 text-xs font-bold text-emerald-800/40">Searching…</div>
+              ) : results.length === 0 ? (
+                <div className="px-4 py-3 text-xs font-bold text-emerald-800/40">No students found</div>
+              ) : (
+                results.map((s) => (
+                  <button
+                    key={s.pgpId} type="button" onClick={() => handlePick(s)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-emerald-50 transition-colors border-b border-emerald-900/5 last:border-0"
+                  >
+                    <div className="text-sm font-bold text-emerald-950">{s.name}</div>
+                    <div className="text-[11px] font-semibold text-emerald-700/60">
+                      {s.pgpId} · {s.email}{s.cohortLabel ? ` · ${s.cohortLabel}` : ""}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {reassign.error && (
+          <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+            {reassign.error.message}
+          </p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={reassign.isPending || !selected}
+          className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95"
+        >
+          {reassign.isPending ? "Reassigning…" : "Reassign to This Student"}
+        </button>
+        <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
+          {booking.student.name} will no longer see this session — they're notified by email, no strike applied.
+        </p>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+// ── Swap Sheet ─────────────────────────────────────────────────────────────────
+// Trades which student sits on which of the mentor's own two sessions — picked
+// from the already-loaded dashboard data, not a fresh search.
+function SwapSheet({ booking, candidates, isOpen, onClose }) {
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null); // a candidate session
+  const swap = useSwapBookings();
+
+  const filtered = candidates.filter((c) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return c.student.name.toLowerCase().includes(q) || c.student.pgp.toLowerCase().includes(q);
+  });
+
+  const handleSubmit = () => {
+    if (!selected || !booking) return;
+    swap.mutate(
+      { bookingIdA: booking.bookingId, bookingIdB: selected.bookingId },
+      { onSuccess: onClose },
+    );
+  };
+
+  return (
+    <Sheet isOpen={isOpen} onClose={onClose} maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl">
+      {booking && (
+        <>
+        <div className="flex items-start justify-between mb-0.5">
+          <h3 className="text-lg font-black text-emerald-950">Swap Sessions</h3>
+          <button onClick={onClose} className="text-emerald-700/40 hover:text-emerald-900 -mr-1 -mt-1 p-1" title="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">
+          {booking.student.name} · {booking.date} · {booking.time}
+        </p>
+
+        <div className="mb-5">
+          <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Swap With</label>
+          <div className="relative mb-2">
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-900/30" />
+            <input
+              type="text" placeholder="Filter by name or PGP ID…" value={query} autoFocus
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl pl-9 pr-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+            />
+          </div>
+          <div className="border border-emerald-900/10 rounded-xl max-h-64 overflow-y-auto divide-y divide-emerald-900/5">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-3 text-xs font-bold text-emerald-800/40">No other upcoming sessions</div>
+            ) : (
+              filtered.map((c) => (
+                <button
+                  key={c.bookingId} type="button" onClick={() => setSelected(c)}
+                  className={`w-full text-left px-4 py-2.5 transition-colors ${selected?.bookingId === c.bookingId ? "bg-emerald-100" : "hover:bg-emerald-50"}`}
+                >
+                  <div className="text-sm font-bold text-emerald-950">{c.student.name}</div>
+                  <div className="text-[11px] font-semibold text-emerald-700/60">
+                    {c.student.pgp} · {c.date} · {c.time}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {swap.error && (
+          <p className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+            {swap.error.message}
+          </p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={swap.isPending || !selected}
+          className="w-full bg-emerald-900 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-95"
+        >
+          {swap.isPending ? "Swapping…" : "Swap These Sessions"}
+        </button>
+        <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
+          Both students move to each other's time — they're notified by email, no strike applied either way.
+        </p>
+        </>
+      )}
+    </Sheet>
+  );
+}
+
 // ── Meeting Link Row ───────────────────────────────────────────────────────────
 // Lets a mentor add or edit a slot's Google Meet (or other) link at any time —
 // at creation, or "later somewhere" once the batch already exists.
@@ -288,7 +473,7 @@ function MeetingLinkRow({ slotId, currentLink }) {
 }
 
 // ── Session Card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, onAttendance, pendingBookingId }) {
+function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSwap }) {
   const navigate = useNavigate();
   const [lateSheetOpen, setLateSheetOpen] = useState(false);
   const isPending = pendingBookingId === session.bookingId;
@@ -374,6 +559,22 @@ function SessionCard({ session, onAttendance, pendingBookingId }) {
             title="Reschedule"
           >
             <Calendar size={14} />
+          </button>
+          <button
+            onClick={() => onReassign(session)}
+            disabled={isOverdue}
+            title={isOverdue ? "Not available once a session has ended" : "Reassign to a different student"}
+            className="px-3 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/60 transition-colors disabled:opacity-40"
+          >
+            <UserCog size={14} />
+          </button>
+          <button
+            onClick={() => onSwap(session)}
+            disabled={isOverdue}
+            title={isOverdue ? "Not available once a session has ended" : "Swap with another student"}
+            className="px-3 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 transition-colors disabled:opacity-40"
+          >
+            <ArrowLeftRight size={14} />
           </button>
           {session.student.email && (
             <a
@@ -493,6 +694,13 @@ export default function MentorDashboard() {
 
   // Allocate-by-PGP-ID sheet (per open slot)
   const [allocateSlotTarget, setAllocateSlotTarget] = useState(null);
+
+  // Reassign / Swap sheets (per booked session)
+  const [reassignTarget, setReassignTarget] = useState(null);
+  const [swapTarget, setSwapTarget] = useState(null);
+  const swapCandidates = [...ongoingSessions, ...bookedSessions].filter(
+    (s) => s.bookingId !== swapTarget?.bookingId && new Date(s.endTime) > new Date(),
+  );
 
   const handleAttendance = (bookingId, status) => {
     setPendingBookingId(bookingId);
@@ -637,6 +845,8 @@ export default function MentorDashboard() {
                     session={session}
                     onAttendance={handleAttendance}
                     pendingBookingId={pendingBookingId}
+                    onReassign={setReassignTarget}
+                    onSwap={setSwapTarget}
                   />
                 ))
               )}
@@ -663,6 +873,8 @@ export default function MentorDashboard() {
                     session={session}
                     onAttendance={handleAttendance}
                     pendingBookingId={pendingBookingId}
+                    onReassign={setReassignTarget}
+                    onSwap={setSwapTarget}
                   />
                 ))
               )}
@@ -859,6 +1071,8 @@ export default function MentorDashboard() {
           </CollapsibleSection>
 
           <AllocateSheet slot={allocateSlotTarget} isOpen={!!allocateSlotTarget} onClose={() => setAllocateSlotTarget(null)} />
+          <ReassignSheet booking={reassignTarget} isOpen={!!reassignTarget} onClose={() => setReassignTarget(null)} />
+          <SwapSheet booking={swapTarget} candidates={swapCandidates} isOpen={!!swapTarget} onClose={() => setSwapTarget(null)} />
           <AppFooter />
         </main>
       </div>
