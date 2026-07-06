@@ -443,7 +443,7 @@ function OrgMentorStatsTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <OrgCard title="Disha (Committee)" stats={org?.disha} loading={orgLoading} accent="emerald" />
         <OrgCard title={`AIGs (${org?.aigs?.length ?? 0} groups, combined)`} stats={aigsCombined} loading={orgLoading} accent="slate" />
-        <OrgCard title="Non-AIG (PGP2 Mentors)" stats={org?.nonAig} loading={orgLoading} accent="amber" />
+        <OrgCard title="Non Disha Mentors (PGP2 Mentors)" stats={org?.nonAig} loading={orgLoading} accent="amber" />
       </div>
 
       <div className="space-y-3">
@@ -474,7 +474,7 @@ function OrgMentorStatsTab() {
         </div>
 
         <MentorGroup
-          title="Non-AIG Mentors (PGP2 Students)"
+          title="Non Disha Mentors (PGP2 Students)"
           icon={<GraduationCap size={16} className="text-amber-700" />}
           mentors={grouped.nonAig}
           isExpanded={expanded === "non-aig"}
@@ -780,7 +780,7 @@ function WhitelistTab() {
             />
           </div>
         </div>
-        <div className="divide-y divide-emerald-900/5 max-h-[480px] overflow-y-auto">
+        <div className="divide-y divide-emerald-900/5">
           {isLoading ? (
             <div className="p-8 text-center text-xs font-bold text-emerald-800/30">Loading…</div>
           ) : whitelist.length === 0 ? (

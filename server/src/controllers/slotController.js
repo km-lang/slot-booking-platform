@@ -26,7 +26,7 @@ const listAigs = async (_req, res, next) => {
     // invisible on the student dashboard's browse view — only findable via search.
     // Surface them as a pseudo-group alongside the real AIGs.
     if (nonAigCount > 0) {
-      groups.push({ id: "none", name: "Non-AIG Mentors", type: "Independent", count: nonAigCount });
+      groups.push({ id: "none", name: "Non Disha Mentors", type: "Independent", count: nonAigCount });
     }
     res.json(groups);
   } catch (err) {

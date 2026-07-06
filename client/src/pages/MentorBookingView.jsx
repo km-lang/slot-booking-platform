@@ -158,7 +158,7 @@ export default function MentorBookingView() {
           </p>
         )}
         <p className="text-[10px] font-bold text-emerald-700/40 uppercase tracking-widest mt-1">
-          {group === "none" ? "Non-AIG Mentor" : `${group.toUpperCase()} MENTOR`}
+          {group === "none" ? "Non Disha Mentor" : `${group.toUpperCase()} MENTOR`}
         </p>
       </div>
 
