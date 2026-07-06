@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "MentorType" ADD VALUE 'PGP2_STUDENT_NO_AIG';

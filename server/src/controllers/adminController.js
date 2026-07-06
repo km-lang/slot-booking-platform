@@ -653,7 +653,13 @@ const listMentorStats = async (_req, res, next) => {
     const rows = mentors.map((m) => {
       const s = statsByMentor[m.id] ?? { completed: 0, attended: 0, noShow: 0, cancelled: 0 };
       const slotsOffered = m._count.slots;
-      const category = !m.aig ? "non-aig" : m.aig.slug === "disha" ? "disha" : m.aig.slug;
+      const category = !m.aig
+        ? m.mentorType === "PGP2_STUDENT_NO_AIG"
+          ? "pgp2-mentors"
+          : "non-aig"
+        : m.aig.slug === "disha"
+        ? "disha"
+        : m.aig.slug;
       return {
         slug: m.slug,
         name: m.user.name ?? m.user.email,

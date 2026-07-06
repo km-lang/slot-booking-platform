@@ -44,11 +44,15 @@ enum OrgCategory {
   AIG
 }
 
-// Distinguishes alumni mentors from current PGP2 students mentoring without
-// any org affiliation (mentorType=PGP2_STUDENT implies aigId is null).
+// Distinguishes alumni mentors from current PGP2 students. PGP2_STUDENT
+// mentors can still have a real aigId (e.g. Cracktank) — PGP2_STUDENT_NO_AIG
+// specifically marks the "PGP 2 Mentors" independent bucket, kept as its own
+// display group distinct from the older "Non Disha Mentors" (aigId null,
+// mentorType PGP2_STUDENT) population.
 enum MentorType {
   ALUMNI
   PGP2_STUDENT
+  PGP2_STUDENT_NO_AIG
 }
 
 // ─── Access Control ───────────────────────────────────────────────────────────

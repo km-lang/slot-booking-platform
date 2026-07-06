@@ -416,14 +416,20 @@ function OrgMentorStatsTab() {
   const grouped = useMemo(() => {
     const disha = mentors.filter((m) => m.category === "disha");
     const nonAig = mentors.filter((m) => m.category === "non-aig");
-    const byAig = {};
+    const pgp2Mentors = mentors.filter((m) => m.category === "pgp2-mentors");
+    const byAigUnsorted = {};
     for (const m of mentors) {
-      if (m.category !== "disha" && m.category !== "non-aig") {
-        if (!byAig[m.category]) byAig[m.category] = { name: m.orgName, mentors: [] };
-        byAig[m.category].mentors.push(m);
+      if (m.category !== "disha" && m.category !== "non-aig" && m.category !== "pgp2-mentors") {
+        if (!byAigUnsorted[m.category]) byAigUnsorted[m.category] = { name: m.orgName, mentors: [] };
+        byAigUnsorted[m.category].mentors.push(m);
       }
     }
-    return { disha, nonAig, byAig };
+    // Iteration order above follows mentors' name sort, not AIG name — resort so
+    // blocks render alphabetically by AIG name, matching the student dashboard's order.
+    const byAig = Object.fromEntries(
+      Object.entries(byAigUnsorted).sort(([, a], [, b]) => a.name.localeCompare(b.name)),
+    );
+    return { disha, nonAig, pgp2Mentors, byAig };
   }, [mentors]);
 
   const aigsCombined = useMemo(() => {
@@ -479,6 +485,15 @@ function OrgMentorStatsTab() {
           mentors={grouped.nonAig}
           isExpanded={expanded === "non-aig"}
           onToggle={() => setExpanded((e) => (e === "non-aig" ? null : "non-aig"))}
+          loading={mentorsLoading}
+        />
+
+        <MentorGroup
+          title="PGP 2 Mentors"
+          icon={<GraduationCap size={16} className="text-amber-700" />}
+          mentors={grouped.pgp2Mentors}
+          isExpanded={expanded === "pgp2-mentors"}
+          onToggle={() => setExpanded((e) => (e === "pgp2-mentors" ? null : "pgp2-mentors"))}
           loading={mentorsLoading}
         />
       </div>

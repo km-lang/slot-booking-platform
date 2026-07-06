@@ -6,12 +6,13 @@ const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } =
 
 const listAigs = async (_req, res, next) => {
   try {
-    const [aigs, nonAigCount] = await Promise.all([
+    const [aigs, totalNonAig, pgp2NoAigCount] = await Promise.all([
       prisma.aIG.findMany({
         include: { _count: { select: { mentorProfiles: true } } },
         orderBy: { name: "asc" },
       }),
       prisma.mentorProfile.count({ where: { aigId: null } }),
+      prisma.mentorProfile.count({ where: { aigId: null, mentorType: "PGP2_STUDENT_NO_AIG" } }),
     ]);
     const groups = aigs.map((aig) => ({
       id: aig.slug,
@@ -24,9 +25,18 @@ const listAigs = async (_req, res, next) => {
     groups.sort((a, b) => (a.id === "disha" ? -1 : b.id === "disha" ? 1 : 0));
     // Mentors not attached to any AIG (independent/general mentors) were previously
     // invisible on the student dashboard's browse view — only findable via search.
-    // Surface them as a pseudo-group alongside the real AIGs.
-    if (nonAigCount > 0) {
-      groups.push({ id: "none", name: "Non Disha Mentors", type: "Independent", count: nonAigCount });
+    // Surface them as pseudo-groups alongside the real AIGs. Two distinct
+    // independent populations share aigId=null — "Non Disha Mentors" (the
+    // original population) and "PGP 2 Mentors" (added later, kept as its own
+    // block) — split by mentorType, with anything not explicitly
+    // PGP2_STUDENT_NO_AIG defaulting to the "Non Disha Mentors" bucket so an
+    // unexpected mentorType still shows up somewhere rather than vanishing.
+    const nonDishaCount = totalNonAig - pgp2NoAigCount;
+    if (nonDishaCount > 0) {
+      groups.push({ id: "none", name: "Non Disha Mentors", type: "Independent", count: nonDishaCount });
+    }
+    if (pgp2NoAigCount > 0) {
+      groups.push({ id: "pgp2-no-aig", name: "PGP 2 Mentors", type: "Independent", count: pgp2NoAigCount });
     }
     res.json(groups);
   } catch (err) {
@@ -58,8 +68,17 @@ const listMentors = async (req, res, next) => {
       studentCohortId = sp?.cohortId ?? null;
     }
 
+    const where =
+      aigSlug === "none"
+        ? { aigId: null, mentorType: { not: "PGP2_STUDENT_NO_AIG" } }
+        : aigSlug === "pgp2-no-aig"
+        ? { aigId: null, mentorType: "PGP2_STUDENT_NO_AIG" }
+        : aigSlug
+        ? { aig: { slug: aigSlug } }
+        : undefined;
+
     const mentors = await prisma.mentorProfile.findMany({
-      where: aigSlug === "none" ? { aigId: null } : aigSlug ? { aig: { slug: aigSlug } } : undefined,
+      where,
       include: {
         user: true,
         aig: true,
