@@ -80,8 +80,12 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
         />
       </button>
 
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="bg-[var(--color-bg)] border-t border-emerald-900/5 p-3">
+      {/* grid-template-rows 0fr/1fr animates to the content's real height, however
+          tall it is — the previous max-h-[2000px] fixed cap silently clipped (with
+          no way to scroll to) any group whose content exceeded it, e.g. the 200+
+          mentor Non Disha group. */}
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden bg-[var(--color-bg)] border-t border-emerald-900/5 p-3">
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
               {[0, 1].map((i) => <SkeletonCard key={i} padding="p-4" />)}

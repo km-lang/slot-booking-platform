@@ -377,14 +377,14 @@ function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
           ) : mentors.length === 0 ? (
             <div className="p-6 text-center text-xs font-bold text-emerald-800/30">No mentors in this group</div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[640px]">
+            <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
                   <th className="py-2 px-4">Name</th>
                   <th className="py-2 px-4">Firm / Domain</th>
-                  <th className="py-2 px-4">Offered</th>
-                  <th className="py-2 px-4">Completed</th>
-                  <th className="py-2 px-4">No-Show</th>
+                  <th className="py-2 px-4 hidden sm:table-cell">Offered</th>
+                  <th className="py-2 px-4 hidden sm:table-cell">Completed</th>
+                  <th className="py-2 px-4 hidden sm:table-cell">No-Show</th>
                   <th className="py-2 px-4">Util %</th>
                 </tr>
               </thead>
@@ -393,9 +393,9 @@ function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
                   <tr key={m.slug} className="border-b border-emerald-900/5 hover:bg-emerald-50/30">
                     <td className="py-2.5 px-4 font-semibold text-emerald-950">{m.name}</td>
                     <td className="py-2.5 px-4 text-emerald-700/70 text-xs">{m.firm} · {m.domain}</td>
-                    <td className="py-2.5 px-4">{m.slotsOffered}</td>
-                    <td className="py-2.5 px-4">{m.completed}</td>
-                    <td className="py-2.5 px-4">{m.noShow}</td>
+                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.slotsOffered}</td>
+                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.completed}</td>
+                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.noShow}</td>
                     <td className="py-2.5 px-4 font-bold">{m.utilizationPct}%</td>
                   </tr>
                 ))}
