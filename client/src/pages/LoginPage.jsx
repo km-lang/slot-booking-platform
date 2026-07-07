@@ -172,7 +172,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center">
           <p className="text-xs font-semibold text-emerald-700/50 flex items-center justify-center gap-1">
-            Made with <Heart size={12} className="text-emerald-500 fill-emerald-500" /> by
+            Made with <Heart size={12} className="text-red-500 fill-red-500" /> by
           </p>
           <p className="text-sm font-black text-emerald-950 tracking-tight mt-1">Team Synapse</p>
           <span className="inline-block text-[9px] font-bold text-emerald-800/60 uppercase tracking-widest border border-emerald-900/15 rounded px-2 py-0.5 mt-1.5">

@@ -20,6 +20,7 @@ import AppFooter from "../components/AppFooter";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import Toggle from "../components/ui/Toggle";
+import psLogo from "../assets/PSLogo.png";
 
 const COLORS = ["var(--color-heading)", "var(--color-primary)", "var(--color-primary-light)", "var(--color-primary-lighter)"];
 
@@ -1031,14 +1032,17 @@ export default function PlacementAdminDashboard() {
     <div className="min-h-screen app-bg text-emerald-950 font-sans pb-12">
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center gap-3 shadow-sm">
         <div className="flex items-center gap-3 font-bold text-lg text-emerald-950 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400 shrink-0">
-            <Shield size={18} />
+          <img src={psLogo} alt="Parthsaarthi" className="w-8 h-8 rounded-lg object-contain bg-white shrink-0" />
+          <div className="truncate leading-tight">
+            <div className="truncate">Parthsaarthi</div>
+            <div className="hidden sm:block text-emerald-700 text-[10px] font-bold uppercase tracking-widest truncate">
+              Placements Admin Console
+            </div>
           </div>
-          <div className="truncate">Placements <span className="hidden sm:inline text-emerald-700 text-sm font-semibold ml-1">Admin Console</span></div>
         </div>
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <SyncBadge />
-          <AvatarMenu />
+          <AvatarMenu shukracharyaTo="/admin/placements" />
         </div>
       </nav>
 

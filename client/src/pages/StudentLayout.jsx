@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Briefcase } from "lucide-react";
 import AvatarMenu from "../components/AvatarMenu";
 import AppShell from "../components/ui/AppShell";
 import PageHeader from "../components/ui/PageHeader";
+import psLogo from "../assets/PSLogo.png";
 
 const TITLES = {
-  "/student": { title: "Book your Slot", subtitle: "SIP Prep 2026" },
+  "/student": { title: "Parthsaarthi", subtitle: "Book your slots" },
   "/student/bookings": { title: "My Sessions" },
 };
 
@@ -37,7 +37,7 @@ export default function StudentLayout() {
         <PageHeader
           title={known?.title ?? "Select Mentor"}
           subtitle={known?.subtitle ?? headerExtra.subtitle}
-          icon={isRoot ? <Briefcase size={18} /> : undefined}
+          icon={isRoot ? <img src={psLogo} alt="Parthsaarthi" className="w-8 h-8 rounded-lg object-contain bg-white" /> : undefined}
           onBack={onBack}
           actions={
             isRoot ? (

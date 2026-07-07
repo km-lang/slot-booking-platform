@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Shield, Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight, Download, XCircle, Loader2 } from "lucide-react";
+import { Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight, Download, XCircle, Loader2 } from "lucide-react";
 import { useAigOverview, useExportCsv } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -8,6 +8,7 @@ import CollapsibleSection from "../components/CollapsibleSection";
 import AppShell from "../components/ui/AppShell";
 import Card from "../components/ui/Card";
 import { SkeletonCard } from "../components/ui/Skeleton";
+import psLogo from "../assets/PSLogo.png";
 
 const getCountdown = (deadline) => {
   if (!deadline) return null;
@@ -56,9 +57,7 @@ export default function AigAdminDashboard() {
         <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-emerald-900/10 px-4 py-4">
           <div className="flex justify-between items-center gap-3 mb-4">
             <div className="flex items-center gap-2 font-bold text-emerald-950 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-emerald-900 flex items-center justify-center text-emerald-400 shrink-0">
-                <Shield size={18} />
-              </div>
+              <img src={psLogo} alt="Parthsaarthi" className="w-8 h-8 rounded-lg object-contain bg-white shrink-0" />
               <div className="min-w-0">
                 <span className="block leading-tight">{aigName}</span>
                 <span className="text-[10px] uppercase tracking-widest text-emerald-600 block leading-none mt-0.5">

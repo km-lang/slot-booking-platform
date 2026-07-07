@@ -17,6 +17,7 @@ import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
 import Sheet from "../components/ui/Sheet";
+import psLogo from "../assets/PSLogo.png";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -768,8 +769,14 @@ export default function MentorDashboard() {
 
         {/* Header — identity bar only; stays put while the page scrolls beneath it */}
         <header className="sticky top-0 z-30 bg-emerald-900 px-5 header-safe-top pb-4 shadow-lg flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-white font-bold text-sm shrink-0">
-            <Shield size={18} className="text-emerald-400" /> Mentor Console
+          <div className="flex items-center gap-2.5 shrink-0 min-w-0">
+            <img src={psLogo} alt="Parthsaarthi" className="w-8 h-8 rounded-lg object-contain bg-white shrink-0" />
+            <div className="min-w-0">
+              <div className="text-white font-black text-sm leading-tight truncate">Parthsaarthi</div>
+              <div className="text-emerald-300/70 text-[10px] font-bold uppercase tracking-widest leading-none mt-0.5 truncate">
+                Mentor Console
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
