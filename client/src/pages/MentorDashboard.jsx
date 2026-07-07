@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Shield, Plus, Users, CheckCircle, XCircle,
+  Plus, Users, CheckCircle, XCircle,
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
   Send, UserPlus, Search, ShieldAlert, UserCog, ArrowLeftRight,
@@ -779,13 +779,7 @@ export default function MentorDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => navigate("/mentor")}
-              className="bg-emerald-950 text-white text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-full shadow-inner border border-emerald-800 active:scale-95 transition-all flex items-center gap-1.5"
-            >
-              <Shield size={12} className="text-emerald-400" /> Shukracharya
-            </button>
-            <AvatarMenu variant="dark" />
+            <AvatarMenu variant="dark" shukracharyaTo="/mentor" />
           </div>
         </header>
 

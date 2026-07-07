@@ -41,15 +41,7 @@ export default function StudentLayout() {
           onBack={onBack}
           actions={
             isRoot ? (
-              <>
-                <button
-                  onClick={() => navigate("/student")}
-                  className="bg-emerald-900 hover:bg-emerald-800 text-white text-[10px] font-black uppercase tracking-wide px-3 py-2 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.15)] active:scale-95 transition-all shrink-0"
-                >
-                  Shukracharya
-                </button>
-                <AvatarMenu />
-              </>
+              <AvatarMenu shukracharyaTo="/student" />
             ) : (
               headerExtra.actions
             )
