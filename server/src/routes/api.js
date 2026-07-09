@@ -100,7 +100,6 @@ router.delete(
 // ── Bookings ───────────────────────────────────────────────────────────────
 // GET    /api/bookings/mine         student: own booking history (upcoming + past)
 // POST   /api/bookings              student: create booking (OCC, idempotency)
-// DELETE /api/bookings/:id/release  student: cancel booking (never penalised)
 // POST   /api/bookings/:id/attendance  mentor: mark attended / no-show
 // POST   /api/bookings/:id/strike      mentor: manually strike a cancelled booking
 // POST   /api/bookings/:id/reassign    mentor: give this booking to a different student
@@ -108,7 +107,6 @@ router.delete(
 router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
 router.get("/bookings/export", requireRole("STUDENT"), exportController.exportMyBookings);
 router.post("/bookings", bookingRateLimiter, requireRole("STUDENT"), bookingController.createBooking);
-router.delete("/bookings/:id/release", requireRole("STUDENT"), bookingController.cancelBooking);
 router.post(
   "/bookings/:id/attendance",
   requireRole("MENTOR"),

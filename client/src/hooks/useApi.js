@@ -193,18 +193,6 @@ export const useBookSlot = (mentorSlug) => {
   });
 };
 
-export const useCancelBooking = (mentorSlug) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (bookingId) =>
-      apiFetch(`/bookings/${bookingId}/release`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QK.slots(mentorSlug) });
-      qc.invalidateQueries({ queryKey: ["myBookings"] });
-    },
-  });
-};
-
 export const useMarkAttendance = () => {
   const qc = useQueryClient();
   return useMutation({

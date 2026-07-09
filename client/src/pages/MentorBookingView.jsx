@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Clock, MapPin, Video, AlertTriangle, ShieldCheck,
-  ChevronDown, XCircle, Phone, MessageCircle, Mail,
+  ChevronDown, Phone, MessageCircle, Mail,
 } from "lucide-react";
-import { useMentor, useSlots, useBookSlot, useCancelBooking, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
+import { useMentor, useSlots, useBookSlot, useJoinWaitlist, useLeaveWaitlist } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 import Sheet from "../components/ui/Sheet";
 
@@ -63,55 +63,41 @@ export default function MentorBookingView() {
   const { data: slots = [], isLoading: slotsLoading, error: slotsError } = useSlots(mentorId);
 
   const [selectedSlot, setSelectedSlot] = useState(null);
-  const [sheetMode, setSheetMode] = useState("BOOK");
   const [purpose, setPurpose] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(null);
 
-  const bookMutation    = useBookSlot(mentorId);
-  const cancelMutation  = useCancelBooking(mentorId);
+  const bookMutation = useBookSlot(mentorId);
 
-  const isProcessing = bookMutation.isPending || cancelMutation.isPending;
+  const isProcessing = bookMutation.isPending;
   // Normalize "This student" → "You" for student-facing display.
-  const rawError     = bookMutation.error?.message ?? cancelMutation.error?.message ?? null;
+  const rawError     = bookMutation.error?.message ?? null;
   const actionError  = rawError?.replace(/^This student('s)?/i, (_, s) => s ? "Your" : "You") ?? null;
   // Any 409 on booking means the user can't book this specific slot right now —
   // show the exact server reason and swap the button to "Choose Another Slot".
-  const bookConflict = sheetMode === "BOOK" && bookMutation.error?.status === 409;
+  const bookConflict = bookMutation.error?.status === 409;
 
   // Reset mutation errors when the sheet closes
   useEffect(() => {
     if (!selectedSlot) {
       bookMutation.reset();
-      cancelMutation.reset();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSlot]);
 
-  const openSheet = (slot, mode) => {
+  const openSheet = (slot) => {
     setSelectedSlot(slot);
-    setSheetMode(mode);
     setPurpose("");
-    if (mode === "BOOK") setIdempotencyKey(crypto.randomUUID());
+    setIdempotencyKey(crypto.randomUUID());
   };
 
   const handleAction = () => {
-    if (sheetMode === "BOOK") {
-      bookMutation.mutate(
-        { slotId: selectedSlot.id, focus: purpose, idempotencyKey },
-        // On a 409 (someone else booked it first) we deliberately leave the sheet open —
-        // the error message renders below and the slot list behind it has already
-        // refreshed (see useBookSlot's onError) to show the slot as taken.
-        { onSuccess: () => setSelectedSlot(null) },
-      );
-    } else {
-      // Stay on this mentor's page instead of bouncing to the AIG/mentor list —
-      // useCancelBooking's onSuccess already invalidates the slot list and
-      // myBookings, so this page's own re-render is enough to reflect the
-      // cancellation (the slot reopens right here).
-      cancelMutation.mutate(selectedSlot.bookingId, {
-        onSuccess: () => setSelectedSlot(null),
-      });
-    }
+    bookMutation.mutate(
+      { slotId: selectedSlot.id, focus: purpose, idempotencyKey },
+      // On a 409 (someone else booked it first) we deliberately leave the sheet open —
+      // the error message renders below and the slot list behind it has already
+      // refreshed (see useBookSlot's onError) to show the slot as taken.
+      { onSuccess: () => setSelectedSlot(null) },
+    );
   };
 
   const displayName =
@@ -262,17 +248,10 @@ export default function MentorBookingView() {
                   <div className="shrink-0">
                     {isAvailable && (
                       <button
-                        onClick={() => openSheet(slot, "BOOK")}
+                        onClick={() => openSheet(slot)}
                         className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 px-4 py-2 rounded-xl transition-colors"
                       >
                         Book
-                      </button>
-                    )}
-                    {isMine && (
-                      <button onClick={() => openSheet(slot, "CANCEL")} className="flex flex-col items-end gap-1 group">
-                        <span className="text-xs font-bold text-red-600 bg-red-50 group-hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-                          Cancel Session <XCircle size={12} />
-                        </span>
                       </button>
                     )}
                     {slot.status === "BOOKED_BY_OTHER" && (
@@ -299,60 +278,47 @@ export default function MentorBookingView() {
           return (
             <div>
               <h3 className="text-xl font-black text-emerald-950 mb-1">
-                {sheetMode === "BOOK" ? "Confirm Session" : "Cancel Session"}
+                Confirm Session
               </h3>
               <p className="text-sm font-semibold text-emerald-700/70 mb-6">with {displayName}</p>
 
-              <div className={`border rounded-2xl p-4 mb-6 ${sheetMode === "BOOK" ? "bg-[var(--color-bg)] border-emerald-900/10" : "bg-red-50/50 border-red-100"}`}>
-                <div className={`flex items-center gap-3 mb-3 pb-3 border-b ${sheetMode === "BOOK" ? "border-emerald-900/5" : "border-red-900/5"}`}>
-                  <Clock className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
+              <div className="border rounded-2xl p-4 mb-6 bg-[var(--color-bg)] border-emerald-900/10">
+                <div className="flex items-center gap-3 mb-3 pb-3 border-b border-emerald-900/5">
+                  <Clock className="text-emerald-600" size={18} />
                   <span className="font-bold text-emerald-950">{slotTime}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   {selectedSlot.venue?.toLowerCase().includes("online")
-                    ? <Video className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />
-                    : <MapPin className={sheetMode === "BOOK" ? "text-emerald-600" : "text-red-500"} size={18} />}
+                    ? <Video className="text-emerald-600" size={18} />
+                    : <MapPin className="text-emerald-600" size={18} />}
                   <span className="font-semibold text-emerald-800/80">{selectedSlot.venue}</span>
                 </div>
               </div>
 
-              {sheetMode === "BOOK" && (
-                <>
-                  <div className="mb-6">
-                    <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
-                      Session Focus (Required)
-                    </label>
-                    <div className="relative">
-                      <select
-                        value={purpose}
-                        onChange={(e) => setPurpose(e.target.value)}
-                        className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 shadow-sm appearance-none cursor-pointer"
-                      >
-                        <option value="" disabled>Select your focus…</option>
-                        {Object.entries(FOCUS_LABELS).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={18} className="absolute right-4 top-3 text-emerald-900/30 pointer-events-none" />
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2 bg-red-50 p-3 rounded-xl mb-6">
-                    <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                    <p className="text-[11px] font-bold text-red-900/80 leading-tight">
-                      No-shows result in an automatic strike. You can cancel any time with no automatic penalty.
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {sheetMode === "CANCEL" && (
-                <div className="flex items-start gap-2 p-3 rounded-xl mb-6 border bg-amber-50 border-amber-200">
-                  <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
-                  <p className="text-[11px] font-bold leading-tight text-amber-900/80">
-                    Cancelling won't automatically affect your record. Your mentor will be notified, and may apply a strike for last-minute or repeated cancellations.
-                  </p>
+              <div className="mb-6">
+                <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
+                  Session Focus (Required)
+                </label>
+                <div className="relative">
+                  <select
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                    className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 shadow-sm appearance-none cursor-pointer"
+                  >
+                    <option value="" disabled>Select your focus…</option>
+                    {Object.entries(FOCUS_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-3 text-emerald-900/30 pointer-events-none" />
                 </div>
-              )}
+              </div>
+              <div className="flex items-start gap-2 bg-red-50 p-3 rounded-xl mb-6">
+                <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] font-bold text-red-900/80 leading-tight">
+                  No-shows result in an automatic strike. Sessions cannot be cancelled once booked, so choose your slot carefully.
+                </p>
+              </div>
 
               {actionError && (
                 <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
@@ -364,16 +330,12 @@ export default function MentorBookingView() {
               )}
 
               <button
-                disabled={bookConflict ? false : (sheetMode === "BOOK" && !purpose) || isProcessing}
+                disabled={bookConflict ? false : !purpose || isProcessing}
                 onClick={bookConflict ? () => setSelectedSlot(null) : handleAction}
                 className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200
-                  ${bookConflict
+                  ${bookConflict || (!isProcessing && purpose)
                     ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95"
-                    : isProcessing || (sheetMode === "BOOK" && !purpose)
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : sheetMode === "BOOK"
-                    ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95"
-                    : "bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:scale-95"}`}
+                    : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
               >
                 {isProcessing ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -381,8 +343,8 @@ export default function MentorBookingView() {
                   "Choose Another Slot"
                 ) : (
                   <>
-                    {sheetMode === "BOOK" ? <ShieldCheck size={18} /> : <XCircle size={18} />}
-                    {sheetMode === "BOOK" ? "Lock In Booking" : "Confirm Cancellation"}
+                    <ShieldCheck size={18} />
+                    Lock In Booking
                   </>
                 )}
               </button>
@@ -393,7 +355,7 @@ export default function MentorBookingView() {
                   onClick={() => setSelectedSlot(null)}
                   className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
                 >
-                  {sheetMode === "BOOK" ? "Not Now" : "Keep My Booking"}
+                  Not Now
                 </button>
               )}
             </div>

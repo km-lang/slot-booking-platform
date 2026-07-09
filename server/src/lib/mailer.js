@@ -178,33 +178,10 @@ const sendBookingConfirmationCombined = ({
 };
 
 /**
- * Sent to a student when they cancel a booking. Cancelling is never itself
- * penalised — the mentor is notified separately and may, at their own
- * discretion, apply a strike afterward (see sendStrikeAppliedToStudent).
- */
-const sendCancelConfirmationToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
-  send({
-    to:      studentEmail,
-    subject: `Booking cancelled: ${mentorName} on ${date}`,
-    text:    `Hi ${studentName}, your session with ${mentorName} on ${date} at ${time} has been cancelled. Your mentor has been notified.`,
-    html:    wrap(`
-      <h2 style="margin:0 0 8px;font-size:20px">Booking Cancelled</h2>
-      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Your session has been removed</p>
-      <div style="background:#FEF9F0;border:1px solid #FDE68A;border-radius:10px;padding:16px 20px;margin-bottom:20px">
-        <b>${mentorName}</b><br>
-        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
-      </div>
-      <p style="font-size:14px;color:#064E3B">Your mentor has been notified. Repeated or last-minute cancellations may lead to a strike at your mentor's discretion.</p>
-      <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time. The calendar event has been cancelled.</p>
-    `),
-    ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
-  });
-
-/**
  * Sent to a student when a mentor reassigns their confirmed booking to a
  * different student — the slot itself isn't cancelled, just no longer theirs.
- * No penalty implied; distinct copy from sendCancelConfirmationToStudent so it
- * doesn't read as "you cancelled this."
+ * No penalty implied; copy is deliberately distinct so it doesn't read as
+ * "you cancelled this."
  */
 const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
   send({
@@ -220,29 +197,6 @@ const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorName,
       </div>
       <p style="font-size:14px;color:#064E3B">Your mentor has moved this session to another student. This is not something you did, and no strike or penalty applies.</p>
       <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time. The calendar event has been cancelled.</p>
-    `),
-    ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
-  });
-
-/**
- * Sent to a mentor whenever a student cancels a booking — keeps the mentor's
- * calendar in sync, and is also their cue to review the cancellation and
- * optionally apply a strike from the dashboard.
- */
-const sendBookingCancelledToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, icsContent }) =>
-  send({
-    to:      mentorEmail,
-    subject: `Booking cancelled: ${studentName} on ${date} at ${time}`,
-    text:    `Hi ${mentorName}, ${studentName} (PGP-${pgpId}) cancelled their ${time} session on ${date}. It has been removed from your calendar.`,
-    html:    wrap(`
-      <h2 style="margin:0 0 8px;font-size:20px">Booking Cancelled</h2>
-      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">This slot is now free</p>
-      <div style="background:#FEF9F0;border:1px solid #FDE68A;border-radius:10px;padding:16px 20px;margin-bottom:20px">
-        <b>${studentName}</b>
-        <span style="font-size:13px;color:#064E3B99;margin-left:6px">PGP-${pgpId}</span><br>
-        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
-      </div>
-      <p style="font-size:13px;color:#064E3B99;margin:0">The calendar event has been cancelled.</p>
     `),
     ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
   });
@@ -388,9 +342,7 @@ module.exports = {
   sendBookingConfirmation,
   sendBookingConfirmationToMentor,
   sendBookingConfirmationCombined,
-  sendCancelConfirmationToStudent,
   sendBookingReassignedToStudent,
-  sendBookingCancelledToMentor,
   sendRescheduleNotification,
   sendWaitlistSlotAvailable,
   sendDelayNotification,

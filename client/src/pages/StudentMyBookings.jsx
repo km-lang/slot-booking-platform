@@ -1,15 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import {
   CalendarCheck, Clock, MapPin, CheckCircle,
   XCircle, AlertCircle, AlertTriangle, Download, Video, Loader2,
 } from "lucide-react";
-import { useMyBookings, useCancelBooking, useExportCsv } from "../hooks/useApi";
+import { useMyBookings, useExportCsv } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
 import Card from "../components/ui/Card";
 import { SkeletonCard } from "../components/ui/Skeleton";
-import Sheet from "../components/ui/Sheet";
 
 const FOCUS_LABELS = {
   overall: "Overall CV Review",
@@ -48,12 +47,9 @@ const STATUS_CONFIG = {
   },
 };
 
-function BookingCard({ booking, onCancel }) {
+function BookingCard({ booking }) {
   const cfg = STATUS_CONFIG[booking.status] ?? STATUS_CONFIG.CONFIRMED;
-  // Server rejects cancelling a session that's already started — mirrored here so a
-  // student can't be shown a "Cancel" button for something that already happened
-  // (e.g. a past session the mentor hasn't marked attendance on yet).
-  const canCancel = booking.status === "CONFIRMED" && new Date(booking.slotStart) > new Date();
+  const isUpcomingConfirmed = booking.status === "CONFIRMED" && new Date(booking.slotStart) > new Date();
   const initials = booking.mentorName
     .split(" ")
     .map((w) => w[0])
@@ -87,7 +83,7 @@ function BookingCard({ booking, onCancel }) {
         </div>
       </div>
 
-      {canCancel && booking.delayMinutes > 0 && (
+      {isUpcomingConfirmed && booking.delayMinutes > 0 && (
         <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
           <AlertTriangle size={13} className="text-amber-600 shrink-0" />
           <p className="text-xs font-bold text-amber-800">
@@ -121,15 +117,6 @@ function BookingCard({ booking, onCancel }) {
           <Video size={13} /> Join Google Meet
         </a>
       )}
-
-      {canCancel && (
-        <button
-          onClick={() => onCancel(booking)}
-          className="w-full py-2 rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 text-xs font-bold transition-colors disabled:opacity-50 active:scale-95"
-        >
-          Cancel Session
-        </button>
-      )}
     </Card>
   );
 }
@@ -137,27 +124,11 @@ function BookingCard({ booking, onCancel }) {
 export default function StudentMyBookings() {
   const { setHeaderExtra } = useOutletContext();
   const { data, isLoading, error } = useMyBookings();
-  const cancelMutation = useCancelBooking(null);
   const exportMutation = useExportCsv();
-  const [cancelTarget, setCancelTarget] = useState(null);
 
   const ongoing  = data?.ongoing  ?? [];
   const upcoming = data?.upcoming ?? [];
   const past     = data?.past     ?? [];
-
-  const openCancelSheet = (booking) => {
-    cancelMutation.reset();
-    setCancelTarget(booking);
-  };
-  const closeCancelSheet = () => {
-    if (cancelMutation.isPending) return;
-    setCancelTarget(null);
-  };
-  const confirmCancel = () => {
-    cancelMutation.mutate(cancelTarget.id, {
-      onSuccess: () => setCancelTarget(null),
-    });
-  };
 
   const handleExport = () => {
     exportMutation.mutate(
@@ -229,7 +200,6 @@ export default function StudentMyBookings() {
                 <BookingCard
                   key={b.id}
                   booking={b}
-                  onCancel={openCancelSheet}
                 />
               ))}
             </div>
@@ -261,7 +231,6 @@ export default function StudentMyBookings() {
                 <BookingCard
                   key={b.id}
                   booking={b}
-                  onCancel={openCancelSheet}
                 />
               ))}
             </div>
@@ -289,7 +258,6 @@ export default function StudentMyBookings() {
                   <BookingCard
                     key={b.id}
                     booking={b}
-                    onCancel={openCancelSheet}
                   />
                 ))}
               </div>
@@ -300,62 +268,6 @@ export default function StudentMyBookings() {
       <div className="pb-safe">
         <AppFooter />
       </div>
-
-      {/* Cancel confirmation bottom sheet */}
-      <Sheet isOpen={!!cancelTarget} onClose={closeCancelSheet}>
-        {cancelTarget && (
-          <div>
-            <h3 className="text-xl font-black text-emerald-950 mb-1">Cancel Session</h3>
-            <p className="text-sm font-semibold text-emerald-700/70 mb-6">with {cancelTarget.mentorName}</p>
-
-            <div className="border rounded-2xl p-4 mb-6 bg-red-50/50 border-red-100">
-              <div className="flex items-center gap-3 mb-3 pb-3 border-b border-red-900/5">
-                <Clock className="text-red-500" size={18} />
-                <span className="font-bold text-emerald-950">{cancelTarget.slotLabel}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <MapPin className="text-red-500" size={18} />
-                <span className="font-semibold text-emerald-800/80">{cancelTarget.venue}</span>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2 p-3 rounded-xl mb-6 border bg-amber-50 border-amber-200">
-              <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
-              <p className="text-[11px] font-bold leading-tight text-amber-900/80">
-                Cancelling won't automatically affect your record. Your mentor will be notified, and may apply a strike for last-minute or repeated cancellations.
-              </p>
-            </div>
-
-            {cancelMutation.error && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-                <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
-                <p className="text-xs font-bold text-red-700">{cancelMutation.error.message}</p>
-              </div>
-            )}
-
-            <button
-              disabled={cancelMutation.isPending}
-              onClick={confirmCancel}
-              className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 bg-red-600 text-white shadow-[0_8px_20px_rgba(220,38,38,0.2)] active:scale-95 disabled:opacity-60"
-            >
-              {cancelMutation.isPending ? (
-                <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <XCircle size={18} /> Confirm Cancellation
-                </>
-              )}
-            </button>
-            <button
-              disabled={cancelMutation.isPending}
-              onClick={closeCancelSheet}
-              className="w-full py-3 mt-2 text-sm font-bold text-emerald-800/60 hover:text-emerald-950 transition-colors"
-            >
-              Keep My Booking
-            </button>
-          </div>
-        )}
-      </Sheet>
     </>
   );
 }

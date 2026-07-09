@@ -15,25 +15,10 @@ const ALLOWED_FOCUS = ["overall", "workex", "por"];
 const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = null, actingUserId = null) => {
   await tx.studentWarning.create({ data: { userId, bookingId, type: "STRIKE", reason, issuedBy } });
   const strikeCount = await tx.studentWarning.count({ where: { userId, type: "STRIKE" } });
-  const tier = await tx.banPolicyTier.findUnique({ where: { strikeThreshold: strikeCount } });
-  let ban = null;
-  if (tier) {
-    const endsAt = tier.banDurationHours ? new Date(Date.now() + tier.banDurationHours * 3600 * 1000) : null;
-    ban = await tx.ban.create({ data: { userId, reason: tier.description, endsAt } });
-    // Previously only BAN_LIFTED was ever recorded — BAN_APPLIED had a label
-    // in the admin audit log but nothing wrote it, so an auto-ban never showed
-    // up there even though BAN_LIFTED for the same ban does.
-    await tx.auditEvent.create({
-      data: {
-        userId:   actingUserId,
-        action:   "BAN_APPLIED",
-        entity:   "Ban",
-        entityId: ban.id,
-        meta:     JSON.stringify({ bannedUserId: userId, strikeCount, reason: tier.description }),
-      },
-    });
-  }
-  return { ban };
+  // Auto-banning is switched off for now (policy call, 2026-07-09) — strikes
+  // still accumulate and show up everywhere as before, but no Ban row is ever
+  // created off the back of one. BanPolicyTier lookup deliberately skipped.
+  return { ban: null };
 };
 
 // Sends the booking confirmation email + calendar invite to both parties. Shared by
@@ -654,130 +639,6 @@ const swapBookings = async (req, res, next) => {
   }
 };
 
-// Cancellation itself is never auto-penalised — the student can always cancel
-// freely. The mentor is notified and can, at their own discretion, apply a
-// strike to this specific cancellation afterward (see applyManualStrike below).
-const cancelBooking = async (req, res, next) => {
-  try {
-    const booking = await prisma.booking.findUnique({
-      where:   { id: req.params.id },
-      include: {
-        slot: {
-          include: {
-            mentorProfile: { include: { user: { select: { name: true, email: true } } } },
-          },
-        },
-        student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
-      },
-    });
-    if (!booking) return res.status(404).json({ error: "Booking not found" });
-    if (booking.studentUserId !== req.user.sub) return res.status(403).json({ error: "Not your booking" });
-    if (booking.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
-    if (booking.slot.startTime <= new Date()) {
-      return res.status(400).json({ error: "Cannot cancel a session that has already started" });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.booking.update({
-        where: { id: booking.id },
-        data:  { status: "CANCELLED", cancelledBy: "STUDENT", cancelledAt: new Date() },
-      });
-      await tx.slotCapacity.update({ where: { slotId: booking.slotId }, data: { current: { decrement: 1 } } });
-
-      await tx.auditEvent.create({
-        data: {
-          userId:   req.user.sub,
-          action:   "BOOKING_CANCELLED",
-          entity:   "Booking",
-          entityId: booking.id,
-          meta:     JSON.stringify({ cancelledBy: "STUDENT" }),
-        },
-      });
-    });
-
-    const fmtDate = (d) =>
-      new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-    const fmtTime = (d) =>
-      new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-    const mentor  = booking.slot.mentorProfile?.user;
-    const student = booking.student;
-
-    const studentName = student?.name ?? student?.email ?? "the student";
-    const mentorName  = mentor?.name ?? mentor?.email ?? "the mentor";
-    const cancelIcsContent = buildSessionEvent({
-      uid: booking.id,
-      sequence: booking.slot.icsSequence + 1, // must exceed any prior reschedule's sequence
-      method: "CANCEL",
-      status: "CANCELLED",
-      startTime: booking.slot.startTime,
-      endTime: booking.slot.endTime,
-      summary: `CV Review: ${studentName} × ${mentorName}`,
-      description: "This session was cancelled via Parthsaarthi.",
-      location: booking.slot.venue,
-      organizerEmail: CALENDAR_ORGANIZER_EMAIL,
-      organizerName: "Parthsaarthi",
-      attendees: [
-        ...(student?.email ? [{ email: student.email, name: studentName }] : []),
-        ...(mentor?.email ? [{ email: mentor.email, name: mentorName }] : []),
-      ],
-    });
-
-    // Notify the student their cancellation went through — no penalty language,
-    // since cancelling is never itself penalised.
-    if (student?.email) {
-      mailer.sendCancelConfirmationToStudent({
-        studentEmail: student.email,
-        studentName:  student.name ?? student.email,
-        mentorName:   mentor?.name ?? "your mentor",
-        date:         fmtDate(booking.slot.startTime),
-        time:         fmtTime(booking.slot.startTime),
-        icsContent: cancelIcsContent,
-      }).catch((e) => console.error("[mailer] cancel confirmation:", e.message));
-    }
-
-    // Notify the mentor their slot was cancelled by this student — this is also
-    // the mentor's cue to review it and optionally apply a strike.
-    if (mentor?.email) {
-      mailer.sendBookingCancelledToMentor({
-        mentorEmail: mentor.email,
-        mentorName:  mentor.name ?? mentor.email,
-        studentName,
-        pgpId:       student?.studentProfile?.pgpId ?? "N/A",
-        date:        fmtDate(booking.slot.startTime),
-        time:        fmtTime(booking.slot.startTime),
-        icsContent:  cancelIcsContent,
-      }).catch((e) => console.error("[mailer] booking cancelled to mentor:", e.message));
-    }
-
-    // Notify the waitlist (if any) that this slot just freed up — one-shot, never
-    // auto-books anyone. First person to actually submit a real booking still wins,
-    // through the normal OCC-guarded createBooking flow above.
-    prisma.slotWaitlist.findMany({
-      where: { slotId: booking.slotId },
-      include: { student: { select: { name: true, email: true } } },
-    }).then(async (waitlisted) => {
-      if (waitlisted.length === 0) return;
-      for (const w of waitlisted) {
-        if (!w.student?.email) continue;
-        mailer.sendWaitlistSlotAvailable({
-          studentEmail: w.student.email,
-          studentName:  w.student.name ?? w.student.email,
-          mentorName,
-          firm:         booking.slot.mentorProfile?.firm ?? "IIM Lucknow",
-          date:         fmtDate(booking.slot.startTime),
-          time:         fmtTime(booking.slot.startTime),
-          venue:        booking.slot.venue,
-        }).catch((e) => console.error("[mailer] waitlist notify:", e.message));
-      }
-      await prisma.slotWaitlist.deleteMany({ where: { slotId: booking.slotId } });
-    }).catch((e) => console.error("[waitlist] notify lookup:", e.message));
-
-    res.json({ id: booking.id, status: "CANCELLED", cancelledBy: "STUDENT" });
-  } catch (err) {
-    next(err);
-  }
-};
-
 // Mentor marks attendance. NO_SHOW → STRIKE → evaluate BanPolicyTier
 const markAttendance = async (req, res, next) => {
   try {
@@ -962,7 +823,7 @@ const getMyBookings = async (req, res, next) => {
 };
 
 module.exports = {
-  createBooking, allocateSlot, searchStudentsForAllocation, cancelBooking,
+  createBooking, allocateSlot, searchStudentsForAllocation,
   markAttendance, applyManualStrike, getMyBookings,
   reassignBooking, swapBookings,
 };
