@@ -202,6 +202,29 @@ const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorName,
   });
 
 /**
+ * Sent to a student when a mentor deletes a slot that had their confirmed
+ * booking on it — the session is gone entirely (unlike a reassignment, where
+ * it still happens for someone else). No penalty implied.
+ */
+const sendSlotDeletedToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
+  send({
+    to:      studentEmail,
+    subject: `Your session with ${mentorName} on ${date} has been cancelled`,
+    text:    `Hi ${studentName}, your mentor ${mentorName} has removed the ${date} at ${time} session. This wasn't something you did — no strike or penalty applies. You can book a new slot from the app at any time.`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Session Cancelled</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Removed by your mentor</p>
+      <div style="background:#FEF9F0;border:1px solid #FDE68A;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b>${mentorName}</b><br>
+        <span style="font-size:13px;color:#064E3B99">${date} · ${time}</span>
+      </div>
+      <p style="font-size:14px;color:#064E3B">Your mentor has removed this session. This is not something you did, and no strike or penalty applies.</p>
+      <p style="font-size:13px;color:#064E3B99;margin-top:8px">You can book a new slot from the app at any time. The calendar event has been cancelled.</p>
+    `),
+    ...(icsContent && { icalEvent: { method: "CANCEL", content: icsContent } }),
+  });
+
+/**
  * Sent to both student and mentor when a mentor reschedules an already-booked
  * session to a new time. No penalty either direction — this is a time change,
  * not a cancellation.
@@ -343,6 +366,7 @@ module.exports = {
   sendBookingConfirmationToMentor,
   sendBookingConfirmationCombined,
   sendBookingReassignedToStudent,
+  sendSlotDeletedToStudent,
   sendRescheduleNotification,
   sendWaitlistSlotAvailable,
   sendDelayNotification,

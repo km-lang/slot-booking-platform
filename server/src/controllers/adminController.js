@@ -131,7 +131,7 @@ const getAigSlotHoursReleased = async (req, res, next) => {
     toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
 
     const slots = await prisma.slot.findMany({
-      where: { mentorProfile: { aigId: aig.id }, startTime: { gte: fromDate, lt: toDate } },
+      where: { mentorProfile: { aigId: aig.id }, startTime: { gte: fromDate, lt: toDate }, retired: false },
       select: { startTime: true, endTime: true },
     });
     const hours = slots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
@@ -167,8 +167,9 @@ const getBatchOverview = async (_req, res, next) => {
         where: { user: { bookings: { some: { status: "ATTENDED" } } } },
       }),
       // Durations, not a count — slots can be of any length, so "utilization" is
-      // measured in hours rather than number of slots.
-      prisma.slot.findMany({ select: { startTime: true, endTime: true } }),
+      // measured in hours rather than number of slots. Retired (deleted) slots are
+      // excluded — they no longer exist from the mentor's or student's point of view.
+      prisma.slot.findMany({ where: { retired: false }, select: { startTime: true, endTime: true } }),
       prisma.booking.count({ where: { status: "NO_SHOW" } }),
       // A CONFIRMED booking whose slot has already ended and was never marked has an
       // unknown outcome — it shouldn't count as "utilized" alongside real ATTENDED
@@ -190,8 +191,8 @@ const getBatchOverview = async (_req, res, next) => {
         take: 8,
         include: {
           user: { select: { name: true } },
-          _count: { select: { slots: true } },
-          slots: { select: { startTime: true, endTime: true } },
+          _count: { select: { slots: { where: { retired: false } } } },
+          slots: { where: { retired: false }, select: { startTime: true, endTime: true } },
         },
         orderBy: { slots: { _count: "desc" } },
       }),
@@ -538,7 +539,7 @@ const getMentorSessionDetail = async (req, res, next) => {
 
     // Hours, not a slot count, since slots can be of any duration.
     const mentorSlots = await prisma.slot.findMany({
-      where: { mentorProfileId: mentorProfile.id },
+      where: { mentorProfileId: mentorProfile.id, retired: false },
       select: { startTime: true, endTime: true },
     });
     const totalHours = mentorSlots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
@@ -604,7 +605,11 @@ const getOrgStats = async (_req, res, next) => {
     const now = new Date();
     const toHours = (start, end) => (end - start) / 3600000;
     const orgUnits = await prisma.aIG.findMany({
-      include: { mentorProfiles: { include: { slots: { select: { startTime: true, endTime: true } } } } },
+      include: {
+        mentorProfiles: {
+          include: { slots: { where: { retired: false }, select: { startTime: true, endTime: true } } },
+        },
+      },
       orderBy: { name: "asc" },
     });
 
@@ -659,7 +664,7 @@ const getOrgStats = async (_req, res, next) => {
 
     const nonAigMentors = await prisma.mentorProfile.findMany({
       where: { aigId: null },
-      include: { slots: { select: { startTime: true, endTime: true } } },
+      include: { slots: { where: { retired: false }, select: { startTime: true, endTime: true } } },
     });
     const nonAig = await statsFor(nonAigMentors);
 
@@ -699,7 +704,7 @@ const listMentorStats = async (_req, res, next) => {
         include: {
           user: { select: { name: true, email: true } },
           aig: { select: { slug: true, name: true } },
-          slots: { select: { startTime: true, endTime: true } },
+          slots: { where: { retired: false }, select: { startTime: true, endTime: true } },
         },
         orderBy: { user: { name: "asc" } },
       }),

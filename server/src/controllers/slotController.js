@@ -83,7 +83,7 @@ const listMentors = async (req, res, next) => {
         user: true,
         aig: true,
         slots: {
-          where: { startTime: { gt: now } },
+          where: { startTime: { gt: now }, retired: false },
           include: { capacity: true, release: { select: { cohortOnly: true } } },
         },
       },
@@ -295,62 +295,113 @@ const releaseSlots = async (req, res, next) => {
   }
 };
 
-// A slot with only CANCELLED booking history can never be hard-deleted (Booking.slotId
-// is ON DELETE RESTRICT, to keep the cancelled booking's history intact) — so instead
-// of erroring, this quietly retires it: marks it out of the way (excluded from the
-// slot_no_overlap_per_mentor constraint — see the partial-exclusion migration) without
-// touching its startTime/endTime, since the cancelled booking's own history display
+// Every delete is a soft delete — the row always stays (retired: true, published:
+// false), never removed from the DB. That's also required for slots with CANCELLED
+// booking history: Booking.slotId is ON DELETE RESTRICT, so hard-deleting a slot a
+// cancelled booking still points to would fail outright. Retiring instead keeps
+// startTime/endTime intact, since the cancelled booking's own history display
 // (student's "My Sessions", mentor's "Cancelled Sessions", admin pages, CSV exports)
 // reads the original scheduled time through this same row and must stay accurate.
-// From the mentor's point of view there's only ever one action, "Delete" — this is
-// just which of the two mechanisms actually applies underneath.
+// A slot with a live CONFIRMED booking can also be deleted — that booking is
+// auto-cancelled (cancelledBy: MENTOR) and the student is emailed a cancellation
+// notice, same pattern as reassignBooking's outgoing-student notice. A slot whose
+// session already ran (ATTENDED/NO_SHOW) is left alone — nothing to cancel, and the
+// record shouldn't be pulled out of the mentor's own history views.
 const deleteSlot = async (req, res, next) => {
   try {
-    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
     if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
 
     const slot = await prisma.slot.findUnique({
       where: { id: req.params.id },
-      include: { bookings: true },
+      include: {
+        bookings: {
+          where: { status: { not: "CANCELLED" } },
+          include: { student: { select: { name: true, email: true } } },
+        },
+      },
     });
     if (!slot) return res.status(404).json({ error: "Slot not found" });
     if (slot.mentorProfileId !== mentorProfile.id) {
       return res.status(403).json({ error: "Not your slot" });
     }
 
-    const hasActive = slot.bookings.some((b) => b.status !== "CANCELLED");
-    if (hasActive) {
-      return res.status(409).json({ error: "Cannot delete a slot with an active booking" });
+    const resolvedBookings = slot.bookings.filter((b) => b.status !== "CONFIRMED");
+    if (resolvedBookings.length > 0) {
+      return res.status(409).json({ error: "Cannot delete a slot whose session already ran" });
     }
+    const activeBookings = slot.bookings; // remaining ones are all CONFIRMED
 
-    if (slot.bookings.length === 0) {
-      await prisma.$transaction([
-        prisma.slotCapacity.deleteMany({ where: { slotId: slot.id } }),
-        prisma.slot.delete({ where: { id: slot.id } }),
-        prisma.auditEvent.create({
-          data: {
-            userId: req.user.sub,
-            action: "SLOT_DELETED",
-            entity: "Slot",
-            entityId: slot.id,
-          },
+    const now = new Date();
+    const [updatedSlot] = await prisma.$transaction([
+      prisma.slot.update({
+        where: { id: slot.id },
+        data: {
+          retired: true,
+          published: false,
+          ...(activeBookings.length > 0 && { icsSequence: { increment: 1 } }),
+        },
+      }),
+      ...activeBookings.map((b) =>
+        prisma.booking.update({
+          where: { id: b.id },
+          data: { status: "CANCELLED", cancelledBy: "MENTOR", cancelledAt: now },
         }),
-      ]);
-      return res.status(204).send();
-    }
-
-    await prisma.$transaction([
-      prisma.slot.update({ where: { id: slot.id }, data: { retired: true, published: false } }),
+      ),
       prisma.auditEvent.create({
         data: {
           userId: req.user.sub,
           action: "SLOT_RETIRED",
           entity: "Slot",
           entityId: slot.id,
+          ...(activeBookings.length > 0 && {
+            meta: JSON.stringify({ cancelledBookings: activeBookings.length }),
+          }),
         },
       }),
     ]);
-    res.status(200).json({ id: slot.id, retired: true });
+
+    if (activeBookings.length > 0) {
+      (async () => {
+        const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+        const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+        const mentorName = mentorProfile.user?.name ?? "your mentor";
+        const date = fmtDate(slot.startTime);
+        const time = fmtTime(slot.startTime);
+
+        for (const b of activeBookings) {
+          if (!b.student?.email) continue;
+          const studentName = b.student.name ?? b.student.email;
+          const icsContent = buildSessionEvent({
+            uid: b.id,
+            sequence: updatedSlot.icsSequence,
+            method: "CANCEL",
+            status: "CANCELLED",
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            summary: `CV Review: ${studentName} × ${mentorName}`,
+            description: "This session was cancelled via Parthsaarthi.",
+            location: slot.venue,
+            organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+            organizerName: "Parthsaarthi",
+            attendees: [{ email: b.student.email, name: studentName }],
+          });
+          mailer.sendSlotDeletedToStudent({
+            studentEmail: b.student.email,
+            studentName,
+            mentorName,
+            date,
+            time,
+            icsContent,
+          }).catch((e) => console.error("[mailer] slot deleted notice:", e.message));
+        }
+      })().catch((e) => console.error("[mailer] slot deleted notification:", e.message));
+    }
+
+    res.status(200).json({ id: slot.id, retired: true, cancelledBookings: activeBookings.length });
   } catch (err) {
     next(err);
   }
@@ -479,7 +530,7 @@ const listMentorOwnSlots = async (req, res, next) => {
     // Upcoming unbooked slots (for the live slot list)
     // Include any non-CANCELLED booking so used slots (ATTENDED/NO_SHOW) are excluded.
     const upcomingSlots = await prisma.slot.findMany({
-      where: { mentorProfileId: mentorProfile.id, startTime: { gte: now } },
+      where: { mentorProfileId: mentorProfile.id, startTime: { gte: now }, retired: false },
       include: {
         bookings: { where: { status: { not: "CANCELLED" } } },
         release: { select: { cohortOnly: true } },
@@ -636,7 +687,7 @@ const getSlotHoursReleased = async (req, res, next) => {
     toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
 
     const slots = await prisma.slot.findMany({
-      where: { mentorProfileId: mentorProfile.id, startTime: { gte: fromDate, lt: toDate } },
+      where: { mentorProfileId: mentorProfile.id, startTime: { gte: fromDate, lt: toDate }, retired: false },
       select: { startTime: true, endTime: true },
     });
     const hours = slots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
@@ -842,9 +893,12 @@ const setSlotReschedule = async (req, res, next) => {
 };
 
 // ── Bulk slot actions ──────────────────────────────────────────────────────────
-// Same ownership + "any booking history blocks deletion" rule as the single-slot
-// deleteSlot above, just applied across a list. Per-slot, not all-or-nothing —
-// one ineligible slot in the batch shouldn't block deleting the rest.
+// Same ownership + eligibility rule as the single-slot deleteSlot above (soft
+// delete, never removed from the DB), just applied across a list. Per-slot, not
+// all-or-nothing — one ineligible slot in the batch shouldn't block deleting the
+// rest. Unlike the single-slot path, this one still skips any slot with booking
+// history (of any status) rather than auto-cancelling — a bulk action isn't the
+// place to silently cancel a live student booking.
 
 const bulkDeleteSlots = async (req, res, next) => {
   try {
@@ -864,12 +918,14 @@ const bulkDeleteSlots = async (req, res, next) => {
 
     if (deletable.length > 0) {
       await prisma.$transaction([
-        prisma.slotCapacity.deleteMany({ where: { slotId: { in: deletable.map((s) => s.id) } } }),
-        prisma.slot.deleteMany({ where: { id: { in: deletable.map((s) => s.id) } } }),
+        prisma.slot.updateMany({
+          where: { id: { in: deletable.map((s) => s.id) } },
+          data: { retired: true, published: false },
+        }),
         prisma.auditEvent.create({
           data: {
             userId: req.user.sub,
-            action: "SLOT_DELETED",
+            action: "SLOT_RETIRED",
             entity: "Slot",
             meta: JSON.stringify({ bulk: true, count: deletable.length }),
           },

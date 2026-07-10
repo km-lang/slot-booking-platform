@@ -476,7 +476,7 @@ function MeetingLinkRow({ slotId, currentLink }) {
 }
 
 // ── Session Card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSwap }) {
+function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSwap, onDelete }) {
   const navigate = useNavigate();
   const [lateSheetOpen, setLateSheetOpen] = useState(false);
   const isPending = pendingBookingId === session.bookingId;
@@ -588,6 +588,13 @@ function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSw
               <Mail size={14} />
             </a>
           )}
+          <button
+            onClick={() => onDelete(session.id, session.student.name)}
+            className="px-3 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/60 transition-colors"
+            title="Delete this slot"
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
       </div>
 
@@ -767,8 +774,11 @@ export default function MentorDashboard() {
     );
   };
 
-  const handleDeleteSlot = (slotId) => {
-    if (!confirm("Delete this slot? This can't be undone.")) return;
+  const handleDeleteSlot = (slotId, studentName) => {
+    const message = studentName
+      ? `Delete this slot? ${studentName}'s booking will be cancelled and they'll be notified by email. This can't be undone.`
+      : "Delete this slot? This can't be undone.";
+    if (!confirm(message)) return;
     deleteSlotMutation.mutate(slotId, {
       onError: (err) => alert(err.message),
     });
@@ -903,6 +913,7 @@ export default function MentorDashboard() {
                     pendingBookingId={pendingBookingId}
                     onReassign={setReassignTarget}
                     onSwap={setSwapTarget}
+                    onDelete={handleDeleteSlot}
                   />
                 ))
               )}
@@ -931,6 +942,7 @@ export default function MentorDashboard() {
                     pendingBookingId={pendingBookingId}
                     onReassign={setReassignTarget}
                     onSwap={setSwapTarget}
+                    onDelete={handleDeleteSlot}
                   />
                 ))
               )}
