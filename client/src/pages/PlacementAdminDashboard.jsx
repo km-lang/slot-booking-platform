@@ -106,9 +106,9 @@ function OverviewTab() {
       barPct: kpis.batchCoverage?.pct ?? 0, barColor: "bg-emerald-500",
     },
     {
-      label: "Slots Utilized",
-      value: isLoading ? "—" : String(kpis.slotsUtilized?.count ?? 0),
-      sub:   isLoading ? "Loading…" : `of ${kpis.slotsUtilized?.total ?? 0} created (${kpis.slotsUtilized?.pct ?? 0}%)`,
+      label: "Hours Utilized",
+      value: isLoading ? "—" : `${kpis.slotsUtilized?.hours ?? 0}h`,
+      sub:   isLoading ? "Loading…" : `of ${kpis.slotsUtilized?.totalHours ?? 0}h created (${kpis.slotsUtilized?.pct ?? 0}%)`,
       icon:  <CalendarCheck size={18} />, color: "text-emerald-700",
       barPct: kpis.slotsUtilized?.pct ?? 0, barColor: "bg-emerald-500",
     },
@@ -179,7 +179,7 @@ function OverviewTab() {
 
         <Card className="lg:col-span-2">
           <h3 className="font-bold text-emerald-950 mb-1">Mentor Utilization</h3>
-          <p className="text-xs font-semibold text-emerald-700/60 mb-6">Slots offered vs. completed per mentor</p>
+          <p className="text-xs font-semibold text-emerald-700/60 mb-6">Hours offered vs. completed per mentor</p>
           {mentorUtilization.length === 0 ? (
             <div className="h-56 flex items-center justify-center text-xs font-bold text-emerald-800/30">
               {isLoading ? "Loading…" : "No data yet"}
@@ -189,9 +189,9 @@ function OverviewTab() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={mentorUtilization} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 12, fontWeight: 600 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: "rgba(92,124,106,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} />
-                  <Bar dataKey="offered" name="Slots Offered" fill="var(--color-primary-lighter)" radius={[4, 4, 0, 0]} barSize={24} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--color-heading)", fontSize: 12 }} unit="h" />
+                  <Tooltip cursor={{ fill: "rgba(92,124,106,0.07)" }} contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 15px rgba(0,0,0,0.1)" }} formatter={(value) => `${value}h`} />
+                  <Bar dataKey="offered" name="Hours Offered" fill="var(--color-primary-lighter)" radius={[4, 4, 0, 0]} barSize={24} />
                   <Bar dataKey="completed" name="Completed" fill="var(--color-primary)" radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
@@ -230,23 +230,25 @@ function OverviewTab() {
         <h3 className="font-bold text-emerald-950 mb-1">Cohort Breakdown</h3>
         <p className="text-xs font-semibold text-emerald-700/60 mb-4">Coverage by cohort, across every org unit</p>
         <div className="overflow-x-auto max-h-72 overflow-y-auto">
-          <table className="w-full text-left border-collapse min-w-[480px]">
+          <table className="w-full text-left border-collapse min-w-[620px]">
             <thead>
               <tr className="border-b border-emerald-900/10 text-xs font-bold text-emerald-800/50 uppercase tracking-widest">
                 <th className="py-2 px-3">Cohort</th>
+                <th className="py-2 px-3">Mentor</th>
                 <th className="py-2 px-3">Org Unit</th>
                 <th className="py-2 px-3">Coverage</th>
               </tr>
             </thead>
             <tbody className="text-sm">
               {isLoading ? (
-                <tr><td colSpan={3} className="py-8 text-center text-xs font-bold text-emerald-800/30">Loading…</td></tr>
+                <tr><td colSpan={4} className="py-8 text-center text-xs font-bold text-emerald-800/30">Loading…</td></tr>
               ) : (data?.cohortBreakdown ?? []).length === 0 ? (
-                <tr><td colSpan={3} className="py-8 text-center text-xs font-bold text-emerald-800/30">No cohorts yet</td></tr>
+                <tr><td colSpan={4} className="py-8 text-center text-xs font-bold text-emerald-800/30">No cohorts yet</td></tr>
               ) : (
                 data.cohortBreakdown.map((c, i) => (
                   <tr key={i} className="border-b border-emerald-900/5 hover:bg-emerald-50/50 transition-colors">
                     <td className="py-2.5 px-3 font-semibold text-emerald-950">{c.label}</td>
+                    <td className="py-2.5 px-3 text-emerald-700/70">{c.mentorName}</td>
                     <td className="py-2.5 px-3 text-emerald-700/70">{c.orgName}</td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
@@ -351,7 +353,7 @@ function OrgCard({ title, stats, loading, accent }) {
             <div className="text-[10px] font-bold text-emerald-700/50 uppercase">Utilization</div>
           </div>
           <div className="col-span-2 text-xs font-semibold text-emerald-700/70">
-            {stats?.completed ?? 0} completed / {stats?.slotsOffered ?? 0} slots offered
+            {stats?.completedHours ?? 0}h completed / {stats?.offeredHours ?? 0}h offered
           </div>
         </div>
       )}
@@ -394,8 +396,8 @@ function MentorGroup({ title, icon, mentors, isExpanded, onToggle, loading }) {
                   <tr key={m.slug} className="border-b border-emerald-900/5 hover:bg-emerald-50/30">
                     <td className="py-2.5 px-4 font-semibold text-emerald-950">{m.name}</td>
                     <td className="py-2.5 px-4 text-emerald-700/70 text-xs">{m.firm} · {m.domain}</td>
-                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.slotsOffered}</td>
-                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.completed}</td>
+                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.offeredHours}h</td>
+                    <td className="py-2.5 px-4 hidden sm:table-cell">{m.completedHours}h</td>
                     <td className="py-2.5 px-4 hidden sm:table-cell">{m.noShow}</td>
                     <td className="py-2.5 px-4 font-bold">{m.utilizationPct}%</td>
                   </tr>
@@ -437,12 +439,12 @@ function OrgMentorStatsTab() {
     const agg = (org?.aigs ?? []).reduce(
       (acc, a) => ({
         mentorCount: acc.mentorCount + a.mentorCount,
-        slotsOffered: acc.slotsOffered + a.slotsOffered,
-        completed: acc.completed + a.completed,
+        offeredHours: +(acc.offeredHours + a.offeredHours).toFixed(1),
+        completedHours: +(acc.completedHours + a.completedHours).toFixed(1),
       }),
-      { mentorCount: 0, slotsOffered: 0, completed: 0 },
+      { mentorCount: 0, offeredHours: 0, completedHours: 0 },
     );
-    return { ...agg, utilizationPct: agg.slotsOffered > 0 ? Math.round((agg.completed / agg.slotsOffered) * 100) : 0 };
+    return { ...agg, utilizationPct: agg.offeredHours > 0 ? Math.round((agg.completedHours / agg.offeredHours) * 100) : 0 };
   }, [org]);
 
   return (

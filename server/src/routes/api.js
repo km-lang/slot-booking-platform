@@ -35,6 +35,7 @@ router.get("/mentors/:slug", requireRole("STUDENT"), slotController.getMentor);
 // GET  /api/slots?mentorSlug=evelyn-vance   student: list slots (auth-aware: marks bookedByMe)
 // POST /api/slots                           mentor: release a new block
 router.get("/slots/mine", requireRole("MENTOR"), slotController.listMentorOwnSlots);
+router.get("/slots/hours-released", requireRole("MENTOR"), slotController.getSlotHoursReleased);
 router.get("/slots", requireRole("STUDENT"), slotController.listSlots);
 router.post(
   "/slots",
@@ -144,6 +145,12 @@ router.get(
   requireRole("AIGs"),
   requireAigScope("aigSlug"),
   exportController.exportAigRoster,
+);
+router.get(
+  "/admin/aig/:aigSlug/hours-released",
+  requireRole("AIGs"),
+  requireAigScope("aigSlug"),
+  adminController.getAigSlotHoursReleased,
 );
 router.get(
   "/admin/mentor/:mentorSlug",

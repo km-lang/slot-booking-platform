@@ -5,6 +5,7 @@ import {
   ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
   Send, UserPlus, Search, ShieldAlert, UserCog, ArrowLeftRight,
+  CalendarRange,
 } from "lucide-react";
 import {
   useMentorDashboard, useMarkAttendance,
@@ -12,6 +13,7 @@ import {
   useBulkDeleteSlots, useBulkSetMeetingLink,
   useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
   useApplyStrike, useReassignBooking, useSwapBookings,
+  useMentorHoursReleased,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -667,6 +669,57 @@ function CancelledSessionRow({ session }) {
   );
 }
 
+// ── Hours Released (date range) ───────────────────────────────────────────────
+// Hours, not a slot count, since slots can be of any duration — lets the mentor
+// see how many mentoring hours they've put on the calendar for a given window,
+// scoped by the session's own date (slot startTime), not when it was created.
+function HoursReleasedCard() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(todayStr);
+  const [to, setTo] = useState(todayStr);
+  const { data, isFetching, error } = useMentorHoursReleased(from, to);
+
+  return (
+    <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm p-4">
+      <h3 className="text-emerald-950 text-xs font-bold uppercase tracking-widest flex items-center gap-1.5 mb-3">
+        <CalendarRange size={14} className="text-emerald-700" /> Hours Released
+      </h3>
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          type="date"
+          value={from}
+          max={to}
+          onChange={(e) => setFrom(e.target.value)}
+          className="flex-1 min-w-0 bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
+        />
+        <span className="text-emerald-700/50 text-xs font-bold shrink-0">to</span>
+        <input
+          type="date"
+          value={to}
+          min={from}
+          onChange={(e) => setTo(e.target.value)}
+          className="flex-1 min-w-0 bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
+        />
+      </div>
+      {error ? (
+        <div className="text-xs font-bold text-red-600">{error.message}</div>
+      ) : (
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="text-2xl font-black text-emerald-950">
+              {isFetching ? "—" : `${data?.hours ?? 0}h`}
+            </div>
+            <div className="text-[9px] text-emerald-700/60 font-bold uppercase mt-0.5">Total Hours Released</div>
+          </div>
+          <div className="text-xs font-semibold text-emerald-700/70">
+            {isFetching ? "" : `${data?.slotCount ?? 0} slot${data?.slotCount === 1 ? "" : "s"}`}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function MentorDashboard() {
   const navigate = useNavigate();
@@ -818,6 +871,8 @@ export default function MentorDashboard() {
               View Cohort Details <ChevronRight size={14} />
             </button>
           </div>
+
+          <HoursReleasedCard />
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-xs font-bold text-red-700">

@@ -110,6 +110,38 @@ const getAigOverview = async (req, res, next) => {
   }
 };
 
+// Total hours of slots scheduled (by session startTime, not creation date) within
+// [from, to], across every mentor in this AIG — hours rather than a slot count,
+// since slots can be of any duration. Same date-window semantics as the mentor's
+// own getSlotHoursReleased.
+const getAigSlotHoursReleased = async (req, res, next) => {
+  try {
+    const aig = await prisma.aIG.findUnique({ where: { slug: req.params.aigSlug } });
+    if (!aig) return res.status(404).json({ error: "AIG not found" });
+
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: "from and to are required" });
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return res.status(400).json({ error: "Invalid from/to date" });
+    }
+    fromDate.setHours(0, 0, 0, 0);
+    toDate.setHours(0, 0, 0, 0);
+    toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
+
+    const slots = await prisma.slot.findMany({
+      where: { mentorProfile: { aigId: aig.id }, startTime: { gte: fromDate, lt: toDate } },
+      select: { startTime: true, endTime: true },
+    });
+    const hours = slots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
+
+    res.json({ hours: +hours.toFixed(1), slotCount: slots.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── Placement Admin ──────────────────────────────────────────────────────────
 
 const getBatchOverview = async (_req, res, next) => {
@@ -120,9 +152,9 @@ const getBatchOverview = async (_req, res, next) => {
     const [
       totalStudents,
       coveredStudents,
-      totalSlots,
+      allSlots,
       noShowCount,
-      totalUtilized,
+      utilizedBookings,
       activeBans,
       purposeDist,
       mentors,
@@ -134,18 +166,21 @@ const getBatchOverview = async (_req, res, next) => {
       prisma.studentProfile.count({
         where: { user: { bookings: { some: { status: "ATTENDED" } } } },
       }),
-      prisma.slot.count(),
+      // Durations, not a count — slots can be of any length, so "utilization" is
+      // measured in hours rather than number of slots.
+      prisma.slot.findMany({ select: { startTime: true, endTime: true } }),
       prisma.booking.count({ where: { status: "NO_SHOW" } }),
       // A CONFIRMED booking whose slot has already ended and was never marked has an
       // unknown outcome — it shouldn't count as "utilized" alongside real ATTENDED
       // bookings (same reasoning as listMentorStats's overdueUnmarked exclusion).
-      prisma.booking.count({
+      prisma.booking.findMany({
         where: {
           OR: [
             { status: "ATTENDED" },
             { status: "CONFIRMED", slot: { endTime: { gt: now } } },
           ],
         },
+        select: { slot: { select: { startTime: true, endTime: true } } },
       }),
       prisma.ban.count({
         where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
@@ -153,7 +188,11 @@ const getBatchOverview = async (_req, res, next) => {
       prisma.booking.groupBy({ by: ["focus"], _count: { _all: true } }),
       prisma.mentorProfile.findMany({
         take: 8,
-        include: { user: { select: { name: true } }, _count: { select: { slots: true } } },
+        include: {
+          user: { select: { name: true } },
+          _count: { select: { slots: true } },
+          slots: { select: { startTime: true, endTime: true } },
+        },
         orderBy: { slots: { _count: "desc" } },
       }),
       prisma.auditEvent.findMany({
@@ -172,6 +211,9 @@ const getBatchOverview = async (_req, res, next) => {
           aig: { select: { name: true, slug: true } },
           studentProfiles: {
             select: { user: { select: { bookings: { select: { status: true } } } } },
+          },
+          mentorProfiles: {
+            select: { user: { select: { name: true } } },
           },
         },
         orderBy: { aig: { name: "asc" } },
@@ -202,23 +244,30 @@ const getBatchOverview = async (_req, res, next) => {
         label: c.label,
         orgName: c.aig?.name ?? "—",
         orgSlug: c.aig?.slug ?? null,
+        mentorName: c.mentorProfiles.map((m) => m.user.name).join(", ") || "—",
         total,
         covered,
         pct: total > 0 ? Math.round((covered / total) * 100) : 0,
       };
     }).sort((a, b) => a.orgName.localeCompare(b.orgName) || byCohortLabel(a, b));
 
+    const toHours = (start, end) => (end - start) / 3600000;
+
+    const totalSlotHours = allSlots.reduce((sum, s) => sum + toHours(s.startTime, s.endTime), 0);
+    const utilizedHours = utilizedBookings.reduce((sum, b) => sum + toHours(b.slot.startTime, b.slot.endTime), 0);
+
     const coveragePct =
       totalStudents > 0 ? Math.round((coveredStudents / totalStudents) * 100) : 0;
-    const slotsPct = totalSlots > 0 ? Math.round((totalUtilized / totalSlots) * 100) : 0;
+    const slotsPct = totalSlotHours > 0 ? Math.round((utilizedHours / totalSlotHours) * 100) : 0;
     const noShowPct =
-      totalUtilized > 0 ? +((noShowCount / totalUtilized) * 100).toFixed(1) : 0;
+      utilizedBookings.length > 0 ? +((noShowCount / utilizedBookings.length) * 100).toFixed(1) : 0;
 
-    // Per-mentor completion counts (N+1 acceptable at take:8 scale)
+    // Per-mentor completion hours (N+1 acceptable at take:8 scale) — hours, not slot
+    // counts, since slots can be of any duration
     const mentorUtil = (
       await Promise.all(
         mentors.map(async (m) => {
-          const completed = await prisma.booking.count({
+          const completedBookings = await prisma.booking.findMany({
             where: {
               slot: { mentorProfileId: m.id },
               OR: [
@@ -226,8 +275,18 @@ const getBatchOverview = async (_req, res, next) => {
                 { status: "CONFIRMED", slot: { endTime: { gt: now } } },
               ],
             },
+            select: { slot: { select: { startTime: true, endTime: true } } },
           });
-          return { name: m.user.name?.split(" ")[0] ?? "—", offered: m._count.slots, completed };
+          const offeredHours = m.slots.reduce((sum, s) => sum + toHours(s.startTime, s.endTime), 0);
+          const completedHours = completedBookings.reduce(
+            (sum, b) => sum + toHours(b.slot.startTime, b.slot.endTime),
+            0,
+          );
+          return {
+            name: m.user.name?.split(" ")[0] ?? "—",
+            offered: +offeredHours.toFixed(1),
+            completed: +completedHours.toFixed(1),
+          };
         })
       )
     ).filter((m) => m.offered > 0);
@@ -235,7 +294,7 @@ const getBatchOverview = async (_req, res, next) => {
     res.json({
       kpis: {
         batchCoverage: { pct: coveragePct, covered: coveredStudents, total: totalStudents },
-        slotsUtilized: { count: totalUtilized, total: totalSlots, pct: slotsPct },
+        slotsUtilized: { hours: +utilizedHours.toFixed(1), totalHours: +totalSlotHours.toFixed(1), pct: slotsPct },
         noShowRate: { pct: noShowPct, count: noShowCount },
         activeBans,
       },
@@ -477,12 +536,17 @@ const getMentorSessionDetail = async (req, res, next) => {
       take: 200,
     });
 
-    const totalSlots  = await prisma.slot.count({ where: { mentorProfileId: mentorProfile.id } });
+    // Hours, not a slot count, since slots can be of any duration.
+    const mentorSlots = await prisma.slot.findMany({
+      where: { mentorProfileId: mentorProfile.id },
+      select: { startTime: true, endTime: true },
+    });
+    const totalHours = mentorSlots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
     const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
     const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 
     const stats = {
-      totalSlots,
+      totalHours: +totalHours.toFixed(1),
       confirmed: bookings.filter((b) => b.status === "CONFIRMED").length,
       attended:  bookings.filter((b) => b.status === "ATTENDED").length,
       noShow:    bookings.filter((b) => b.status === "NO_SHOW").length,
@@ -538,18 +602,23 @@ const getMentorSessionDetail = async (req, res, next) => {
 const getOrgStats = async (_req, res, next) => {
   try {
     const now = new Date();
+    const toHours = (start, end) => (end - start) / 3600000;
     const orgUnits = await prisma.aIG.findMany({
-      include: { mentorProfiles: { include: { _count: { select: { slots: true } } } } },
+      include: { mentorProfiles: { include: { slots: { select: { startTime: true, endTime: true } } } } },
       orderBy: { name: "asc" },
     });
 
+    // Hours, not slot counts, since slots can be of any duration.
     const statsFor = async (mentorProfiles) => {
       const mentorIds = mentorProfiles.map((m) => m.id);
-      const slotsOffered = mentorProfiles.reduce((sum, m) => sum + m._count.slots, 0);
+      const offeredHours = mentorProfiles.reduce(
+        (sum, m) => sum + m.slots.reduce((s, sl) => s + toHours(sl.startTime, sl.endTime), 0),
+        0,
+      );
       // Same overdueUnmarked exclusion as listMentorStats/getBatchOverview — an
       // unmarked CONFIRMED booking past its slot's endTime has an unknown outcome.
-      const completed = mentorIds.length
-        ? await prisma.booking.count({
+      const completedBookings = mentorIds.length
+        ? await prisma.booking.findMany({
             where: {
               slot: { mentorProfileId: { in: mentorIds } },
               OR: [
@@ -557,13 +626,18 @@ const getOrgStats = async (_req, res, next) => {
                 { status: "CONFIRMED", slot: { endTime: { gt: now } } },
               ],
             },
+            select: { slot: { select: { startTime: true, endTime: true } } },
           })
-        : 0;
+        : [];
+      const completedHours = completedBookings.reduce(
+        (sum, b) => sum + toHours(b.slot.startTime, b.slot.endTime),
+        0,
+      );
       return {
         mentorCount: mentorProfiles.length,
-        slotsOffered,
-        completed,
-        utilizationPct: slotsOffered > 0 ? Math.round((completed / slotsOffered) * 100) : 0,
+        offeredHours: +offeredHours.toFixed(1),
+        completedHours: +completedHours.toFixed(1),
+        utilizationPct: offeredHours > 0 ? Math.round((completedHours / offeredHours) * 100) : 0,
       };
     };
 
@@ -585,7 +659,7 @@ const getOrgStats = async (_req, res, next) => {
 
     const nonAigMentors = await prisma.mentorProfile.findMany({
       where: { aigId: null },
-      include: { _count: { select: { slots: true } } },
+      include: { slots: { select: { startTime: true, endTime: true } } },
     });
     const nonAig = await statsFor(nonAigMentors);
 
@@ -593,14 +667,14 @@ const getOrgStats = async (_req, res, next) => {
       rows.reduce(
         (acc, r) => ({
           mentorCount: acc.mentorCount + r.mentorCount,
-          slotsOffered: acc.slotsOffered + r.slotsOffered,
-          completed: acc.completed + r.completed,
+          offeredHours: +(acc.offeredHours + r.offeredHours).toFixed(1),
+          completedHours: +(acc.completedHours + r.completedHours).toFixed(1),
         }),
-        { mentorCount: 0, slotsOffered: 0, completed: 0 },
+        { mentorCount: 0, offeredHours: 0, completedHours: 0 },
       );
     const withPct = (agg) => ({
       ...agg,
-      utilizationPct: agg.slotsOffered > 0 ? Math.round((agg.completed / agg.slotsOffered) * 100) : 0,
+      utilizationPct: agg.offeredHours > 0 ? Math.round((agg.completedHours / agg.offeredHours) * 100) : 0,
     });
 
     res.json({
@@ -625,36 +699,40 @@ const listMentorStats = async (_req, res, next) => {
         include: {
           user: { select: { name: true, email: true } },
           aig: { select: { slug: true, name: true } },
-          _count: { select: { slots: true } },
+          slots: { select: { startTime: true, endTime: true } },
         },
         orderBy: { user: { name: "asc" } },
       }),
       // One query for every mentor's booking counts instead of N+1 per-mentor queries.
       prisma.booking.findMany({
-        select: { status: true, slot: { select: { mentorProfileId: true, endTime: true } } },
+        select: { status: true, slot: { select: { mentorProfileId: true, startTime: true, endTime: true } } },
       }),
     ]);
 
     const now = new Date();
+    const toHours = (start, end) => (end - start) / 3600000;
 
     const statsByMentor = {};
     for (const b of allBookings) {
       const mid = b.slot.mentorProfileId;
-      const s = statsByMentor[mid] ?? (statsByMentor[mid] = { completed: 0, attended: 0, noShow: 0, cancelled: 0 });
+      const s = statsByMentor[mid] ?? (statsByMentor[mid] = { completedHours: 0, attended: 0, noShow: 0, cancelled: 0 });
       // A CONFIRMED booking whose slot has already ended has an unknown outcome —
       // the mentor never marked it — so it shouldn't count as "completed" alongside
       // genuinely ATTENDED sessions. Still-upcoming CONFIRMED bookings do count,
       // since the slot is legitimately utilized even though the session hasn't run yet.
       const overdueUnmarked = b.status === "CONFIRMED" && b.slot.endTime <= now;
-      if (b.status === "ATTENDED" || (b.status === "CONFIRMED" && !overdueUnmarked)) s.completed += 1;
+      if (b.status === "ATTENDED" || (b.status === "CONFIRMED" && !overdueUnmarked)) {
+        s.completedHours += toHours(b.slot.startTime, b.slot.endTime);
+      }
       if (b.status === "ATTENDED") s.attended += 1;
       if (b.status === "NO_SHOW") s.noShow += 1;
       if (b.status === "CANCELLED") s.cancelled += 1;
     }
 
     const rows = mentors.map((m) => {
-      const s = statsByMentor[m.id] ?? { completed: 0, attended: 0, noShow: 0, cancelled: 0 };
-      const slotsOffered = m._count.slots;
+      const s = statsByMentor[m.id] ?? { completedHours: 0, attended: 0, noShow: 0, cancelled: 0 };
+      // Hours, not slot counts, since slots can be of any duration.
+      const offeredHours = m.slots.reduce((sum, sl) => sum + toHours(sl.startTime, sl.endTime), 0);
       const category = !m.aig
         ? m.mentorType === "PGP2_STUDENT_NO_AIG"
           ? "pgp2-mentors"
@@ -671,9 +749,12 @@ const listMentorStats = async (_req, res, next) => {
         mentorType: m.mentorType,
         category,
         orgName: m.aig?.name ?? "Independent (No AIG)",
-        slotsOffered,
-        ...s,
-        utilizationPct: slotsOffered > 0 ? Math.round((s.completed / slotsOffered) * 100) : 0,
+        offeredHours: +offeredHours.toFixed(1),
+        completedHours: +s.completedHours.toFixed(1),
+        attended: s.attended,
+        noShow: s.noShow,
+        cancelled: s.cancelled,
+        utilizationPct: offeredHours > 0 ? Math.round((s.completedHours / offeredHours) * 100) : 0,
       };
     });
 
@@ -823,6 +904,7 @@ const getCalendarWeek = async (req, res, next) => {
 
 module.exports = {
   getAigOverview,
+  getAigSlotHoursReleased,
   getMentorSessionDetail,
   getBatchOverview,
   listWhitelist,

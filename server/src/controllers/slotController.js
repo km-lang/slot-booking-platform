@@ -615,6 +615,38 @@ const listMentorOwnSlots = async (req, res, next) => {
   }
 };
 
+// Total hours of this mentor's slots scheduled (by session startTime, not creation
+// date) within [from, to] — lets a mentor see how many mentoring hours they've put
+// on the calendar for a given window, since slot count alone is misleading when
+// slots vary in duration.
+const getSlotHoursReleased = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: "from and to are required" });
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return res.status(400).json({ error: "Invalid from/to date" });
+    }
+    fromDate.setHours(0, 0, 0, 0);
+    toDate.setHours(0, 0, 0, 0);
+    toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
+
+    const slots = await prisma.slot.findMany({
+      where: { mentorProfileId: mentorProfile.id, startTime: { gte: fromDate, lt: toDate } },
+      select: { startTime: true, endTime: true },
+    });
+    const hours = slots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
+
+    res.json({ hours: +hours.toFixed(1), slotCount: slots.length });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const setSlotDelay = async (req, res, next) => {
   try {
     const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
@@ -943,6 +975,7 @@ module.exports = {
   getMentor,
   listSlots,
   listMentorOwnSlots,
+  getSlotHoursReleased,
   releaseSlots,
   deleteSlot,
   setSlotDelay,

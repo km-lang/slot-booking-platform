@@ -101,7 +101,7 @@ export default function AigMentorDetail() {
         <section>
           <h3 className="text-xs font-bold text-emerald-900/50 uppercase tracking-widest mb-3">Summary</h3>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <StatCard icon={BookOpen}      label="Slots"      value={stats.totalSlots} color="slate"   />
+            <StatCard icon={BookOpen}      label="Hours"      value={`${stats.totalHours}h`} color="slate"   />
             <StatCard icon={Clock}         label="Confirmed"  value={stats.confirmed}  color="blue"    />
             <StatCard icon={CheckCircle}   label="Attended"   value={stats.attended}   color="emerald" />
             <StatCard icon={XCircle}       label="No-Show"    value={stats.noShow}     color="red"     />

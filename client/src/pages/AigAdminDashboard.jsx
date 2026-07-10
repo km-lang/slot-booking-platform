@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight, Download, XCircle, Loader2 } from "lucide-react";
-import { useAigOverview, useExportCsv } from "../hooks/useApi";
+import { Clock, AlertTriangle, CheckCircle, Search, Mail, Bell, ChevronRight, Download, XCircle, Loader2, CalendarRange } from "lucide-react";
+import { useAigOverview, useAigHoursReleased, useExportCsv } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
@@ -18,6 +18,57 @@ const getCountdown = (deadline) => {
   const hours = Math.floor((diff % 86400000) / 3600000);
   return `${days} Day${days !== 1 ? "s" : ""}, ${hours} Hr${hours !== 1 ? "s" : ""}`;
 };
+
+// Hours, not a slot count, since slots can be of any duration — lets the AIG admin
+// see how many mentoring hours were put on the calendar (across every mentor in
+// this AIG) for a given window, scoped by the session's own date (slot startTime),
+// not when it was created.
+function HoursReleasedCard({ aigSlug }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [from, setFrom] = useState(todayStr);
+  const [to, setTo] = useState(todayStr);
+  const { data, isFetching, error } = useAigHoursReleased(aigSlug, from, to);
+
+  return (
+    <Card>
+      <h3 className="text-xs font-bold text-emerald-800/50 uppercase tracking-widest flex items-center gap-1.5 mb-3">
+        <CalendarRange size={14} className="text-emerald-600" /> Hours Released
+      </h3>
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          type="date"
+          value={from}
+          max={to}
+          onChange={(e) => setFrom(e.target.value)}
+          className="flex-1 min-w-0 bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
+        />
+        <span className="text-emerald-700/50 text-xs font-bold shrink-0">to</span>
+        <input
+          type="date"
+          value={to}
+          min={from}
+          onChange={(e) => setTo(e.target.value)}
+          className="flex-1 min-w-0 bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
+        />
+      </div>
+      {error ? (
+        <div className="text-xs font-bold text-red-600">{error.message}</div>
+      ) : (
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="text-2xl font-black text-emerald-950">
+              {isFetching ? "—" : `${data?.hours ?? 0}h`}
+            </div>
+            <div className="text-[10px] font-bold text-emerald-700/50 uppercase mt-0.5">Total Hours Released</div>
+          </div>
+          <div className="text-xs font-semibold text-emerald-700/70">
+            {isFetching ? "" : `${data?.slotCount ?? 0} slot${data?.slotCount === 1 ? "" : "s"}`}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export default function AigAdminDashboard() {
   const { aigSlug } = useParams();
@@ -139,6 +190,10 @@ export default function AigAdminDashboard() {
                 <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
               </div>
             </Card>
+          </section>
+
+          <section className="mb-8">
+            <HoursReleasedCard aigSlug={aigSlug} />
           </section>
 
           {/* Intervention Required */}

@@ -13,7 +13,9 @@ export const QK = {
   slots:           (slug)    => ["slots", slug],
   mentorDashboard: ()        => ["mentorDashboard"],
   mentorCohort:    ()        => ["mentorCohort"],
+  mentorHoursReleased: (from, to) => ["mentorHoursReleased", from, to],
   aigOverview:     (slug)    => ["aigOverview", slug],
+  aigHoursReleased: (slug, from, to) => ["aigHoursReleased", slug, from, to],
   mentorDetail:    (slug)    => ["mentorDetail", slug],
   adminBatch:      ()        => ["adminBatch"],
   orgStats:        ()        => ["orgStats"],
@@ -103,11 +105,27 @@ export const useMentorCohort = () =>
     queryFn:  () => apiFetch("/cohort"),
   });
 
+// Lazily enabled — only fires once the mentor has picked both ends of the range.
+export const useMentorHoursReleased = (from, to) =>
+  useQuery({
+    queryKey: QK.mentorHoursReleased(from, to),
+    queryFn:  () => apiFetch(`/slots/hours-released?from=${from}&to=${to}`),
+    enabled:  !!from && !!to,
+  });
+
 export const useAigOverview = (aigSlug) =>
   useQuery({
     queryKey: QK.aigOverview(aigSlug),
     queryFn:  () => apiFetch(`/admin/aig/${aigSlug}`),
     enabled:  !!aigSlug,
+  });
+
+// Lazily enabled — only fires once the AIG admin has picked both ends of the range.
+export const useAigHoursReleased = (aigSlug, from, to) =>
+  useQuery({
+    queryKey: QK.aigHoursReleased(aigSlug, from, to),
+    queryFn:  () => apiFetch(`/admin/aig/${aigSlug}/hours-released?from=${from}&to=${to}`),
+    enabled:  !!aigSlug && !!from && !!to,
   });
 
 export const useMentorDetail = (mentorSlug) =>
