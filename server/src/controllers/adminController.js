@@ -471,7 +471,9 @@ const getMentorSessionDetail = async (req, res, next) => {
         slot:    { select: { startTime: true, endTime: true, venue: true } },
         student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
       },
-      orderBy: { createdAt: "desc" },
+      // Ordered by the session's own start time (not booking creation time) so
+      // it matches the Date/Time columns actually shown in the table.
+      orderBy: { slot: { startTime: "desc" } },
       take: 200,
     });
 
@@ -730,7 +732,9 @@ const getStudentDetail = async (req, res, next) => {
         include: {
           slot: { include: { mentorProfile: { include: { user: { select: { name: true } } } } } },
         },
-        orderBy: { createdAt: "desc" },
+        // Ordered by the session's own start time (not booking creation time) so
+        // it matches the Date/Time columns actually shown in the table.
+        orderBy: { slot: { startTime: "desc" } },
       }),
       prisma.ban.findMany({
         where: { userId: studentProfile.user.id },
