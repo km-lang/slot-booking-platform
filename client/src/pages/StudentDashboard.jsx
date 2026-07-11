@@ -1,10 +1,14 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ChevronDown, Shield, Briefcase, TrendingUp, CalendarCheck, Users } from "lucide-react";
+import { Search, ChevronDown, Shield, Briefcase, TrendingUp, CalendarCheck, Users, CalendarClock } from "lucide-react";
 import { useAigs, useAigMentors, useAllMentors, useMyBookings } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
 import Card from "../components/ui/Card";
 import { SkeletonCard } from "../components/ui/Skeleton";
+
+// Available-first, then most slots — surfaces mentors a student can actually
+// book with right now without needing the "available only" filter at all.
+const byAvailability = (a, b) => (b.liveSlots ?? 0) - (a.liveSlots ?? 0);
 
 const AIG_ICON = {
   disha:      <Shield size={20} />,
@@ -56,8 +60,12 @@ const MentorRow = ({ mentor, aigSlug }) => {
 
 // Separate component per AIG row so each mounts its own useAigMentors hook
 // only when expanded — React Query enables/disables the query via `enabled`.
-const AigRow = ({ aig, isExpanded, onToggle }) => {
-  const { data: mentors = [], isLoading } = useAigMentors(isExpanded ? aig.id : null);
+const AigRow = ({ aig, isExpanded, onToggle, availableOnly }) => {
+  const { data: rawMentors = [], isLoading } = useAigMentors(isExpanded ? aig.id : null);
+
+  const mentors = [...rawMentors]
+    .sort(byAvailability)
+    .filter((m) => !availableOnly || m.liveSlots > 0);
 
   return (
     <div className="flex flex-col bg-white">
@@ -97,7 +105,9 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
               ))}
             </div>
           ) : (
-            <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">No mentors available</div>
+            <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">
+              {availableOnly && rawMentors.length > 0 ? "No mentors with open slots right now" : "No mentors available"}
+            </div>
           )}
         </div>
       </div>
@@ -108,6 +118,7 @@ const AigRow = ({ aig, isExpanded, onToggle }) => {
 export default function StudentDashboard() {
   const [expandedAig, setExpandedAig] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [availableOnly, setAvailableOnly] = useState(false);
 
   const { data: aigs = [], isLoading: aigsLoading, error: aigsError } = useAigs();
   const isSearching = searchQuery.trim().length > 0;
@@ -115,7 +126,7 @@ export default function StudentDashboard() {
   const { data: myBookingsData } = useMyBookings();
   const upcomingCount = myBookingsData?.upcoming?.length ?? 0;
 
-  const filteredMentors = isSearching && allMentors
+  const searchMatches = isSearching && allMentors
     ? allMentors.filter((m) => {
         const q = searchQuery.toLowerCase();
         return (
@@ -125,12 +136,16 @@ export default function StudentDashboard() {
         );
       })
     : [];
+  // Available-first sort always applies; the toggle additionally hides the full ones.
+  const filteredMentors = [...searchMatches]
+    .sort(byAvailability)
+    .filter((m) => !availableOnly || m.liveSlots > 0);
 
   const navigate = useNavigate();
 
   return (
     <div className="px-4 py-6 pb-safe-6">
-      <div className="relative mb-6">
+      <div className="relative mb-3">
         <Search size={18} className="absolute left-3 top-3.5 text-emerald-900/40" />
         <input
           type="text"
@@ -140,6 +155,17 @@ export default function StudentDashboard() {
           className="w-full bg-white border border-emerald-900/10 rounded-xl pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm transition-all"
         />
       </div>
+
+      <button
+        onClick={() => setAvailableOnly((v) => !v)}
+        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold border transition-colors mb-6 ${
+          availableOnly
+            ? "bg-emerald-900 text-emerald-50 border-emerald-900"
+            : "bg-white text-emerald-800/70 border-emerald-900/10 hover:bg-emerald-50"
+        }`}
+      >
+        <CalendarClock size={14} /> Available Slots Only
+      </button>
 
       {/* My Sessions shortcut */}
       <button
@@ -188,7 +214,9 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="p-8 text-center text-emerald-800/50 text-sm font-semibold">
-                No mentors found matching "{searchQuery}"
+                {availableOnly && searchMatches.length > 0
+                  ? `No mentors with open slots matching "${searchQuery}"`
+                  : `No mentors found matching "${searchQuery}"`}
               </div>
             )}
           </Card>
@@ -210,6 +238,7 @@ export default function StudentDashboard() {
                   aig={aig}
                   isExpanded={expandedAig === aig.id}
                   onToggle={() => setExpandedAig((prev) => (prev === aig.id ? null : aig.id))}
+                  availableOnly={availableOnly}
                 />
               ))}
             </Card>

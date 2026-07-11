@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import {
   CalendarCheck, Clock, MapPin, CheckCircle,
   XCircle, AlertCircle, AlertTriangle, Download, Video, Loader2,
+  Phone, MessageCircle, Mail,
 } from "lucide-react";
 import { useMyBookings, useExportCsv } from "../hooks/useApi";
 import AppFooter from "../components/AppFooter";
@@ -15,6 +16,9 @@ const FOCUS_LABELS = {
   workex:  "Work Experience",
   por:     "POR / ECA",
 };
+
+// wa.me needs digits only (no "+", spaces, or dashes).
+const toWhatsAppDigits = (phone) => phone.replace(/[^0-9]/g, "");
 
 // Only STUDENT is reachable today (no mentor-cancel path exists in this app),
 // but keying off the server's cancelledBy value keeps this correct without
@@ -116,6 +120,36 @@ function BookingCard({ booking }) {
         >
           <Video size={13} /> Join Google Meet
         </a>
+      )}
+
+      {booking.status === "CONFIRMED" && (booking.mentorPhone || booking.mentorEmail) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {booking.mentorPhone ? (
+            <>
+              <a
+                href={`tel:${booking.mentorPhone}`}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+              >
+                <Phone size={10} /> Call
+              </a>
+              <a
+                href={`https://wa.me/${toWhatsAppDigits(booking.mentorPhone)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+              >
+                <MessageCircle size={10} /> WhatsApp
+              </a>
+            </>
+          ) : booking.mentorEmail && (
+            <a
+              href={`mailto:${booking.mentorEmail}`}
+              className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-200"
+            >
+              <Mail size={10} /> Email Mentor
+            </a>
+          )}
+        </div>
       )}
     </Card>
   );

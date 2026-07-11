@@ -770,7 +770,7 @@ const getMyBookings = async (req, res, next) => {
           include: {
             release: { select: { cohortOnly: true } },
             mentorProfile: {
-              include: { user: { select: { name: true } } },
+              include: { user: { select: { name: true, email: true } } },
             },
           },
         },
@@ -799,6 +799,8 @@ const getMyBookings = async (req, res, next) => {
       meetingLink:  b.slot.meetingLink ?? null,
       mentorName:   b.slot.mentorProfile?.user?.name ?? "—",
       mentorSlug:   b.slot.mentorProfile?.slug ?? null,
+      mentorEmail:  b.slot.mentorProfile?.user?.email ?? null,
+      mentorPhone:  b.slot.mentorProfile?.phone ?? null,
       firm:         b.slot.mentorProfile?.firm ?? null,
       domain:       b.slot.mentorProfile?.domain ?? null,
     });

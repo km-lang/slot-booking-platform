@@ -100,9 +100,12 @@ export default function MentorBookingView() {
     );
   };
 
+  // mentorId can go briefly undefined during the exit-transition render pass when
+  // navigating away from this page (route params update before unmount finishes) —
+  // guard it instead of crashing with "Cannot read properties of undefined".
   const displayName =
     mentor?.name ??
-    mentorId.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    (mentorId ? mentorId.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : "");
 
   const loading = mentorLoading || slotsLoading;
   const error   = mentorError || slotsError;
