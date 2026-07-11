@@ -83,7 +83,10 @@ const listMentors = async (req, res, next) => {
         user: true,
         aig: true,
         slots: {
-          where: { startTime: { gt: now }, retired: false },
+          // published: true — must match listSlots' definition of "visible to a
+          // student" exactly, otherwise this count includes draft slots the
+          // student can never actually see or book when they open the mentor's page.
+          where: { startTime: { gt: now }, retired: false, published: true },
           include: { capacity: true, release: { select: { cohortOnly: true } } },
         },
       },
