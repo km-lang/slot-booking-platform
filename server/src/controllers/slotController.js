@@ -205,95 +205,160 @@ const listSlots = async (req, res, next) => {
   }
 };
 
+// Feeds the Create Slots wizard's smart defaults — venue, meeting link, per-slot
+// duration, and cohort-only all default to whatever the mentor picked on their
+// most recent release, instead of resetting to a first-time-user default every
+// single time. No new column needed — just reads their latest BookingRelease.
+const getLastUsedSlotDefaults = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const lastRelease = await prisma.bookingRelease.findFirst({
+      where: { mentorProfileId: mentorProfile.id },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!lastRelease) return res.json({ found: false });
+
+    res.json({
+      found: true,
+      venue: lastRelease.venue,
+      meetingLink: lastRelease.meetingLink ?? "",
+      slotDuration: lastRelease.slotDuration,
+      cohortOnly: lastRelease.cohortOnly,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Accepts either a single {startTime, endTime} range (the original shape) or a
+// recurring {occurrences: [{startTime, endTime}, ...]} list — e.g. "Mon/Wed/Fri
+// 2-4pm for 4 weeks" becomes 12 occurrences from the client. Each occurrence gets
+// its own BookingRelease and is created independently (own try/catch around the
+// no-overlap constraint) so one day colliding with an existing slot doesn't block
+// the rest of the batch — it's just reported back in `skipped` instead.
+const MAX_OCCURRENCES_PER_BATCH = 60;
+
 const releaseSlots = async (req, res, next) => {
   try {
-    const { startTime, endTime, slotDuration, venue, cohortOnly, publish } = req.body;
+    const { slotDuration, venue, cohortOnly, publish } = req.body;
     // Trimmed the same way as setSlotMeetingLink/bulkSetMeetingLink, so a pasted
     // link with incidental leading/trailing whitespace isn't rejected here but
     // accepted there.
     const meetingLink = (req.body.meetingLink ?? "").trim();
-    if (!startTime || !endTime || !slotDuration || !venue) {
-      return res.status(400).json({ error: "startTime, endTime, slotDuration, and venue are required" });
+    if (!slotDuration || !venue) {
+      return res.status(400).json({ error: "slotDuration and venue are required" });
     }
     if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
       return res.status(400).json({ error: "meetingLink must be a valid URL" });
     }
-
-    const start = new Date(startTime);
-    const end = new Date(endTime);
     const duration = Number(slotDuration);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start || duration <= 0) {
-      return res.status(400).json({ error: "Invalid time range or slotDuration" });
+    if (!(duration > 0)) return res.status(400).json({ error: "Invalid slotDuration" });
+
+    const rawOccurrences = Array.isArray(req.body.occurrences) && req.body.occurrences.length > 0
+      ? req.body.occurrences
+      : [{ startTime: req.body.startTime, endTime: req.body.endTime }];
+    if (rawOccurrences.length > MAX_OCCURRENCES_PER_BATCH) {
+      return res.status(400).json({ error: `Too many occurrences in one batch (max ${MAX_OCCURRENCES_PER_BATCH}) — narrow the date range` });
     }
-    if (start <= new Date()) {
-      return res.status(400).json({ error: "Start time must be in the future" });
+
+    const now = new Date();
+    const occurrences = [];
+    for (const occ of rawOccurrences) {
+      const start = new Date(occ.startTime);
+      const end = new Date(occ.endTime);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        return res.status(400).json({ error: "Invalid time range in one of the occurrences" });
+      }
+      if (start <= now) {
+        return res.status(400).json({ error: "All occurrences must start in the future" });
+      }
+      occurrences.push({ start, end });
     }
 
     const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
     if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
 
-    const intervals = [];
-    for (let cursor = start; cursor < end; cursor = new Date(cursor.getTime() + duration * 60000)) {
-      const slotEnd = new Date(cursor.getTime() + duration * 60000);
-      if (slotEnd > end) break;
-      intervals.push({ startTime: new Date(cursor), endTime: slotEnd });
-    }
-    if (intervals.length === 0) {
-      return res.status(400).json({ error: "Time range too short for the given slot duration" });
-    }
+    // Defaults to published (matches pre-existing behavior for mentors who don't
+    // think about this) — pass publish:false to create as a draft instead.
+    const published = publish !== false;
+    const releaseIds = [];
+    const skipped = [];
+    let totalSlotsCreated = 0;
 
-    const release = await prisma.$transaction(async (tx) => {
-      const created = await tx.bookingRelease.create({
-        data: {
-          mentorProfileId: mentorProfile.id,
-          startTime: start,
-          endTime: end,
-          slotDuration: duration,
-          venue,
-          cohortOnly: Boolean(cohortOnly),
-          meetingLink: meetingLink || null,
-        },
-      });
-
-      // Defaults to published (matches pre-existing behavior for mentors who don't
-      // think about this) — pass publish:false to create as a draft instead.
-      const published = publish !== false;
-      for (const interval of intervals) {
-        const slot = await tx.slot.create({
-          data: {
-            releaseId: created.id,
-            mentorProfileId: mentorProfile.id,
-            startTime: interval.startTime,
-            endTime: interval.endTime,
-            venue,
-            meetingLink: meetingLink || null,
-            published,
-          },
-        });
-        await tx.slotCapacity.create({ data: { slotId: slot.id, max: 1, current: 0 } });
+    for (const occ of occurrences) {
+      const intervals = [];
+      for (let cursor = occ.start; cursor < occ.end; cursor = new Date(cursor.getTime() + duration * 60000)) {
+        const slotEnd = new Date(cursor.getTime() + duration * 60000);
+        if (slotEnd > occ.end) break;
+        intervals.push({ startTime: new Date(cursor), endTime: slotEnd });
+      }
+      if (intervals.length === 0) {
+        skipped.push({ startTime: occ.start, reason: "Time range too short for the given slot duration" });
+        continue;
       }
 
-      await tx.auditEvent.create({
-        data: {
-          userId: req.user.sub,
-          action: "SLOT_RELEASED",
-          entity: "BookingRelease",
-          entityId: created.id,
-          meta: JSON.stringify({ slotsCreated: intervals.length }),
-        },
-      });
+      try {
+        const release = await prisma.$transaction(async (tx) => {
+          const created = await tx.bookingRelease.create({
+            data: {
+              mentorProfileId: mentorProfile.id,
+              startTime: occ.start,
+              endTime: occ.end,
+              slotDuration: duration,
+              venue,
+              cohortOnly: Boolean(cohortOnly),
+              meetingLink: meetingLink || null,
+            },
+          });
 
-      return created;
-    });
+          for (const interval of intervals) {
+            const slot = await tx.slot.create({
+              data: {
+                releaseId: created.id,
+                mentorProfileId: mentorProfile.id,
+                startTime: interval.startTime,
+                endTime: interval.endTime,
+                venue,
+                meetingLink: meetingLink || null,
+                published,
+              },
+            });
+            await tx.slotCapacity.create({ data: { slotId: slot.id, max: 1, current: 0 } });
+          }
 
-    const slots = await prisma.slot.findMany({ where: { releaseId: release.id }, include: { capacity: true } });
-    res.status(201).json({ release, slots });
-  } catch (err) {
-    // DB-enforced by the slot_no_overlap_per_mentor GiST exclusion constraint —
-    // Prisma surfaces this as an untyped error, so match on the constraint name.
-    if (err.message?.includes("slot_no_overlap_per_mentor")) {
-      return res.status(409).json({ error: "This time range overlaps with one of your existing slots" });
+          await tx.auditEvent.create({
+            data: {
+              userId: req.user.sub,
+              action: "SLOT_RELEASED",
+              entity: "BookingRelease",
+              entityId: created.id,
+              meta: JSON.stringify({ slotsCreated: intervals.length }),
+            },
+          });
+
+          return created;
+        });
+        releaseIds.push(release.id);
+        totalSlotsCreated += intervals.length;
+      } catch (err) {
+        // DB-enforced by the slot_no_overlap_per_mentor GiST exclusion constraint —
+        // Prisma surfaces this as an untyped error, so match on the constraint name.
+        if (err.message?.includes("slot_no_overlap_per_mentor")) {
+          skipped.push({ startTime: occ.start, reason: "Overlaps an existing slot" });
+          continue;
+        }
+        throw err;
+      }
     }
+
+    if (releaseIds.length === 0) {
+      return res.status(409).json({ error: "Every occurrence overlapped an existing slot or was too short to fit one slot", skipped });
+    }
+
+    res.status(201).json({ releaseIds, slotsCreated: totalSlotsCreated, skipped });
+  } catch (err) {
     next(err);
   }
 };
@@ -710,6 +775,25 @@ const getMentorHistory = async (req, res, next) => {
 // date) within [from, to] — lets a mentor see how many mentoring hours they've put
 // on the calendar for a given window, since slot count alone is misleading when
 // slots vary in duration.
+// Raw start/end times for the mentor's own upcoming, non-retired slots (booked
+// or open) — feeds the Create Slots wizard's conflict preview so an overlap with
+// an existing slot is visible before submit, not just a 409 error after.
+const getMyUpcomingSlotTimes = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const slots = await prisma.slot.findMany({
+      where: { mentorProfileId: mentorProfile.id, startTime: { gte: new Date() }, retired: false },
+      select: { startTime: true, endTime: true },
+      orderBy: { startTime: "asc" },
+    });
+    res.json(slots);
+  } catch (err) {
+    next(err);
+  }
+};
+
 const getSlotHoursReleased = async (req, res, next) => {
   try {
     const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
@@ -1125,6 +1209,8 @@ module.exports = {
   listMentorOwnSlots,
   getMentorHistory,
   getSlotHoursReleased,
+  getLastUsedSlotDefaults,
+  getMyUpcomingSlotTimes,
   releaseSlots,
   deleteSlot,
   setSlotDelay,

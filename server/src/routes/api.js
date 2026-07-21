@@ -37,6 +37,8 @@ router.get("/mentors/:slug", requireRole("STUDENT"), slotController.getMentor);
 router.get("/slots/mine", requireRole("MENTOR"), slotController.listMentorOwnSlots);
 router.get("/slots/mine/history", requireRole("MENTOR"), slotController.getMentorHistory);
 router.get("/slots/hours-released", requireRole("MENTOR"), slotController.getSlotHoursReleased);
+router.get("/slots/last-used", requireRole("MENTOR"), slotController.getLastUsedSlotDefaults);
+router.get("/slots/mine/upcoming-times", requireRole("MENTOR"), slotController.getMyUpcomingSlotTimes);
 router.get("/slots", requireRole("STUDENT"), slotController.listSlots);
 router.post(
   "/slots",

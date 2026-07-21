@@ -15,6 +15,8 @@ export const QK = {
   mentorHistory:   (page)    => ["mentorHistory", page],
   mentorCohort:    ()        => ["mentorCohort"],
   mentorHoursReleased: (from, to) => ["mentorHoursReleased", from, to],
+  lastUsedSlotDefaults: () => ["lastUsedSlotDefaults"],
+  myUpcomingSlotTimes: () => ["myUpcomingSlotTimes"],
   aigOverview:     (slug)    => ["aigOverview", slug],
   aigHoursReleased: (slug, from, to) => ["aigHoursReleased", slug, from, to],
   mentorDetail:    (slug)    => ["mentorDetail", slug],
@@ -121,6 +123,24 @@ export const useMentorHoursReleased = (from, to) =>
     queryKey: QK.mentorHoursReleased(from, to),
     queryFn:  () => apiFetch(`/slots/hours-released?from=${from}&to=${to}`),
     enabled:  !!from && !!to,
+  });
+
+// Powers Create Slots' smart defaults — the mentor's own most recent release
+// (venue, meeting link, per-slot duration, cohort-only), not a hardcoded default.
+export const useLastUsedSlotDefaults = () =>
+  useQuery({
+    queryKey: QK.lastUsedSlotDefaults(),
+    queryFn:  () => apiFetch("/slots/last-used"),
+    staleTime: 60_000,
+  });
+
+// Raw start/end times of the mentor's own upcoming slots — used only to compute
+// the Create Slots wizard's conflict preview client-side.
+export const useMyUpcomingSlotTimes = () =>
+  useQuery({
+    queryKey: QK.myUpcomingSlotTimes(),
+    queryFn:  () => apiFetch("/slots/mine/upcoming-times"),
+    staleTime: 10_000,
   });
 
 export const useAigOverview = (aigSlug) =>
@@ -250,7 +270,11 @@ export const useCreateSlots = () => {
   return useMutation({
     mutationFn: (body) =>
       apiFetch("/slots", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: QK.mentorDashboard() });
+      qc.invalidateQueries({ queryKey: QK.lastUsedSlotDefaults() });
+      qc.invalidateQueries({ queryKey: QK.myUpcomingSlotTimes() });
+    },
   });
 };
 
