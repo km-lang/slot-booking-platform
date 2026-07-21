@@ -6,6 +6,7 @@ import AppShell from "../components/ui/AppShell";
 import PageHeader from "../components/ui/PageHeader";
 import Toggle from "../components/ui/Toggle";
 import Button from "../components/ui/Button";
+import TimeField from "../components/ui/TimeField";
 import { VENUE_OPTIONS, isOnlineVenue as checkIsOnlineVenue } from "../lib/venues";
 
 const STEP_TITLES = ["Schedule", "Options & Review"];
@@ -19,7 +20,10 @@ const DRAFT_KEY = "parthsaarthi:createSlotsDraft";
 // the 400 instead of after.
 const MAX_OCCURRENCES_PER_BATCH = 60;
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const BLOCK_PRESETS_MIN = [60, 120, 180, 240];
+// Quick-fill shortcuts for the Ends field — not the only way to set it, the field
+// itself is always directly typeable/editable.
+const QUICK_DURATIONS_MIN = [60, 120, 180, 240];
+const toMinutesOfDay = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
 
 export default function CreateSlotsFlow() {
   const navigate = useNavigate();
@@ -40,8 +44,7 @@ export default function CreateSlotsFlow() {
 
   const [startDate, setStartDate]     = useState(today);
   const [startTime, setStartTime]     = useState("14:00");
-  const [blockMinutes, setBlockMinutes]         = useState(120);
-  const [isCustomBlock, setIsCustomBlock]       = useState(false);
+  const [endTime, setEndTime]         = useState("16:00");
   const [slotDuration, setSlotDuration]         = useState(30);
   const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(VENUE_OPTIONS[0]);
@@ -72,8 +75,7 @@ export default function CreateSlotsFlow() {
         const d = JSON.parse(raw);
         if (d.startDate) setStartDate(d.startDate);
         if (d.startTime) setStartTime(d.startTime);
-        if (d.blockMinutes) setBlockMinutes(d.blockMinutes);
-        if (typeof d.isCustomBlock === "boolean") setIsCustomBlock(d.isCustomBlock);
+        if (d.endTime) setEndTime(d.endTime);
         if (d.slotDuration) setSlotDuration(d.slotDuration);
         if (typeof d.isCustomDuration === "boolean") setIsCustomDuration(d.isCustomDuration);
         if (d.selectedVenue) setSelectedVenue(d.selectedVenue);
@@ -104,11 +106,11 @@ export default function CreateSlotsFlow() {
   useEffect(() => {
     if (!hydratedRef.current) return; // don't stomp a draft mid-restore
     const draft = {
-      startDate, startTime, blockMinutes, isCustomBlock, slotDuration, isCustomDuration,
+      startDate, startTime, endTime, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil,
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [startDate, startTime, blockMinutes, isCustomBlock, slotDuration, isCustomDuration,
+  }, [startDate, startTime, endTime, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil]);
 
   // First time Repeat Weekly is switched on, pre-check the start date's own
@@ -128,6 +130,14 @@ export default function CreateSlotsFlow() {
 
   // ── Occurrence generation ───────────────────────────────────────────────────
   const [startHour, startMin] = startTime.split(":").map(Number);
+  const [endHour, endMin] = endTime.split(":").map(Number);
+  // If the end clock-time is at or before the start clock-time, it's read as
+  // crossing into the next day (e.g. 11:30 PM → 12:00 AM), same inference the
+  // old separate end-date field made explicit.
+  const spansMidnight = toMinutesOfDay(endTime) <= toMinutesOfDay(startTime);
+  const blockMinutes = spansMidnight
+    ? (24 * 60 - toMinutesOfDay(startTime)) + toMinutesOfDay(endTime)
+    : toMinutesOfDay(endTime) - toMinutesOfDay(startTime);
 
   const occurrenceDates = useMemo(() => {
     const [y, m, d] = startDate.split("-").map(Number);
@@ -147,9 +157,11 @@ export default function CreateSlotsFlow() {
   const occurrences = useMemo(
     () => occurrenceDates.map((d) => {
       const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), startHour, startMin);
-      return { start, end: new Date(start.getTime() + blockMinutes * 60000) };
+      let end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), endHour, endMin);
+      if (spansMidnight) end = new Date(end.getTime() + 24 * 60 * 60000);
+      return { start, end };
     }),
-    [occurrenceDates, startHour, startMin, blockMinutes],
+    [occurrenceDates, startHour, startMin, endHour, endMin, spansMidnight],
   );
 
   const perOccurrenceSlotCount = slotDuration > 0 ? Math.floor(blockMinutes / slotDuration) : 0;
@@ -223,7 +235,6 @@ export default function CreateSlotsFlow() {
   const weekdayLong = (dateStr) => new Date(`${dateStr}T00:00:00`).toLocaleDateString("en-US", { weekday: "long" });
   const fmtOccDate = (d) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const fmtOccTime = (d) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-  const computedEndTime = occurrences[0] ? fmtOccTime(occurrences[0].end) : "";
 
   return (
     <AppShell
@@ -261,40 +272,33 @@ export default function CreateSlotsFlow() {
                   </div>
                   <div className="min-w-0">
                     <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Time</label>
-                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+                    <TimeField value={startTime} onChange={setStartTime}
                       className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Block Length</label>
-                <div className="grid grid-cols-5 gap-2">
-                  {BLOCK_PRESETS_MIN.map((mins) => (
-                    <button key={mins} type="button" onClick={() => { setIsCustomBlock(false); setBlockMinutes(mins); }}
-                      className={`py-2 rounded-xl text-xs font-bold border transition-colors ${!isCustomBlock && blockMinutes === mins ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
-                      {mins / 60}h
-                    </button>
-                  ))}
-                  <button type="button" onClick={() => setIsCustomBlock(true)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${isCustomBlock ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
-                    Custom
-                  </button>
-                </div>
-                {isCustomBlock && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <input
-                      type="number" min="15" max="720" placeholder="Custom minutes…"
-                      value={blockMinutes || ""}
-                      onChange={(e) => setBlockMinutes(Number(e.target.value))}
-                      className="flex-1 bg-white border border-emerald-900/10 rounded-xl px-4 py-2.5 text-sm font-bold text-emerald-950 outline-none"
-                    />
-                    <span className="text-xs font-bold text-emerald-700/60">minutes</span>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[10px] font-bold text-emerald-800/60 uppercase">Ends</label>
+                  <div className="flex gap-1">
+                    {QUICK_DURATIONS_MIN.map((mins) => (
+                      <button key={mins} type="button"
+                        onClick={() => {
+                          const total = (toMinutesOfDay(startTime) + mins) % (24 * 60);
+                          setEndTime(`${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
+                        }}
+                        className="text-[10px] font-bold px-2 py-1 rounded-lg border border-emerald-900/10 text-emerald-700/70 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
+                        +{mins / 60}h
+                      </button>
+                    ))}
                   </div>
-                )}
-                {computedEndTime && (
+                </div>
+                <TimeField value={endTime} onChange={setEndTime}
+                  className="w-full bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                {spansMidnight && (
                   <p className="text-[10px] font-bold text-emerald-700/50 mt-1.5">
-                    Ends at {computedEndTime}{blockMinutes >= 1440 ? " (spans past midnight)" : ""}
+                    Spans past midnight — ends the next day.
                   </p>
                 )}
               </div>
@@ -442,7 +446,7 @@ export default function CreateSlotsFlow() {
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Time</span>
-                      <span className="font-bold text-emerald-950">{fmtTime(startTime)} – {computedEndTime}</span>
+                      <span className="font-bold text-emerald-950">{fmtTime(startTime)} – {fmtTime(endTime)}</span>
                     </div>
                   </>
                 ) : (
@@ -453,7 +457,7 @@ export default function CreateSlotsFlow() {
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Time</span>
-                      <span className="font-bold text-emerald-950">{fmtTime(startTime)} – {computedEndTime}</span>
+                      <span className="font-bold text-emerald-950">{fmtTime(startTime)} – {fmtTime(endTime)}</span>
                     </div>
                   </>
                 )}
