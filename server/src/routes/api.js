@@ -35,6 +35,7 @@ router.get("/mentors/:slug", requireRole("STUDENT"), slotController.getMentor);
 // GET  /api/slots?mentorSlug=evelyn-vance   student: list slots (auth-aware: marks bookedByMe)
 // POST /api/slots                           mentor: release a new block
 router.get("/slots/mine", requireRole("MENTOR"), slotController.listMentorOwnSlots);
+router.get("/slots/mine/history", requireRole("MENTOR"), slotController.getMentorHistory);
 router.get("/slots/hours-released", requireRole("MENTOR"), slotController.getSlotHoursReleased);
 router.get("/slots", requireRole("STUDENT"), slotController.listSlots);
 router.post(
@@ -56,6 +57,11 @@ router.patch(
   "/slots/:id/meeting-link",
   requireRole("MENTOR"),
   slotController.setSlotMeetingLink,
+);
+router.patch(
+  "/slots/:id/venue",
+  requireRole("MENTOR"),
+  slotController.setSlotVenue,
 );
 router.patch(
   "/slots/:id/reschedule",
@@ -104,6 +110,7 @@ router.delete(
 // POST   /api/bookings/:id/attendance  mentor: mark attended / no-show
 // POST   /api/bookings/:id/strike      mentor: manually strike a cancelled booking
 // POST   /api/bookings/:id/reassign    mentor: give this booking to a different student
+// POST   /api/bookings/:id/unassign    mentor: cancel this booking, keep the slot open (before it starts)
 // POST   /api/bookings/swap            mentor: trade students between two of their own bookings
 router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
 router.get("/bookings/export", requireRole("STUDENT"), exportController.exportMyBookings);
@@ -122,6 +129,11 @@ router.post(
   "/bookings/:id/reassign",
   requireRole("MENTOR"),
   bookingController.reassignBooking,
+);
+router.post(
+  "/bookings/:id/unassign",
+  requireRole("MENTOR"),
+  bookingController.unassignBooking,
 );
 router.post(
   "/bookings/swap",

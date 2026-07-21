@@ -4,6 +4,7 @@ import { useRescheduleSlot } from "../hooks/useApi";
 import AppShell from "../components/ui/AppShell";
 import PageHeader from "../components/ui/PageHeader";
 import Button from "../components/ui/Button";
+import { VENUE_OPTIONS, isOnlineVenue } from "../lib/venues";
 
 const toLocalHHMM = (iso) => {
   const d = new Date(iso);
@@ -14,11 +15,12 @@ const toLocalYYYYMMDD = (iso) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-// Mentor-initiated time shift of an already-booked session — same booking, same
-// student, no penalty either direction. Student (and mentor) get an updated
-// calendar invite automatically. Session data comes via router state (set by the
-// calendar-icon trigger in MentorDashboard) rather than a fetch-by-id endpoint,
-// since the dashboard query already has everything this page needs.
+// Mentor-initiated time and/or venue change for an already-booked session —
+// same booking, same student, no penalty either direction. Student (and mentor)
+// get an updated calendar invite automatically. Session data comes via router
+// state (set by the calendar-icon trigger in MentorDashboard) rather than a
+// fetch-by-id endpoint, since the dashboard query already has everything this
+// page needs.
 export default function RescheduleSlot() {
   const navigate = useNavigate();
   const { slotId } = useParams();
@@ -29,7 +31,15 @@ export default function RescheduleSlot() {
   const [start, setStart]         = useState(session ? toLocalHHMM(session.startTime) : "");
   const [endDate, setEndDate]     = useState(session ? toLocalYYYYMMDD(session.endTime) : "");
   const [end, setEnd]             = useState(session ? toLocalHHMM(session.endTime) : "");
+  // Falls back to the plain venue list if the session was created with a value
+  // that's since been retired from VENUE_OPTIONS, so the <select> always has a
+  // matching option instead of silently showing the first one.
+  const [venue, setVenue] = useState(session?.venue ?? VENUE_OPTIONS[0]);
+  const [meetingLink, setMeetingLink] = useState(session?.meetingLink ?? "");
   const reschedule = useRescheduleSlot();
+  const venueOptions = session?.venue && !VENUE_OPTIONS.includes(session.venue)
+    ? [session.venue, ...VENUE_OPTIONS]
+    : VENUE_OPTIONS;
 
   // Start/end each carry their own day, so a reschedule that spans midnight
   // (e.g. 11:30 PM → 12:00 AM) is just two datetimes with the end one a day
@@ -46,12 +56,20 @@ export default function RescheduleSlot() {
 
   if (!session) return null;
 
+  const venueIsOnline = isOnlineVenue(venue);
+
   const handleSubmit = () => {
     if (!isRangeValid) return;
     const startDateTime = new Date(`${startDate}T${start}:00`).toISOString();
     const endDateTime   = new Date(`${endDate}T${end}:00`).toISOString();
     reschedule.mutate(
-      { slotId, startTime: startDateTime, endTime: endDateTime },
+      {
+        slotId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        venue,
+        meetingLink: venueIsOnline ? meetingLink.trim() : "",
+      },
       { onSuccess: () => navigate("/mentor") },
     );
   };
@@ -69,7 +87,7 @@ export default function RescheduleSlot() {
       }
     >
         <main className="flex-1 px-4 py-6 pb-safe-6">
-          <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">Currently: {session.date} · {session.time}</p>
+          <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">Currently: {session.date} · {session.time} · {session.venue}</p>
 
           <div className="space-y-3 mb-5">
             <div>
@@ -112,6 +130,27 @@ export default function RescheduleSlot() {
                 End must be after start — if this crosses midnight, set the End day to the next date.
               </p>
             )}
+
+            <div>
+              <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Venue</label>
+              <select value={venue} onChange={(e) => setVenue(e.target.value)}
+                className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none appearance-none">
+                {venueOptions.map((v) => <option key={v}>{v}</option>)}
+              </select>
+            </div>
+
+            {venueIsOnline && (
+              <div>
+                <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">
+                  Google Meet Link <span className="text-emerald-700/40 font-semibold normal-case">(optional — can add later)</span>
+                </label>
+                <input
+                  type="url" placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)}
+                  className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none"
+                />
+              </div>
+            )}
           </div>
 
           {reschedule.error && (
@@ -127,7 +166,7 @@ export default function RescheduleSlot() {
             loadingText="Rescheduling…"
             className="w-full py-4 shadow-[0_8px_20px_rgba(0,0,0,0.2)]"
           >
-            Confirm New Time
+            Save Changes
           </Button>
           <Button
             variant="ghost"
@@ -135,7 +174,7 @@ export default function RescheduleSlot() {
             disabled={reschedule.isPending}
             className="w-full mt-2"
           >
-            Keep Current Time
+            Cancel
           </Button>
           <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
             No penalty applies. {session.student.name} will get an updated calendar invite.

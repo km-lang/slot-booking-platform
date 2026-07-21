@@ -616,32 +616,11 @@ const listMentorOwnSlots = async (req, res, next) => {
       },
     }));
 
-    // Past sessions the mentor has already marked ATTENDED or NO_SHOW — capped like
-    // cancelledBookings above since this list only grows over time.
-    const historyBookings = await prisma.booking.findMany({
+    // Total count for the History section's badge — the rows themselves are
+    // fetched separately (paginated) via getMentorHistory below.
+    const historyCount = await prisma.booking.count({
       where: { mentorProfileId: mentorProfile.id, status: { in: ["ATTENDED", "NO_SHOW"] } },
-      include: {
-        slot: { select: { startTime: true, endTime: true, venue: true } },
-        student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
-      },
-      orderBy: { slot: { startTime: "desc" } },
-      take: 50,
     });
-    const historySessions = historyBookings.map((b) => ({
-      bookingId: b.id,
-      startTime: b.slot.startTime,
-      endTime:   b.slot.endTime,
-      date:      new Date(b.slot.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-      time:      fmtTime(b.slot.startTime),
-      venue:     b.slot.venue,
-      status:    b.status,
-      focus:     b.focus,
-      student: {
-        name:  b.student?.name ?? "—",
-        email: b.student?.email ?? null,
-        pgp:   b.student?.studentProfile?.pgpId ?? "N/A",
-      },
-    }));
 
     // Cohort aggregate stats
     let cohortStats = { totalMentees: 0, totalSlotsTaken: 0 };
@@ -663,7 +642,65 @@ const listMentorOwnSlots = async (req, res, next) => {
       cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
     }
 
-    res.json({ bookedSessions, ongoingSessions, availableSlots, expiredSlots, cancelledSessions, historySessions, cohortStats });
+    res.json({ bookedSessions, ongoingSessions, availableSlots, expiredSlots, cancelledSessions, historyCount, cohortStats });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Past sessions the mentor has already marked ATTENDED or NO_SHOW — paginated
+// (10/page) since this list only grows over time and a mentor with a long
+// history shouldn't have to load it all at once.
+const getMentorHistory = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const pageSize = 10;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+
+    const where = { mentorProfileId: mentorProfile.id, status: { in: ["ATTENDED", "NO_SHOW"] } };
+
+    const [total, historyBookings] = await Promise.all([
+      prisma.booking.count({ where }),
+      prisma.booking.findMany({
+        where,
+        include: {
+          slot: { select: { startTime: true, endTime: true, venue: true } },
+          student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
+        },
+        orderBy: { slot: { startTime: "desc" } },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const fmtTime = (d) =>
+      new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+    const historySessions = historyBookings.map((b) => ({
+      bookingId: b.id,
+      startTime: b.slot.startTime,
+      endTime:   b.slot.endTime,
+      date:      new Date(b.slot.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      time:      fmtTime(b.slot.startTime),
+      venue:     b.slot.venue,
+      status:    b.status,
+      focus:     b.focus,
+      student: {
+        name:  b.student?.name ?? "—",
+        email: b.student?.email ?? null,
+        pgp:   b.student?.studentProfile?.pgpId ?? "N/A",
+      },
+    }));
+
+    res.json({
+      historySessions,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    });
   } catch (err) {
     next(err);
   }
@@ -791,9 +828,49 @@ const setSlotMeetingLink = async (req, res, next) => {
   }
 };
 
-// Mentor-initiated time shift of an already-booked session — same booking record,
-// same student, no penalty either direction. Rescheduling an *unbooked* slot isn't
-// supported here (just delete + recreate it instead).
+// Lets a mentor change an *unbooked* slot's venue (e.g. Library → GMeet) before
+// anyone's claimed it — no booking to notify, so this is a plain field update,
+// unlike setSlotReschedule's booked-slot path which also emails the student.
+const setSlotVenue = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const venue = String(req.body.venue ?? "").trim();
+    if (!venue) return res.status(400).json({ error: "venue is required" });
+    const meetingLink = (req.body.meetingLink ?? "").trim();
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
+    }
+
+    const slot = await prisma.slot.findUnique({
+      where: { id: req.params.id },
+      include: { bookings: { where: { status: { not: "CANCELLED" } } } },
+    });
+    if (!slot) return res.status(404).json({ error: "Slot not found" });
+    if (slot.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your slot" });
+    if (slot.bookings.length > 0) {
+      return res.status(409).json({ error: "This slot already has a booking — use Reschedule to change its venue instead" });
+    }
+
+    const updated = await prisma.slot.update({
+      where: { id: slot.id },
+      data:  { venue, meetingLink: meetingLink || null },
+    });
+
+    res.json({ id: updated.id, venue: updated.venue, meetingLink: updated.meetingLink });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Mentor-initiated time (and, optionally, venue) shift of an already-booked
+// session — same booking record, same student, no penalty either direction.
+// venue/meetingLink let a mentor convert e.g. "Library (In-Person)" to
+// "GMeet (Online)" in the same step as moving the time; both are optional and
+// default to the slot's current values. Rescheduling an *unbooked* slot isn't
+// supported here (just delete + recreate it instead, or use setSlotVenue if
+// only the venue needs to change).
 const setSlotReschedule = async (req, res, next) => {
   try {
     const mentorProfile = await prisma.mentorProfile.findUnique({
@@ -809,6 +886,12 @@ const setSlotReschedule = async (req, res, next) => {
     }
     if (newStart <= new Date()) {
       return res.status(400).json({ error: "New start time must be in the future" });
+    }
+    const venue = req.body.venue !== undefined ? String(req.body.venue).trim() : undefined;
+    if (venue !== undefined && !venue) return res.status(400).json({ error: "venue cannot be blank" });
+    const meetingLink = req.body.meetingLink !== undefined ? String(req.body.meetingLink).trim() : undefined;
+    if (meetingLink && !/^https?:\/\//i.test(meetingLink)) {
+      return res.status(400).json({ error: "meetingLink must be a valid URL" });
     }
 
     const slot = await prisma.slot.findUnique({
@@ -828,7 +911,13 @@ const setSlotReschedule = async (req, res, next) => {
     const oldStart = slot.startTime;
     const updated = await prisma.slot.update({
       where: { id: slot.id },
-      data:  { startTime: newStart, endTime: newEnd, icsSequence: { increment: 1 } },
+      data:  {
+        startTime: newStart,
+        endTime: newEnd,
+        icsSequence: { increment: 1 },
+        ...(venue !== undefined && { venue }),
+        ...(meetingLink !== undefined && { meetingLink: meetingLink || null }),
+      },
     });
 
     // Notify both parties (non-blocking) — mentor's own calendar entry needs the
@@ -1034,11 +1123,13 @@ module.exports = {
   getMentor,
   listSlots,
   listMentorOwnSlots,
+  getMentorHistory,
   getSlotHoursReleased,
   releaseSlots,
   deleteSlot,
   setSlotDelay,
   setSlotMeetingLink,
+  setSlotVenue,
   setSlotReschedule,
   bulkDeleteSlots,
   bulkSetMeetingLink,

@@ -6,6 +6,7 @@ import AppShell from "../components/ui/AppShell";
 import PageHeader from "../components/ui/PageHeader";
 import Toggle from "../components/ui/Toggle";
 import Button from "../components/ui/Button";
+import { VENUE_OPTIONS, isOnlineVenue as checkIsOnlineVenue } from "../lib/venues";
 
 const STEP_TITLES = ["Schedule", "Options & Review"];
 const TOTAL_STEPS = STEP_TITLES.length;
@@ -44,7 +45,7 @@ export default function CreateSlotsFlow() {
   const slotCount = slotDuration > 0
     ? Math.max(0, Math.floor((endDateTimeMs - startDateTimeMs) / 60000 / slotDuration))
     : 0;
-  const isOnlineVenue = selectedVenue.toLowerCase().includes("online");
+  const isOnlineVenue = checkIsOnlineVenue(selectedVenue);
 
   const handleBack = () => {
     if (step > 1) setStep((s) => s - 1);
@@ -189,8 +190,7 @@ export default function CreateSlotsFlow() {
                 <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Venue</label>
                 <select value={selectedVenue} onChange={(e) => setSelectedVenue(e.target.value)}
                   className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none appearance-none">
-                  <option>Library (In-Person)</option>
-                  <option>Online (Google Meet)</option>
+                  {VENUE_OPTIONS.map((v) => <option key={v}>{v}</option>)}
                 </select>
               </div>
 

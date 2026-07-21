@@ -2,23 +2,25 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Plus, Users, CheckCircle, XCircle,
-  ChevronRight, Trash2, AlertTriangle, Calendar,
+  ChevronLeft, ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
-  Send, UserPlus, Search, ShieldAlert, UserCog, ArrowLeftRight,
-  CalendarRange,
+  Send, UserPlus, UserMinus, Search, ShieldAlert, UserCog, ArrowLeftRight,
+  CalendarRange, MapPin,
 } from "lucide-react";
 import {
-  useMentorDashboard, useMarkAttendance,
-  useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink,
+  useMentorDashboard, useMentorHistory, useMarkAttendance,
+  useDeleteSlot, useSetSlotDelay, useSetSlotMeetingLink, useSetSlotVenue,
   useBulkDeleteSlots, useBulkSetMeetingLink,
   useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
-  useApplyStrike, useReassignBooking, useSwapBookings,
+  useApplyStrike, useReassignBooking, useUnassignBooking, useSwapBookings,
   useMentorHoursReleased,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
 import Sheet from "../components/ui/Sheet";
+import IconButton from "../components/ui/IconButton";
+import { VENUE_OPTIONS, isOnlineVenue as checkIsOnlineVenue } from "../lib/venues";
 import psLogo from "../assets/PSLogo.png";
 
 const FOCUS_LABELS = {
@@ -475,11 +477,83 @@ function MeetingLinkRow({ slotId, currentLink }) {
   );
 }
 
+// ── Venue Editor ────────────────────────────────────────────────────────────
+// Lets a mentor change an unbooked slot's location — e.g. convert a Library
+// slot to GMeet before anyone's booked it — without deleting and recreating it.
+function VenueEditor({ slotId, currentVenue, currentLink }) {
+  const [editing, setEditing] = useState(false);
+  const [venue, setVenue] = useState(currentVenue);
+  const [link, setLink] = useState(currentLink ?? "");
+  const setSlotVenue = useSetSlotVenue();
+
+  useEffect(() => { setVenue(currentVenue); setLink(currentLink ?? ""); }, [currentVenue, currentLink]);
+
+  // Keeps a venue the slot already has (even if since dropped from the standard
+  // list) selectable, instead of silently switching the <select> to some other option.
+  const venueOptions = currentVenue && !VENUE_OPTIONS.includes(currentVenue)
+    ? [currentVenue, ...VENUE_OPTIONS]
+    : VENUE_OPTIONS;
+  const willBeOnline = checkIsOnlineVenue(venue);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-1 text-[10px] font-bold text-emerald-700/60 hover:text-emerald-900 mt-0.5"
+      >
+        <MapPin size={10} /> {currentVenue} <Pencil size={9} className="opacity-50" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <select
+          value={venue}
+          onChange={(e) => setVenue(e.target.value)}
+          className="flex-1 min-w-0 bg-white border border-emerald-300 rounded-lg px-2 py-1.5 text-[11px] font-semibold outline-none"
+        >
+          {venueOptions.map((v) => <option key={v}>{v}</option>)}
+        </select>
+        <button
+          type="button"
+          disabled={setSlotVenue.isPending}
+          onClick={() => setSlotVenue.mutate(
+            { slotId, venue, meetingLink: willBeOnline ? link.trim() : "" },
+            { onSuccess: () => setEditing(false) },
+          )}
+          className="text-[10px] font-bold text-white bg-emerald-700 hover:bg-emerald-800 px-2.5 py-1.5 rounded-lg shrink-0 disabled:opacity-50"
+        >
+          {setSlotVenue.isPending ? "…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setEditing(false)} className="text-emerald-700/50 hover:text-emerald-900 shrink-0">
+          <X size={14} />
+        </button>
+      </div>
+      {willBeOnline && (
+        <input
+          type="url"
+          placeholder="https://meet.google.com/xxx-xxxx-xxx"
+          value={link}
+          onChange={(e) => setLink(e.target.value)}
+          className="w-full bg-white border border-emerald-300 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold outline-none"
+        />
+      )}
+      {setSlotVenue.error && (
+        <p className="text-[10px] font-bold text-red-600">{setSlotVenue.error.message}</p>
+      )}
+    </div>
+  );
+}
+
 // ── Session Card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSwap, onDelete }) {
+function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSwap, onDelete, onUnassign, pendingUnassignId }) {
   const navigate = useNavigate();
   const [lateSheetOpen, setLateSheetOpen] = useState(false);
   const isPending = pendingBookingId === session.bookingId;
+  const isUnassignPending = pendingUnassignId === session.bookingId;
   // Server rejects attendance marking before the session starts — mirrored here so
   // mentors see a disabled state instead of tapping the button and hitting an alert().
   const hasStarted = new Date(session.startTime) <= new Date();
@@ -529,72 +603,73 @@ function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSw
           <MeetingLinkRow slotId={session.id} currentLink={session.meetingLink} />
         )}
 
-        {/* Actions */}
-        <div className="flex gap-2">
-          <button
+        {/* Actions — icon-only so they never overlap on narrow screens; each
+            button's name shows via native title (desktop hover) or a long-press
+            (touch — see IconButton) instead of inline text. */}
+        <div className="flex flex-wrap gap-2">
+          <IconButton
+            icon={CheckCircle}
+            label={isPending ? "Saving…" : "Mark Attended"}
             onClick={() => onAttendance(session.bookingId, "ATTENDED")}
             disabled={isPending || !hasStarted}
-            title={!hasStarted ? "Available once the session starts" : undefined}
-            className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-          >
-            <CheckCircle size={14} />
-            {isPending ? "Saving…" : "Attended"}
-          </button>
-          <button
+            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200/60"
+          />
+          <IconButton
+            icon={XCircle}
+            label={isPending ? "Saving…" : "Mark No-Show"}
             onClick={() => onAttendance(session.bookingId, "NO_SHOW")}
             disabled={isPending || !hasStarted}
-            title={!hasStarted ? "Available once the session starts" : undefined}
-            className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-          >
-            <XCircle size={14} />
-            {isPending ? "Saving…" : "No-Show"}
-          </button>
-          <button
+            className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
+          />
+          {!hasStarted && (
+            <IconButton
+              icon={UserMinus}
+              label={isUnassignPending ? "Unassigning…" : "Unassign Student"}
+              onClick={() => onUnassign(session.bookingId, session.student.name)}
+              disabled={isUnassignPending}
+              className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200/60"
+            />
+          )}
+          <IconButton
+            icon={Clock}
+            label="Running Late"
             onClick={() => setLateSheetOpen(true)}
-            className="px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/60 transition-colors"
-            title="Running late"
-          >
-            <Clock size={14} />
-          </button>
-          <button
+            className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200/60"
+          />
+          <IconButton
+            icon={Calendar}
+            label="Reschedule"
             onClick={() => navigate(`/mentor/slots/${session.id}/reschedule`, { state: { session } })}
-            className="px-3 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 transition-colors"
-            title="Reschedule"
-          >
-            <Calendar size={14} />
-          </button>
-          <button
+            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/60"
+          />
+          <IconButton
+            icon={UserCog}
+            label={isOverdue ? "Reassign — unavailable, session ended" : "Reassign to Different Student"}
             onClick={() => onReassign(session)}
             disabled={isOverdue}
-            title={isOverdue ? "Not available once a session has ended" : "Reassign to a different student"}
-            className="px-3 py-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/60 transition-colors disabled:opacity-40"
-          >
-            <UserCog size={14} />
-          </button>
-          <button
+            className="bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200/60"
+          />
+          <IconButton
+            icon={ArrowLeftRight}
+            label={isOverdue ? "Swap — unavailable, session ended" : "Swap With Another Student"}
             onClick={() => onSwap(session)}
             disabled={isOverdue}
-            title={isOverdue ? "Not available once a session has ended" : "Swap with another student"}
-            className="px-3 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 transition-colors disabled:opacity-40"
-          >
-            <ArrowLeftRight size={14} />
-          </button>
+            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/60"
+          />
           {session.student.email && (
-            <a
+            <IconButton
+              icon={Mail}
+              label="Email Student"
               href={`mailto:${session.student.email}`}
-              className="px-3 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/60 transition-colors"
-              title="Email student"
-            >
-              <Mail size={14} />
-            </a>
+              className="bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200/60"
+            />
           )}
-          <button
+          <IconButton
+            icon={Trash2}
+            label="Delete Slot"
             onClick={() => onDelete(session.id, session.student.name)}
-            className="px-3 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/60 transition-colors"
-            title="Delete this slot"
-          >
-            <Trash2 size={14} />
-          </button>
+            className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
+          />
         </div>
       </div>
 
@@ -737,16 +812,23 @@ export default function MentorDashboard() {
   const availableSlots    = data?.availableSlots ?? [];
   const expiredSlots      = data?.expiredSlots ?? [];
   const cancelledSessions = data?.cancelledSessions ?? [];
-  const historySessions   = data?.historySessions ?? [];
+  const historyCount      = data?.historyCount ?? 0;
   const cohortStats       = data?.cohortStats ?? { totalMentees: 0, totalSlotsTaken: 0 };
+
+  const [historyPage, setHistoryPage] = useState(1);
+  const { data: historyData, isFetching: historyFetching } = useMentorHistory(historyPage);
+  const historySessions   = historyData?.historySessions ?? [];
+  const historyTotalPages = historyData?.totalPages ?? 1;
 
   const attendanceMutation  = useMarkAttendance();
   const deleteSlotMutation  = useDeleteSlot();
+  const unassignMutation    = useUnassignBooking();
   const bulkDeleteMutation  = useBulkDeleteSlots();
   const bulkLinkMutation    = useBulkSetMeetingLink();
   const bulkPublishMutation = useBulkPublishSlots();
 
   const [pendingBookingId, setPendingBookingId] = useState(null);
+  const [pendingUnassignId, setPendingUnassignId] = useState(null);
 
   // Bulk slot selection (Open Slots list)
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
@@ -772,6 +854,15 @@ export default function MentorDashboard() {
         onError:   (err) => { setPendingBookingId(null); alert(err.message); },
       },
     );
+  };
+
+  const handleUnassign = (bookingId, studentName) => {
+    if (!confirm(`Unassign ${studentName} from this slot? They'll be notified by email and the slot reopens for anyone to book. No penalty applies.`)) return;
+    setPendingUnassignId(bookingId);
+    unassignMutation.mutate(bookingId, {
+      onSuccess: () => setPendingUnassignId(null),
+      onError:   (err) => { setPendingUnassignId(null); alert(err.message); },
+    });
   };
 
   const handleDeleteSlot = (slotId, studentName) => {
@@ -914,6 +1005,8 @@ export default function MentorDashboard() {
                     onReassign={setReassignTarget}
                     onSwap={setSwapTarget}
                     onDelete={handleDeleteSlot}
+                    onUnassign={handleUnassign}
+                    pendingUnassignId={pendingUnassignId}
                   />
                 ))
               )}
@@ -943,6 +1036,8 @@ export default function MentorDashboard() {
                     onReassign={setReassignTarget}
                     onSwap={setSwapTarget}
                     onDelete={handleDeleteSlot}
+                    onUnassign={handleUnassign}
+                    pendingUnassignId={pendingUnassignId}
                   />
                 ))
               )}
@@ -973,11 +1068,11 @@ export default function MentorDashboard() {
           {/* History — past sessions already marked Attended / No-Show */}
           <CollapsibleSection
             title="History"
-            count={historySessions.length}
+            count={historyCount}
             badgeClassName="bg-slate-200 text-slate-600"
           >
             <div className="bg-white border border-emerald-900/10 rounded-2xl shadow-sm overflow-hidden divide-y divide-emerald-900/5">
-              {isLoading ? (
+              {historyFetching && historySessions.length === 0 ? (
                 <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">Loading…</div>
               ) : historySessions.length === 0 ? (
                 <div className="p-6 text-center text-emerald-800/40 text-xs font-bold">
@@ -989,6 +1084,29 @@ export default function MentorDashboard() {
                 ))
               )}
             </div>
+            {historyCount > 0 && (
+              <div className="flex items-center justify-between mt-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                  disabled={historyPage <= 1 || historyFetching}
+                  className="flex items-center gap-1 text-xs font-bold text-emerald-700 disabled:text-emerald-900/20 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={14} /> Back
+                </button>
+                <span className="text-[11px] font-bold text-emerald-700/60">
+                  Page {historyPage} of {historyTotalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                  disabled={historyPage >= historyTotalPages || historyFetching}
+                  className="flex items-center gap-1 text-xs font-bold text-emerald-700 disabled:text-emerald-900/20 disabled:cursor-not-allowed"
+                >
+                  Next <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
           </CollapsibleSection>
 
           {/* Open Slots */}
@@ -1063,7 +1181,6 @@ export default function MentorDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
-                        <span className="text-emerald-700/60">{slot.venue}</span>
                         {slot.cohortOnly && (
                           <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
                         )}
@@ -1073,7 +1190,8 @@ export default function MentorDashboard() {
                           <span className="bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">Draft</span>
                         )}
                       </div>
-                      {slot.venue?.toLowerCase().includes("online") && (
+                      <VenueEditor slotId={slot.id} currentVenue={slot.venue} currentLink={slot.meetingLink} />
+                      {checkIsOnlineVenue(slot.venue) && (
                         <MeetingLinkRow slotId={slot.id} currentLink={slot.meetingLink} />
                       )}
                     </div>

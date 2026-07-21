@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { apiFetch, downloadFile } from "../lib/apiClient";
 
 // ── Stable query keys ─────────────────────────────────────────────────────────
@@ -12,6 +12,7 @@ export const QK = {
   mentor:          (slug)    => ["mentor", slug],
   slots:           (slug)    => ["slots", slug],
   mentorDashboard: ()        => ["mentorDashboard"],
+  mentorHistory:   (page)    => ["mentorHistory", page],
   mentorCohort:    ()        => ["mentorCohort"],
   mentorHoursReleased: (from, to) => ["mentorHoursReleased", from, to],
   aigOverview:     (slug)    => ["aigOverview", slug],
@@ -97,6 +98,15 @@ export const useMentorDashboard = () =>
     queryKey: QK.mentorDashboard(),
     queryFn:  () => apiFetch("/slots/mine"),
     staleTime: 10_000,
+  });
+
+// Mentor's Attended/No-Show history — server-paginated, 10 per page.
+export const useMentorHistory = (page) =>
+  useQuery({
+    queryKey: QK.mentorHistory(page),
+    queryFn:  () => apiFetch(`/slots/mine/history?page=${page}`),
+    staleTime: 10_000,
+    placeholderData: keepPreviousData,
   });
 
 export const useMentorCohort = () =>
@@ -279,10 +289,22 @@ export const useSetSlotMeetingLink = () => {
 export const useRescheduleSlot = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ slotId, startTime, endTime }) =>
+    mutationFn: ({ slotId, startTime, endTime, venue, meetingLink }) =>
       apiFetch(`/slots/${slotId}/reschedule`, {
         method: "PATCH",
-        body: JSON.stringify({ startTime, endTime }),
+        body: JSON.stringify({ startTime, endTime, venue, meetingLink }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useSetSlotVenue = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, venue, meetingLink }) =>
+      apiFetch(`/slots/${slotId}/venue`, {
+        method: "PATCH",
+        body: JSON.stringify({ venue, meetingLink }),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
   });
@@ -337,6 +359,14 @@ export const useReassignBooking = () => {
   return useMutation({
     mutationFn: ({ bookingId, pgpId }) =>
       apiFetch(`/bookings/${bookingId}/reassign`, { method: "POST", body: JSON.stringify({ pgpId }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
+  });
+};
+
+export const useUnassignBooking = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId) => apiFetch(`/bookings/${bookingId}/unassign`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
   });
 };

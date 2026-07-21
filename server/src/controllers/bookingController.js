@@ -471,6 +471,86 @@ const reassignBooking = async (req, res, next) => {
   }
 };
 
+// Cancels a student's booking but — unlike deleteSlot — leaves the slot itself
+// published and non-retired, so it immediately reappears in the mentor's Open
+// Slots list for someone else to book. Only allowed before the session starts;
+// once it's begun the booking has to be resolved via attendance instead.
+const unassignBooking = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: {
+        slot: true,
+        student: { select: { name: true, email: true } },
+      },
+    });
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    if (booking.mentorProfileId !== mentorProfile.id) return res.status(403).json({ error: "Not your booking" });
+    if (booking.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
+    if (booking.slot.startTime <= new Date()) {
+      return res.status(400).json({ error: "Cannot unassign once the session has started" });
+    }
+
+    const [, updatedSlot] = await prisma.$transaction([
+      prisma.booking.update({
+        where: { id: booking.id },
+        data: { status: "CANCELLED", cancelledBy: "MENTOR", cancelledAt: new Date() },
+      }),
+      prisma.slot.update({
+        where: { id: booking.slot.id },
+        data: { icsSequence: { increment: 1 } },
+      }),
+      prisma.auditEvent.create({
+        data: {
+          userId: req.user.sub,
+          action: "BOOKING_UNASSIGNED",
+          entity: "Booking",
+          entityId: booking.id,
+        },
+      }),
+    ]);
+
+    if (booking.student?.email) {
+      const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      const mentorName = mentorProfile.user?.name ?? "your mentor";
+      const studentName = booking.student.name ?? booking.student.email;
+      const icsContent = buildSessionEvent({
+        uid: booking.id,
+        sequence: updatedSlot.icsSequence,
+        method: "CANCEL",
+        status: "CANCELLED",
+        startTime: booking.slot.startTime,
+        endTime: booking.slot.endTime,
+        summary: `CV Review: ${studentName} × ${mentorName}`,
+        description: "This session was cancelled via Parthsaarthi.",
+        location: booking.slot.venue,
+        organizerEmail: CALENDAR_ORGANIZER_EMAIL,
+        organizerName: "Parthsaarthi",
+        attendees: [{ email: booking.student.email, name: studentName }],
+      });
+      mailer.sendSlotDeletedToStudent({
+        studentEmail: booking.student.email,
+        studentName,
+        mentorName,
+        date: fmtDate(booking.slot.startTime),
+        time: fmtTime(booking.slot.startTime),
+        icsContent,
+      }).catch((e) => console.error("[mailer] unassign notice:", e.message));
+    }
+
+    res.json({ id: booking.id, unassigned: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Trades which student sits on which of the mentor's own two confirmed
 // bookings — e.g. two students both want to swap their session times. Deletes
 // and recreates both Booking rows rather than updating studentUserId in place:
@@ -827,5 +907,5 @@ const getMyBookings = async (req, res, next) => {
 module.exports = {
   createBooking, allocateSlot, searchStudentsForAllocation,
   markAttendance, applyManualStrike, getMyBookings,
-  reassignBooking, swapBookings,
+  reassignBooking, unassignBooking, swapBookings,
 };
