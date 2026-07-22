@@ -490,6 +490,7 @@ const deleteSlot = async (req, res, next) => {
           mailer.sendSlotDeletedToStudent({
             studentEmail: b.student.email,
             studentName,
+            mentorEmail: mentorProfile.user?.email ?? null,
             mentorName,
             date,
             time,

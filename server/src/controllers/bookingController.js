@@ -486,6 +486,7 @@ const reassignBooking = async (req, res, next) => {
         mailer.sendBookingConfirmation({
           studentEmail: newStudentProfile.user.email,
           studentName: newStudentName,
+          mentorEmail: mentorProfile.user?.email ?? null,
           mentorName,
           firm: mentorProfile.firm,
           date,
@@ -516,6 +517,7 @@ const reassignBooking = async (req, res, next) => {
         mailer.sendBookingReassignedToStudent({
           studentEmail: oldStudent.email,
           studentName: oldStudentName,
+          mentorEmail: mentorProfile.user?.email ?? null,
           mentorName,
           date,
           time,
@@ -610,6 +612,7 @@ const unassignBooking = async (req, res, next) => {
       mailer.sendSlotDeletedToStudent({
         studentEmail: booking.student.email,
         studentName,
+        mentorEmail: mentorProfile.user?.email ?? null,
         mentorName,
         date: fmtDate(booking.slot.startTime),
         time: fmtTime(booking.slot.startTime),
@@ -853,6 +856,7 @@ const markAttendance = async (req, res, next) => {
       mailer.sendNoShowStrikeToStudent({
         studentEmail: booking.student.email,
         studentName:  booking.student.name ?? booking.student.email,
+        mentorEmail:  mentorProfile.user?.email ?? null,
         mentorName:   mentorProfile.user?.name ?? mentorProfile.user?.email ?? "your mentor",
         date:         fmtDate(booking.slot.startTime),
         time:         fmtTime(booking.slot.startTime),
@@ -925,6 +929,7 @@ const applyManualStrike = async (req, res, next) => {
       mailer.sendStrikeAppliedToStudent({
         studentEmail: student.email,
         studentName:  student.name ?? student.email,
+        mentorEmail:  mentorProfile.user?.email ?? null,
         mentorName:   mentorProfile.user?.name ?? mentorProfile.user?.email ?? "your mentor",
         date:         fmtDate(booking.slot.startTime),
         time:         fmtTime(booking.slot.startTime),

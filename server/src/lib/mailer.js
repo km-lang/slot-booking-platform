@@ -100,12 +100,15 @@ const secondaryBtn = (href, label) =>
 // ── Exported email senders ─────────────────────────────────────────────────────
 
 /**
- * Sent to a student immediately after a successful booking.
+ * Sent to a student immediately after a successful booking. mentorEmail is
+ * optional and, when present, is cc'd so the mentor sees every notice sent
+ * about their own sessions, not just the ones addressed to them directly.
  */
-const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, meetingLink, icsContent, calendarLink }) => {
+const sendBookingConfirmation = ({ studentEmail, studentName, mentorEmail, mentorName, firm, date, time, venue, focus, meetingLink, icsContent, calendarLink }) => {
   const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA", cv_hr: "CV-HR" }[focus] ?? focus;
   return send({
     to:      studentEmail,
+    cc:      mentorEmail || undefined,
     subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
     text:    `Hi ${studentName}, your ${focusLabel} session with ${mentorName} (${firm}) is confirmed for ${date} at ${time}, ${venue}.${meetingLink ? ` Join here: ${meetingLink}` : ""} A calendar invite is attached.${calendarLink ? ` Add to Google Calendar: ${calendarLink}` : ""} To cancel, use the app — cancelling is never automatically penalised, but late or repeated cancellations may result in your mentor applying a strike.`,
     html:    wrap(`
@@ -204,11 +207,13 @@ const sendBookingConfirmationCombined = ({
  * Sent to a student when a mentor reassigns their confirmed booking to a
  * different student — the slot itself isn't cancelled, just no longer theirs.
  * No penalty implied; copy is deliberately distinct so it doesn't read as
- * "you cancelled this."
+ * "you cancelled this." mentorEmail is cc'd since this is the mentor's own
+ * action — they should see the notice their former student receives.
  */
-const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
+const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorEmail, mentorName, date, time, icsContent }) =>
   send({
     to:      studentEmail,
+    cc:      mentorEmail || undefined,
     subject: `Your session with ${mentorName} on ${date} is no longer available`,
     text:    `Hi ${studentName}, your mentor ${mentorName} has moved the ${date} at ${time} session to another student. This wasn't something you did — reach out to your mentor if you'd like to rebook.`,
     html:    wrap(`
@@ -227,11 +232,13 @@ const sendBookingReassignedToStudent = ({ studentEmail, studentName, mentorName,
 /**
  * Sent to a student when a mentor deletes a slot that had their confirmed
  * booking on it — the session is gone entirely (unlike a reassignment, where
- * it still happens for someone else). No penalty implied.
+ * it still happens for someone else). No penalty implied. mentorEmail is
+ * cc'd since this is the mentor's own action.
  */
-const sendSlotDeletedToStudent = ({ studentEmail, studentName, mentorName, date, time, icsContent }) =>
+const sendSlotDeletedToStudent = ({ studentEmail, studentName, mentorEmail, mentorName, date, time, icsContent }) =>
   send({
     to:      studentEmail,
+    cc:      mentorEmail || undefined,
     subject: `Your session with ${mentorName} on ${date} has been cancelled`,
     text:    `Hi ${studentName}, your mentor ${mentorName} has removed the ${date} at ${time} session. This wasn't something you did — no strike or penalty applies. You can book a new slot from the app at any time.`,
     html:    wrap(`
@@ -325,8 +332,9 @@ const sendDelayNotification = ({ students, mentorName, mentorEmail, date, time, 
  * Sent to a student when their mentor manually applies a strike to a
  * cancellation they made — the only path that ever produces a strike from a
  * cancellation now, so this is the student's sole notice it happened.
+ * mentorEmail is cc'd since this is the mentor's own action.
  */
-const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorName, date, time, banApplied, banDurationHours }) => {
+const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorEmail, mentorName, date, time, banApplied, banDurationHours }) => {
   const banNote = banApplied
     ? banDurationHours
       ? ` This also triggered a booking ban for approximately ${banDurationHours} hour${banDurationHours === 1 ? "" : "s"}.`
@@ -335,6 +343,7 @@ const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorName, dat
 
   return send({
     to:      studentEmail,
+    cc:      mentorEmail || undefined,
     subject: `A strike was applied to your account`,
     text:    `Hi ${studentName}, ${mentorName} applied a strike to your record for the ${date} at ${time} session you cancelled.${banNote}`,
     html:    wrap(`
@@ -351,9 +360,10 @@ const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorName, dat
 /**
  * Sent to a student when their mentor marks them as a no-show for a confirmed
  * session — distinct copy from sendStrikeAppliedToStudent since no cancellation
- * happened here, the student simply didn't attend.
+ * happened here, the student simply didn't attend. mentorEmail is cc'd since
+ * this is the mentor's own action.
  */
-const sendNoShowStrikeToStudent = ({ studentEmail, studentName, mentorName, date, time, banApplied, banDurationHours }) => {
+const sendNoShowStrikeToStudent = ({ studentEmail, studentName, mentorEmail, mentorName, date, time, banApplied, banDurationHours }) => {
   const banNote = banApplied
     ? banDurationHours
       ? ` This also triggered a booking ban for approximately ${banDurationHours} hour${banDurationHours === 1 ? "" : "s"}.`
@@ -362,6 +372,7 @@ const sendNoShowStrikeToStudent = ({ studentEmail, studentName, mentorName, date
 
   return send({
     to:      studentEmail,
+    cc:      mentorEmail || undefined,
     subject: `A strike was applied to your account`,
     text:    `Hi ${studentName}, ${mentorName} marked you as a no-show for the ${date} at ${time} session and applied a strike to your record.${banNote}`,
     html:    wrap(`
