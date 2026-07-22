@@ -20,6 +20,7 @@ import AppFooter from "../components/AppFooter";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import Toggle from "../components/ui/Toggle";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
 import psLogo from "../assets/PSLogo.png";
 
 const COLORS = ["var(--color-heading)", "var(--color-primary)", "var(--color-primary-light)", "var(--color-primary-lighter)"];
@@ -734,10 +735,15 @@ function WhitelistTab() {
     );
   };
 
-  const handleRemove = (id, email) => {
-    if (!confirm(`Remove ${email} from the whitelist?`)) return;
-    removeMutation.mutate(id, {
-      onError: (err) => alert(err.message),
+  // In-app confirm modal — deliberately not window.confirm()/alert(). Several
+  // mobile in-app browsers (WhatsApp, Instagram, LinkedIn webviews) silently
+  // suppress native JS dialogs, so this button could appear to do nothing at
+  // all when tapped from inside one of those (see MentorDashboard's ConfirmDialog).
+  const [pendingRemove, setPendingRemove] = useState(null); // { id, email }
+  const handleRemove = (id, email) => setPendingRemove({ id, email });
+  const confirmRemove = () => {
+    removeMutation.mutate(pendingRemove.id, {
+      onSuccess: () => setPendingRemove(null),
     });
   };
 
@@ -836,6 +842,17 @@ function WhitelistTab() {
           )}
         </div>
       </Card>
+      <ConfirmDialog
+        isOpen={!!pendingRemove}
+        title="Remove from whitelist?"
+        message={`Remove ${pendingRemove?.email} from the whitelist?`}
+        confirmLabel="Remove"
+        danger
+        pending={removeMutation.isPending}
+        error={removeMutation.error?.message}
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   );
 }
@@ -914,10 +931,13 @@ function BansTab() {
   const { data: bans = [], isLoading } = useBans();
   const liftMutation                   = useLiftBan();
 
-  const handleLift = (id, email) => {
-    if (!confirm(`Lift ban for ${email}? They will immediately be able to book again.`)) return;
-    liftMutation.mutate(id, {
-      onError: (err) => alert(err.message),
+  // In-app confirm modal — deliberately not window.confirm()/alert() (see
+  // WhitelistTab's handleRemove above for why).
+  const [pendingLift, setPendingLift] = useState(null); // { id, email }
+  const handleLift = (id, email) => setPendingLift({ id, email });
+  const confirmLift = () => {
+    liftMutation.mutate(pendingLift.id, {
+      onSuccess: () => setPendingLift(null),
     });
   };
 
@@ -980,6 +1000,17 @@ function BansTab() {
           )}
         </div>
       </Card>
+      <ConfirmDialog
+        isOpen={!!pendingLift}
+        title="Lift this ban?"
+        message={`Lift ban for ${pendingLift?.email}? They will immediately be able to book again.`}
+        confirmLabel="Lift Ban"
+        danger
+        pending={liftMutation.isPending}
+        error={liftMutation.error?.message}
+        onConfirm={confirmLift}
+        onCancel={() => setPendingLift(null)}
+      />
     </div>
   );
 }

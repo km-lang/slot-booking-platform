@@ -19,6 +19,7 @@ import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import CollapsibleSection from "../components/CollapsibleSection";
 import Sheet from "../components/ui/Sheet";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
 import IconButton from "../components/ui/IconButton";
 import { VENUE_OPTIONS, isOnlineVenue as checkIsOnlineVenue } from "../lib/venues";
 import psLogo from "../assets/PSLogo.png";
@@ -831,11 +832,11 @@ function HistorySessionRow({ session }) {
 // one strike per booking).
 function CancelledSessionRow({ session }) {
   const applyStrike = useApplyStrike();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const handleStrike = () => {
-    if (!confirm(`Apply a strike to ${session.student.name} for this cancelled session? This may also trigger a booking ban depending on their strike history.`)) return;
+  const confirmStrike = () => {
     applyStrike.mutate(session.bookingId, {
-      onError: (err) => alert(err.message),
+      onSuccess: () => setConfirmOpen(false),
     });
   };
 
@@ -858,13 +859,24 @@ function CancelledSessionRow({ session }) {
         </span>
       ) : (
         <button
-          onClick={handleStrike}
+          onClick={() => setConfirmOpen(true)}
           disabled={applyStrike.isPending}
           className="shrink-0 flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
         >
           <ShieldAlert size={13} /> {applyStrike.isPending ? "…" : "Mark Strike"}
         </button>
       )}
+      <ConfirmDialog
+        isOpen={confirmOpen}
+        title="Apply a strike?"
+        message={`Apply a strike to ${session.student.name} for this cancelled session? This may also trigger a booking ban depending on their strike history.`}
+        confirmLabel="Apply Strike"
+        danger
+        pending={applyStrike.isPending}
+        error={applyStrike.error?.message}
+        onConfirm={confirmStrike}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }
@@ -948,6 +960,15 @@ export default function MentorDashboard() {
   const [pendingBookingId, setPendingBookingId] = useState(null);
   const [pendingUnassignId, setPendingUnassignId] = useState(null);
 
+  // In-app confirm modal + error toast — deliberately not window.confirm()/alert().
+  // Several mobile in-app browsers (WhatsApp, Instagram, LinkedIn webviews) silently
+  // suppress native JS dialogs, so a mentor opening this dashboard from a shared
+  // link inside one of those would tap Unassign/Delete and see nothing happen at
+  // all, with no error and no visible failure. { title, message, confirmLabel,
+  // danger, pending, error, onConfirm } — populated per action, cleared on close.
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [actionError, setActionError] = useState(null);
+
   // Bulk slot selection (Open Slots list)
   const [selectedSlotIds, setSelectedSlotIds] = useState([]);
   const [bulkLinkValue, setBulkLinkValue] = useState("");
@@ -980,27 +1001,41 @@ export default function MentorDashboard() {
       { bookingId, status },
       {
         onSuccess: () => setPendingBookingId(null),
-        onError:   (err) => { setPendingBookingId(null); alert(err.message); },
+        onError:   (err) => { setPendingBookingId(null); setActionError(err.message); },
       },
     );
   };
 
   const handleUnassign = (bookingId, studentName) => {
-    if (!confirm(`Unassign ${studentName} from this slot? They'll be notified by email and the slot reopens for anyone to book. No penalty applies.`)) return;
-    setPendingUnassignId(bookingId);
-    unassignMutation.mutate(bookingId, {
-      onSuccess: () => setPendingUnassignId(null),
-      onError:   (err) => { setPendingUnassignId(null); alert(err.message); },
+    setConfirmDialog({
+      title: "Unassign student?",
+      message: `Unassign ${studentName} from this slot? They'll be notified by email and the slot reopens for anyone to book. No penalty applies.`,
+      confirmLabel: "Unassign",
+      danger: true,
+      onConfirm: () => {
+        setPendingUnassignId(bookingId);
+        unassignMutation.mutate(bookingId, {
+          onSuccess: () => { setPendingUnassignId(null); setConfirmDialog(null); },
+          onError:   (err) => { setPendingUnassignId(null); setConfirmDialog(null); setActionError(err.message); },
+        });
+      },
     });
   };
 
   const handleDeleteSlot = (slotId, studentName) => {
-    const message = studentName
-      ? `Delete this slot? ${studentName}'s booking will be cancelled and they'll be notified by email. This can't be undone.`
-      : "Delete this slot? This can't be undone.";
-    if (!confirm(message)) return;
-    deleteSlotMutation.mutate(slotId, {
-      onError: (err) => alert(err.message),
+    setConfirmDialog({
+      title: "Delete this slot?",
+      message: studentName
+        ? `Delete this slot? ${studentName}'s booking will be cancelled and they'll be notified by email. This can't be undone.`
+        : "Delete this slot? This can't be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: () => {
+        deleteSlotMutation.mutate(slotId, {
+          onSuccess: () => setConfirmDialog(null),
+          onError:   (err) => { setConfirmDialog(null); setActionError(err.message); },
+        });
+      },
     });
   };
 
@@ -1020,13 +1055,23 @@ export default function MentorDashboard() {
 
   const handleBulkDelete = () => {
     if (selectedSlotIds.length === 0) return;
-    if (!confirm(`Delete ${selectedSlotIds.length} selected slot${selectedSlotIds.length !== 1 ? "s" : ""}? Slots with existing bookings will be skipped.`)) return;
-    bulkDeleteMutation.mutate(selectedSlotIds, {
-      onSuccess: (res) => {
-        clearSelection();
-        if (res.skipped?.length > 0) alert(`${res.deleted} slot(s) deleted. ${res.skipped.length} skipped (already booked).`);
+    setConfirmDialog({
+      title: "Delete selected slots?",
+      message: `Delete ${selectedSlotIds.length} selected slot${selectedSlotIds.length !== 1 ? "s" : ""}? Slots with existing bookings will be skipped.`,
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: () => {
+        bulkDeleteMutation.mutate(selectedSlotIds, {
+          onSuccess: (res) => {
+            setConfirmDialog(null);
+            clearSelection();
+            if (res.skipped?.length > 0) {
+              setActionError(`${res.deleted} slot(s) deleted. ${res.skipped.length} skipped (already booked).`);
+            }
+          },
+          onError: (err) => { setConfirmDialog(null); setActionError(err.message); },
+        });
       },
-      onError: (err) => alert(err.message),
     });
   };
 
@@ -1034,7 +1079,7 @@ export default function MentorDashboard() {
     if (selectedSlotIds.length === 0) return;
     bulkLinkMutation.mutate(
       { slotIds: selectedSlotIds, meetingLink: bulkLinkValue.trim() },
-      { onSuccess: clearSelection, onError: (err) => alert(err.message) },
+      { onSuccess: clearSelection, onError: (err) => setActionError(err.message) },
     );
   };
 
@@ -1042,7 +1087,7 @@ export default function MentorDashboard() {
     if (selectedSlotIds.length === 0) return;
     bulkPublishMutation.mutate(selectedSlotIds, {
       onSuccess: clearSelection,
-      onError: (err) => alert(err.message),
+      onError: (err) => setActionError(err.message),
     });
   };
 
@@ -1391,6 +1436,26 @@ export default function MentorDashboard() {
           <AllocateSheet slot={allocateSlotTarget} isOpen={!!allocateSlotTarget} onClose={() => setAllocateSlotTarget(null)} />
           <ReassignSheet booking={reassignTarget} isOpen={!!reassignTarget} onClose={() => setReassignTarget(null)} />
           <SwapSheet booking={swapTarget} candidates={swapCandidates} isOpen={!!swapTarget} onClose={() => setSwapTarget(null)} />
+          <ConfirmDialog
+            isOpen={!!confirmDialog}
+            title={confirmDialog?.title}
+            message={confirmDialog?.message}
+            confirmLabel={confirmDialog?.confirmLabel}
+            danger={confirmDialog?.danger}
+            pending={unassignMutation.isPending || deleteSlotMutation.isPending || bulkDeleteMutation.isPending}
+            onConfirm={() => confirmDialog?.onConfirm()}
+            onCancel={() => setConfirmDialog(null)}
+          />
+          {actionError && (
+            <div className="fixed bottom-4 left-4 right-4 z-[110] max-w-md md:max-w-2xl lg:max-w-4xl mx-auto">
+              <div className="bg-red-600 text-white text-sm font-bold rounded-xl shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
+                <span>{actionError}</span>
+                <button onClick={() => setActionError(null)} className="shrink-0 text-white/80 hover:text-white" title="Dismiss">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
           <AppFooter />
         </main>
       </div>
