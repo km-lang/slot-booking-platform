@@ -556,10 +556,23 @@ const unassignBooking = async (req, res, next) => {
       return res.status(400).json({ error: "Cannot unassign once the session has started" });
     }
 
-    const [, updatedSlot] = await prisma.$transaction([
+    const [, , updatedSlot] = await prisma.$transaction([
       prisma.booking.update({
         where: { id: booking.id },
         data: { status: "CANCELLED", cancelledBy: "MENTOR", cancelledAt: new Date() },
+      }),
+      // The claim path (claimSlotAndCreateBooking) increments this atomically —
+      // unassign has to give the seat back the same way, or the slot looks
+      // permanently full to students even though the mentor's own view (which
+      // reads Booking status directly, not this counter) shows it as open again.
+      // Clearing solverClaimed too when the departing seat was CASE's Solver,
+      // so a new student can claim it.
+      prisma.slotCapacity.update({
+        where: { slotId: booking.slot.id },
+        data: {
+          current: { decrement: 1 },
+          ...(booking.role === "SOLVER" && { solverClaimed: false }),
+        },
       }),
       prisma.slot.update({
         where: { id: booking.slot.id },
