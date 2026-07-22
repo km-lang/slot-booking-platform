@@ -56,6 +56,10 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-07-22 | `7807421` | fix | replace window.confirm()/alert() with an in-app ConfirmDialog in Mentor + Placement Admin dashboards — native dialogs are silently suppressed by some in-app browsers, making Unassign/Delete Slot appear to do nothing |
+| 2026-07-22 | `5f20a0c` | feat | dual-mode time input in Create Slots — type digits or pick via the native time picker |
+| 2026-07-22 | `8973d2f` | docs | add structure.readme.md architecture reference |
+| 2026-07-22 | `3b24509` | feat | cc mentor on every mentor-action email sent to a student (reassign, unassign, no-show/strike) |
 | 2026-07-22 | `74a9ba0` | fix | unassignBooking never released the slot's SlotCapacity seat, leaving it permanently unbookable |
 | 2026-07-22 | `fbcf7da` | docs | add CHANGE_MANAGEMENT.md changelog, require a log entry on every release |
 | 2026-07-22 | `58f92db` | chore | prune superseded DB backup dumps, keep only the 2 most recent |
