@@ -176,6 +176,16 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4000/parthsaarthi/api/
 pm2 logs <process-name> --lines 15 --nostream
 ```
 
+### 9. Log the release in CHANGE_MANAGEMENT.md
+
+**Every release gets an entry — this is not optional.** Before considering the
+deploy done, add one row per commit shipped in this release to
+[`CHANGE_MANAGEMENT.md`](CHANGE_MANAGEMENT.md), under the current month's table
+(create a new month section if needed). Pull the exact hash/date/subject from
+`git log` rather than paraphrasing from memory, and note in the summary if a
+migration was included. Commit and push that update too — a release isn't
+logged until this file reflects it.
+
 ---
 
 ## Summary Checklist
@@ -189,4 +199,5 @@ pm2 logs <process-name> --lines 15 --nostream
 - [ ] Confirmed which PM2 process actually owns the port before restarting
 - [ ] Restarted the correct PM2 process(es)
 - [ ] Verified port ownership, served build, and API reachability post-restart
+- [ ] Release logged in `CHANGE_MANAGEMENT.md` (one row per commit shipped) and pushed
 - [ ] **No `prisma migrate`, no `prisma db seed`, no SQL writes, no Prisma Studio edits — at any point**
