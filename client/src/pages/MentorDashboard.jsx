@@ -27,7 +27,10 @@ const FOCUS_LABELS = {
   overall: "Overall CV Review",
   workex:  "Work Experience",
   por:     "POR / ECA",
+  cv_hr:   "CV-HR",
 };
+
+const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study" };
 
 const DELAY_PRESETS = [5, 10, 15, 20, 30];
 
@@ -60,7 +63,12 @@ function RunningLateSheet({ session, isOpen, onClose }) {
     <Sheet isOpen={isOpen} onClose={onClose} maxWidthClassName="max-w-md md:max-w-2xl lg:max-w-4xl">
         <h3 className="text-lg font-black text-emerald-950 mb-0.5">Running Late?</h3>
         <p className="text-xs font-semibold text-emerald-700/60 mb-1">
-          Session with <span className="text-emerald-800 font-bold">{session.student.name}</span>
+          Session with{" "}
+          <span className="text-emerald-800 font-bold">
+            {session.participants?.length === 1
+              ? session.participants[0].name
+              : `${session.participants?.length ?? 0} participants`}
+          </span>
         </p>
         <p className="text-[11px] font-semibold text-emerald-700/50 mb-5">{session.date} · {session.time}</p>
 
@@ -126,7 +134,9 @@ function AllocateSheet({ slot, isOpen, onClose }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null); // { pgpId, name, email, cohortLabel }
   const [focus, setFocus] = useState("overall");
+  const [role, setRole] = useState("SHADOW"); // CASE only
   const allocate = useAllocateSlot();
+  const slotType = slot?.slotType ?? "CV";
 
   // Only search while the mentor is still typing — once a student is picked, the
   // dropdown closes and re-editing the text clears the selection.
@@ -145,7 +155,7 @@ function AllocateSheet({ slot, isOpen, onClose }) {
   const handleSubmit = () => {
     if (!selected || !slot) return;
     allocate.mutate(
-      { slotId: slot.id, pgpId: selected.pgpId, focus },
+      { slotId: slot.id, pgpId: selected.pgpId, focus: slotType === "CV" ? focus : undefined, role: slotType === "CASE" ? role : undefined },
       { onSuccess: onClose },
     );
   };
@@ -196,17 +206,32 @@ function AllocateSheet({ slot, isOpen, onClose }) {
               </div>
             )}
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Focus</label>
-            <div className="grid grid-cols-3 gap-2">
-              {Object.entries(FOCUS_LABELS).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setFocus(key)}
-                  className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${focus === key ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
-                  {label}
-                </button>
-              ))}
+          {slotType === "CV" && (
+            <div>
+              <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Focus</label>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(FOCUS_LABELS).map(([key, label]) => (
+                  <button key={key} type="button" onClick={() => setFocus(key)}
+                    className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${focus === key ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+          {slotType === "CASE" && (
+            <div>
+              <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Role</label>
+              <div className="grid grid-cols-2 gap-2">
+                {["SOLVER", "SHADOW"].map((r) => (
+                  <button key={r} type="button" onClick={() => setRole(r)}
+                    className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${role === r ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                    {r === "SOLVER" ? "Solver" : "Shadow"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {allocate.error && (
@@ -549,17 +574,84 @@ function VenueEditor({ slotId, currentVenue, currentLink }) {
 }
 
 // ── Session Card ──────────────────────────────────────────────────────────────
+const ROLE_BADGE = {
+  SOLVER: "bg-purple-100 text-purple-800",
+  SHADOW: "bg-slate-200 text-slate-600",
+};
+
+// One participant's own action row — attendance/unassign/reassign/swap/email all
+// operate on this specific bookingId, not the slot as a whole. Reassign/Swap take
+// a plain { bookingId, student: {name, pgp}, date, time, endTime } shape, which is
+// exactly what ReassignSheet/SwapSheet already expect (they were written against
+// a single booking, not a slot, so no changes were needed there for GD/CASE).
+function ParticipantActions({ participant, session, onAttendance, pendingBookingId, onReassign, onSwap, onUnassign, pendingUnassignId, hasStarted, isOverdue }) {
+  const isPending = pendingBookingId === participant.bookingId;
+  const isUnassignPending = pendingUnassignId === participant.bookingId;
+  const asBooking = { bookingId: participant.bookingId, student: { name: participant.name, pgp: participant.pgp }, date: session.date, time: session.time, endTime: session.endTime };
+
+  return (
+    <>
+      <IconButton
+        icon={CheckCircle}
+        label={isPending ? "Saving…" : "Mark Attended"}
+        onClick={() => onAttendance(participant.bookingId, "ATTENDED")}
+        disabled={isPending || !hasStarted}
+        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200/60"
+      />
+      <IconButton
+        icon={XCircle}
+        label={isPending ? "Saving…" : "Mark No-Show"}
+        onClick={() => onAttendance(participant.bookingId, "NO_SHOW")}
+        disabled={isPending || !hasStarted}
+        className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
+      />
+      {!hasStarted && (
+        <IconButton
+          icon={UserMinus}
+          label={isUnassignPending ? "Unassigning…" : "Unassign Student"}
+          onClick={() => onUnassign(participant.bookingId, participant.name)}
+          disabled={isUnassignPending}
+          className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200/60"
+        />
+      )}
+      <IconButton
+        icon={UserCog}
+        label={isOverdue ? "Reassign — unavailable, session ended" : "Reassign to Different Student"}
+        onClick={() => onReassign(asBooking)}
+        disabled={isOverdue}
+        className="bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200/60"
+      />
+      <IconButton
+        icon={ArrowLeftRight}
+        label={isOverdue ? "Swap — unavailable, session ended" : "Swap With Another Student"}
+        onClick={() => onSwap(asBooking)}
+        disabled={isOverdue}
+        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/60"
+      />
+      {participant.email && (
+        <IconButton
+          icon={Mail}
+          label="Email Student"
+          href={`mailto:${participant.email}`}
+          className="bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200/60"
+        />
+      )}
+    </>
+  );
+}
+
 function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSwap, onDelete, onUnassign, pendingUnassignId }) {
   const navigate = useNavigate();
   const [lateSheetOpen, setLateSheetOpen] = useState(false);
-  const isPending = pendingBookingId === session.bookingId;
-  const isUnassignPending = pendingUnassignId === session.bookingId;
   // Server rejects attendance marking before the session starts — mirrored here so
   // mentors see a disabled state instead of tapping the button and hitting an alert().
   const hasStarted = new Date(session.startTime) <= new Date();
   // Session time has fully passed with no attendance marked yet — distinguishes a
   // genuinely-in-progress session from backlog that needs the mentor's attention.
   const isOverdue = new Date(session.endTime) < new Date();
+  const participants = session.participants ?? [];
+  const isGroup = session.slotType === "GD" || session.slotType === "CASE";
+  const participantProps = { session, onAttendance, pendingBookingId, onReassign, onSwap, onUnassign, pendingUnassignId, hasStarted, isOverdue };
 
   return (
     <div className="relative">
@@ -581,96 +673,122 @@ function SessionCard({ session, onAttendance, pendingBookingId, onReassign, onSw
           )}
         </div>
 
-        {/* Student info */}
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <h3 className="font-bold text-[15px] text-emerald-950">{session.student.name}</h3>
-            <p className="text-[11px] font-bold text-emerald-700/60 mt-0.5">
-              {session.student.pgp}
-              <span className="text-emerald-900/20 mx-1">|</span>
-              {FOCUS_LABELS[session.student.purpose] ?? session.student.purpose}
-            </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2 py-1 rounded">
-              {session.time}
-            </span>
-            <span className="text-[10px] font-semibold text-emerald-700/50">{session.venue}</span>
-          </div>
-        </div>
+        {isGroup ? (
+          <>
+            {/* Slot header — type + time/venue, shown once for the whole roster */}
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-bold text-[15px] text-emerald-950 flex items-center gap-2">
+                  {session.slotType === "GD" ? "Group Discussion" : "Case Study"}
+                  <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black uppercase px-1.5 py-0.5 rounded">
+                    {participants.length}/{session.capacity ?? participants.length} joined
+                  </span>
+                </h3>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2 py-1 rounded">
+                  {session.time}
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-700/50">{session.venue}</span>
+              </div>
+            </div>
 
-        {session.venue?.toLowerCase().includes("online") && (
-          <MeetingLinkRow slotId={session.id} currentLink={session.meetingLink} />
+            {session.venue?.toLowerCase().includes("online") && (
+              <MeetingLinkRow slotId={session.id} currentLink={session.meetingLink} />
+            )}
+
+            {/* One row per participant — each with its own attendance/reassign/swap/unassign */}
+            <div className="space-y-2 my-3">
+              {participants.map((p) => (
+                <div key={p.bookingId} className="bg-[var(--color-bg)] border border-emerald-900/10 rounded-xl p-3">
+                  <div className="mb-2">
+                    <span className="font-bold text-sm text-emerald-950">{p.name}</span>
+                    <span className="text-[11px] font-bold text-emerald-700/60 ml-2">{p.pgp}</span>
+                    {p.role && (
+                      <span className={`ml-2 text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${ROLE_BADGE[p.role] ?? ""}`}>
+                        {p.role === "SOLVER" ? "Solver" : "Shadow"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <ParticipantActions participant={p} {...participantProps} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Slot-level actions — apply to the whole GD/CASE slot, not one participant */}
+            <div className="flex flex-wrap gap-2">
+              <IconButton
+                icon={Clock}
+                label="Running Late"
+                onClick={() => setLateSheetOpen(true)}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200/60"
+              />
+              <IconButton
+                icon={Calendar}
+                label="Reschedule"
+                onClick={() => navigate(`/mentor/slots/${session.id}/reschedule`, { state: { session } })}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/60"
+              />
+              <IconButton
+                icon={Trash2}
+                label="Delete Slot"
+                onClick={() => onDelete(session.id, null)}
+                className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* CV / CV-HR — unchanged single-student layout */}
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-bold text-[15px] text-emerald-950">{participants[0]?.name}</h3>
+                <p className="text-[11px] font-bold text-emerald-700/60 mt-0.5">
+                  {participants[0]?.pgp}
+                  <span className="text-emerald-900/20 mx-1">|</span>
+                  {FOCUS_LABELS[participants[0]?.purpose] ?? participants[0]?.purpose}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase px-2 py-1 rounded">
+                  {session.time}
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-700/50">{session.venue}</span>
+              </div>
+            </div>
+
+            {session.venue?.toLowerCase().includes("online") && (
+              <MeetingLinkRow slotId={session.id} currentLink={session.meetingLink} />
+            )}
+
+            {/* Actions — icon-only so they never overlap on narrow screens; each
+                button's name shows via native title (desktop hover) or a long-press
+                (touch — see IconButton) instead of inline text. */}
+            <div className="flex flex-wrap gap-2">
+              {participants[0] && <ParticipantActions participant={participants[0]} {...participantProps} />}
+              <IconButton
+                icon={Clock}
+                label="Running Late"
+                onClick={() => setLateSheetOpen(true)}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200/60"
+              />
+              <IconButton
+                icon={Calendar}
+                label="Reschedule"
+                onClick={() => navigate(`/mentor/slots/${session.id}/reschedule`, { state: { session } })}
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/60"
+              />
+              <IconButton
+                icon={Trash2}
+                label="Delete Slot"
+                onClick={() => onDelete(session.id, participants[0]?.name)}
+                className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
+              />
+            </div>
+          </>
         )}
-
-        {/* Actions — icon-only so they never overlap on narrow screens; each
-            button's name shows via native title (desktop hover) or a long-press
-            (touch — see IconButton) instead of inline text. */}
-        <div className="flex flex-wrap gap-2">
-          <IconButton
-            icon={CheckCircle}
-            label={isPending ? "Saving…" : "Mark Attended"}
-            onClick={() => onAttendance(session.bookingId, "ATTENDED")}
-            disabled={isPending || !hasStarted}
-            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200/60"
-          />
-          <IconButton
-            icon={XCircle}
-            label={isPending ? "Saving…" : "Mark No-Show"}
-            onClick={() => onAttendance(session.bookingId, "NO_SHOW")}
-            disabled={isPending || !hasStarted}
-            className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
-          />
-          {!hasStarted && (
-            <IconButton
-              icon={UserMinus}
-              label={isUnassignPending ? "Unassigning…" : "Unassign Student"}
-              onClick={() => onUnassign(session.bookingId, session.student.name)}
-              disabled={isUnassignPending}
-              className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200/60"
-            />
-          )}
-          <IconButton
-            icon={Clock}
-            label="Running Late"
-            onClick={() => setLateSheetOpen(true)}
-            className="bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200/60"
-          />
-          <IconButton
-            icon={Calendar}
-            label="Reschedule"
-            onClick={() => navigate(`/mentor/slots/${session.id}/reschedule`, { state: { session } })}
-            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/60"
-          />
-          <IconButton
-            icon={UserCog}
-            label={isOverdue ? "Reassign — unavailable, session ended" : "Reassign to Different Student"}
-            onClick={() => onReassign(session)}
-            disabled={isOverdue}
-            className="bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200/60"
-          />
-          <IconButton
-            icon={ArrowLeftRight}
-            label={isOverdue ? "Swap — unavailable, session ended" : "Swap With Another Student"}
-            onClick={() => onSwap(session)}
-            disabled={isOverdue}
-            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200/60"
-          />
-          {session.student.email && (
-            <IconButton
-              icon={Mail}
-              label="Email Student"
-              href={`mailto:${session.student.email}`}
-              className="bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200/60"
-            />
-          )}
-          <IconButton
-            icon={Trash2}
-            label="Delete Slot"
-            onClick={() => onDelete(session.id, session.student.name)}
-            className="bg-red-50 hover:bg-red-100 text-red-600 border-red-200/60"
-          />
-        </div>
       </div>
 
       <RunningLateSheet session={session} isOpen={lateSheetOpen} onClose={() => setLateSheetOpen(false)} />
@@ -838,11 +956,22 @@ export default function MentorDashboard() {
   // Allocate-by-PGP-ID sheet (per open slot)
   const [allocateSlotTarget, setAllocateSlotTarget] = useState(null);
 
-  // Reassign / Swap sheets (per booked session)
+  // Reassign / Swap sheets (per participant booking — both sheets already operate
+  // on a single { bookingId, student, date, time, endTime } shape, not a slot, so
+  // GD/CASE slots with multiple participants just contribute one candidate per seat)
   const [reassignTarget, setReassignTarget] = useState(null);
   const [swapTarget, setSwapTarget] = useState(null);
-  const swapCandidates = [...ongoingSessions, ...bookedSessions].filter(
-    (s) => s.bookingId !== swapTarget?.bookingId && new Date(s.endTime) > new Date(),
+  const allBookedParticipants = [...ongoingSessions, ...bookedSessions].flatMap((s) =>
+    (s.participants ?? []).map((p) => ({
+      bookingId: p.bookingId,
+      student: { name: p.name, pgp: p.pgp },
+      date: s.date,
+      time: s.time,
+      endTime: s.endTime,
+    })),
+  );
+  const swapCandidates = allBookedParticipants.filter(
+    (c) => c.bookingId !== swapTarget?.bookingId && new Date(c.endTime) > new Date(),
   );
 
   const handleAttendance = (bookingId, status) => {
@@ -998,7 +1127,7 @@ export default function MentorDashboard() {
               ) : (
                 ongoingSessions.map((session) => (
                   <SessionCard
-                    key={session.bookingId}
+                    key={session.id}
                     session={session}
                     onAttendance={handleAttendance}
                     pendingBookingId={pendingBookingId}
@@ -1029,7 +1158,7 @@ export default function MentorDashboard() {
               ) : (
                 bookedSessions.map((session) => (
                   <SessionCard
-                    key={session.bookingId}
+                    key={session.id}
                     session={session}
                     onAttendance={handleAttendance}
                     pendingBookingId={pendingBookingId}
@@ -1181,6 +1310,9 @@ export default function MentorDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
+                        {SLOT_TYPE_LABELS[slot.slotType] && (
+                          <span className="bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded">{SLOT_TYPE_LABELS[slot.slotType]}</span>
+                        )}
                         {slot.cohortOnly && (
                           <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>
                         )}

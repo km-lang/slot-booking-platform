@@ -57,6 +57,14 @@ export default function RescheduleSlot() {
   if (!session) return null;
 
   const venueIsOnline = isOnlineVenue(venue);
+  // GD/CASE sessions carry a participants[] roster instead of a single student —
+  // name this session by its one participant if there's just one (CV/CV-HR,
+  // always true there), otherwise by the group size.
+  const sessionSubject = session.participants?.length === 1
+    ? session.participants[0].name
+    : session.participants
+    ? `${session.participants.length} participants`
+    : session.student?.name;
 
   const handleSubmit = () => {
     if (!isRangeValid) return;
@@ -80,7 +88,7 @@ export default function RescheduleSlot() {
       header={
         <PageHeader
           title="Reschedule Session"
-          subtitle={<>with <span className="font-bold text-emerald-800">{session.student.name}</span></>}
+          subtitle={<>with <span className="font-bold text-emerald-800">{sessionSubject}</span></>}
           subtitleCase="normal"
           onBack={() => navigate("/mentor")}
         />
@@ -177,7 +185,7 @@ export default function RescheduleSlot() {
             Cancel
           </Button>
           <p className="text-[10px] font-semibold text-emerald-700/40 text-center mt-3">
-            No penalty applies. {session.student.name} will get an updated calendar invite.
+            No penalty applies. {sessionSubject} will get{session.participants?.length > 1 ? "" : "s"} an updated calendar invite.
           </p>
         </main>
     </AppShell>

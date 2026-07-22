@@ -33,6 +33,18 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// This app uses HashRouter, so in-app navigation (including the browser's own
+// back/forward buttons) never triggers a real page load — the same JS keeps
+// running for as long as the tab stays open. The one case that *can* still
+// serve genuinely stale code is the browser restoring a full page from
+// bfcache (e.g. after the OS suspends the tab, or navigating away and back
+// past the app entirely) — that resumes the exact in-memory JS from before,
+// silently skipping any deploy that happened since. Forcing a reload in that
+// one case is the standard mitigation.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) window.location.reload();
+});
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>

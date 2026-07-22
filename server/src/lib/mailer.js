@@ -1,6 +1,7 @@
 "use strict";
 
 const nodemailer = require("nodemailer");
+const crypto = require("crypto");
 
 // ── Transport ──────────────────────────────────────────────────────────────────
 // When SMTP_HOST is set, use real SMTP (production).
@@ -25,10 +26,18 @@ const getTransport = () => {
 };
 
 const FROM = process.env.SMTP_FROM ?? "Parthsaarthi <noreply@iiml.ac.in>";
+// Message-ID domain must match the sending domain — nodemailer otherwise defaults
+// to this machine's hostname, and a From/Message-ID domain mismatch is a classic
+// spam-filter signal. Reply-To is likewise set explicitly rather than left to
+// default the same way From does, since some filters treat an absent Reply-To on
+// bulk-shaped mail as a mild negative signal too.
+const SEND_DOMAIN = FROM.match(/@([\w.-]+)>?$/)?.[1] ?? "gmail.com";
 
 // DEV_EMAIL_OVERRIDE: when set, ALL emails are redirected to this address.
 // Useful for local testing so real SMTP traffic goes only to the developer.
 const DEV_TO = process.env.DEV_EMAIL_OVERRIDE ?? null;
+
+const NO_REPLY_NOTE = "This is an automated message — please do not reply to this email.";
 
 // icalEvent: { method: "REQUEST" | "CANCEL", content: <ics string> } — passed straight
 // through to nodemailer, which renders it as a real calendar invite with native
@@ -36,18 +45,29 @@ const DEV_TO = process.env.DEV_EMAIL_OVERRIDE ?? null;
 const send = async ({ to, cc, subject, html, text, icalEvent }) => {
   const effectiveTo = DEV_TO ?? to;
   const effectiveCc = DEV_TO ? undefined : cc;
+  const finalText = text ? `${text}\n\n${NO_REPLY_NOTE}` : text;
   const t = getTransport();
   if (!t) {
     // No SMTP configured — log to console
     console.log(`\n[EMAIL] To: ${effectiveTo}${DEV_TO && DEV_TO !== to ? ` (override; original: ${to})` : ""}`);
     if (effectiveCc) console.log(`[EMAIL] Cc: ${effectiveCc}`);
     console.log(`[EMAIL] Subject: ${subject}`);
-    console.log(`[EMAIL] Body: ${text ?? html}`);
+    console.log(`[EMAIL] Body: ${finalText ?? html}`);
     console.log(icalEvent ? `[EMAIL] Calendar invite (${icalEvent.method}) attached\n` : "");
     return;
   }
   try {
-    await t.sendMail({ from: FROM, to: effectiveTo, ...(effectiveCc && { cc: effectiveCc }), subject, html, text, ...(icalEvent && { icalEvent }) });
+    await t.sendMail({
+      from: FROM,
+      replyTo: FROM,
+      messageId: `<${crypto.randomUUID()}@${SEND_DOMAIN}>`,
+      to: effectiveTo,
+      ...(effectiveCc && { cc: effectiveCc }),
+      subject,
+      html,
+      text: finalText,
+      ...(icalEvent && { icalEvent }),
+    });
   } catch (err) {
     // A wedged connection (e.g. after a transient SMTP error) can leave this
     // cached transport permanently broken — drop it so the next send rebuilds
@@ -67,6 +87,7 @@ const wrap = (body) => `
   </div>
   <div style="background:#F8FAF7;padding:24px;border:1px solid #D1FAE5;border-top:none;border-radius:0 0 12px 12px">
     ${body}
+    <p style="font-size:11px;color:#064E3B66;margin:24px 0 0;border-top:1px solid #D1FAE5;padding-top:12px">${NO_REPLY_NOTE}</p>
   </div>
 </div>`;
 
@@ -82,7 +103,7 @@ const secondaryBtn = (href, label) =>
  * Sent to a student immediately after a successful booking.
  */
 const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, date, time, venue, focus, meetingLink, icsContent, calendarLink }) => {
-  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
+  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA", cv_hr: "CV-HR" }[focus] ?? focus;
   return send({
     to:      studentEmail,
     subject: `Booking confirmed: ${focusLabel} with ${mentorName} on ${date}`,
@@ -111,7 +132,7 @@ const sendBookingConfirmation = ({ studentEmail, studentName, mentorName, firm, 
  * Sent to a mentor immediately after a student books one of their slots.
  */
 const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName, pgpId, date, time, venue, focus, meetingLink, icsContent, calendarLink }) => {
-  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
+  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA", cv_hr: "CV-HR" }[focus] ?? focus;
   return send({
     to:      mentorEmail,
     subject: `New booking: ${studentName} on ${date} at ${time}`,
@@ -139,9 +160,11 @@ const sendBookingConfirmationToMentor = ({ mentorEmail, mentorName, studentName,
  */
 const sendBookingConfirmationCombined = ({
   studentEmail, studentName, mentorEmail, mentorName,
-  pgpId, firm, date, time, venue, focus, meetingLink, icsContent, calendarLink,
+  pgpId, firm, date, time, venue, focus, sessionLabel, meetingLink, icsContent, calendarLink,
 }) => {
-  const focusLabel = { overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA" }[focus] ?? focus;
+  // sessionLabel overrides the focus-derived label for GD/CASE bookings, which
+  // have no focus value (e.g. "Group Discussion", "Case Study (Solver)").
+  const focusLabel = sessionLabel ?? ({ overall: "Overall CV Review", workex: "Work Experience", por: "POR / ECA", cv_hr: "CV-HR" }[focus] ?? focus);
   const toList     = [studentEmail, mentorEmail].filter(Boolean).join(", ");
   return send({
     to:      toList,
@@ -325,6 +348,32 @@ const sendStrikeAppliedToStudent = ({ studentEmail, studentName, mentorName, dat
   });
 };
 
+/**
+ * Sent to a student when their mentor marks them as a no-show for a confirmed
+ * session — distinct copy from sendStrikeAppliedToStudent since no cancellation
+ * happened here, the student simply didn't attend.
+ */
+const sendNoShowStrikeToStudent = ({ studentEmail, studentName, mentorName, date, time, banApplied, banDurationHours }) => {
+  const banNote = banApplied
+    ? banDurationHours
+      ? ` This also triggered a booking ban for approximately ${banDurationHours} hour${banDurationHours === 1 ? "" : "s"}.`
+      : " This also triggered a booking ban."
+    : "";
+
+  return send({
+    to:      studentEmail,
+    subject: `A strike was applied to your account`,
+    text:    `Hi ${studentName}, ${mentorName} marked you as a no-show for the ${date} at ${time} session and applied a strike to your record.${banNote}`,
+    html:    wrap(`
+      <h2 style="margin:0 0 8px;font-size:20px">Strike Applied</h2>
+      <p style="color:#064E3B99;font-size:13px;margin:0 0 20px">Marked as no-show for your session with ${mentorName}</p>
+      <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+        <b style="color:#991B1B">${mentorName}</b> marked you as a no-show for the session on ${date} at ${time} and applied a strike.${banNote ? `<br><span style="font-size:13px;color:#991B1B">${banNote.trim()}</span>` : ""}
+      </div>
+      <p style="font-size:13px;color:#064E3B99;margin:0">Reach out to your mentor directly if you'd like to discuss this.</p>
+    `),
+  });
+};
 
 /**
  * Sent to an AIG admin at 8 AM daily if at-risk students exist.
@@ -371,5 +420,6 @@ module.exports = {
   sendWaitlistSlotAvailable,
   sendDelayNotification,
   sendStrikeAppliedToStudent,
+  sendNoShowStrikeToStudent,
   sendAigDigest,
 };

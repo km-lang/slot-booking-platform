@@ -15,6 +15,7 @@ const FOCUS_LABELS = {
   overall: "Overall CV Review",
   workex:  "Work Experience",
   por:     "POR / ECA",
+  cv_hr:   "CV-HR",
 };
 
 // wa.me needs digits only (no "+", spaces, or dashes).

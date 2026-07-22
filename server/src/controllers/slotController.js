@@ -159,7 +159,7 @@ const listSlots = async (req, res, next) => {
       include: {
         capacity: true,
         bookings: { where: { status: "CONFIRMED" } },
-        release: { select: { cohortOnly: true } },
+        release: { select: { cohortOnly: true, slotType: true } },
         waitlist: { where: { studentUserId: req.user.sub }, select: { id: true } },
       },
       orderBy: { startTime: "asc" },
@@ -173,9 +173,16 @@ const listSlots = async (req, res, next) => {
         .map((slot) => {
           const myBooking = slot.bookings.find((b) => b.studentUserId === req.user.sub);
           const cohortOnly = slot.release?.cohortOnly ?? false;
+          const slotType = slot.release?.slotType ?? "CV";
+          const seatsMax = slot.capacity?.max ?? 1;
+          const seatsTaken = slot.capacity?.current ?? slot.bookings.length;
+          // GD/CASE stay AVAILABLE (joinable) until every seat is taken, even once
+          // other students have joined — FULL replaces the old binary
+          // BOOKED_BY_OTHER, which assumed a single-seat slot was "taken" the
+          // instant anyone else booked it.
           let status = "AVAILABLE";
           if (myBooking) status = "BOOKED_BY_ME";
-          else if (slot.capacity && slot.capacity.current >= slot.capacity.max) status = "BOOKED_BY_OTHER";
+          else if (seatsTaken >= seatsMax) status = "FULL";
 
           return {
             id: slot.id,
@@ -184,6 +191,10 @@ const listSlots = async (req, res, next) => {
             venue: slot.venue,
             cohortOnly,
             status,
+            slotType,
+            seatsTaken,
+            seatsMax,
+            ...(slotType === "CASE" && { solverTaken: slot.capacity?.solverClaimed ?? false }),
             delayMinutes: slot.delayMinutes ?? 0,
             onWaitlist: slot.waitlist.length > 0,
             // Only reveal the meeting link and mentor contact details once the student
@@ -193,6 +204,7 @@ const listSlots = async (req, res, next) => {
             ...(myBooking && {
               bookingId: myBooking.id,
               focus: myBooking.focus,
+              role: myBooking.role,
               meetingLink: slot.meetingLink ?? null,
               mentorPhone: mentor.phone ?? null,
               mentorEmail: mentor.user.email,
@@ -239,6 +251,7 @@ const getLastUsedSlotDefaults = async (req, res, next) => {
 // no-overlap constraint) so one day colliding with an existing slot doesn't block
 // the rest of the batch — it's just reported back in `skipped` instead.
 const MAX_OCCURRENCES_PER_BATCH = 60;
+const SLOT_TYPES = ["CV", "GD", "CASE"];
 
 const releaseSlots = async (req, res, next) => {
   try {
@@ -255,6 +268,21 @@ const releaseSlots = async (req, res, next) => {
     }
     const duration = Number(slotDuration);
     if (!(duration > 0)) return res.status(400).json({ error: "Invalid slotDuration" });
+
+    const slotType = req.body.slotType ?? "CV";
+    if (!SLOT_TYPES.includes(slotType)) {
+      return res.status(400).json({ error: "slotType must be one of CV, GD, CASE" });
+    }
+    // CV (including its cv_hr focus variant) stays a hard 1 regardless of what's
+    // sent — GD/CASE need a mentor-chosen capacity, CASE additionally needs room
+    // for both the 1 Solver seat and at least 1 Shadow seat.
+    let capacity = 1;
+    if (slotType !== "CV") {
+      capacity = Number(req.body.capacity);
+      if (!Number.isInteger(capacity) || capacity < 2) {
+        return res.status(400).json({ error: `capacity must be an integer of at least 2 for ${slotType} slots` });
+      }
+    }
 
     const rawOccurrences = Array.isArray(req.body.occurrences) && req.body.occurrences.length > 0
       ? req.body.occurrences
@@ -310,6 +338,8 @@ const releaseSlots = async (req, res, next) => {
               venue,
               cohortOnly: Boolean(cohortOnly),
               meetingLink: meetingLink || null,
+              slotType,
+              capacity,
             },
           });
 
@@ -325,7 +355,7 @@ const releaseSlots = async (req, res, next) => {
                 published,
               },
             });
-            await tx.slotCapacity.create({ data: { slotId: slot.id, max: 1, current: 0 } });
+            await tx.slotCapacity.create({ data: { slotId: slot.id, max: capacity, current: 0 } });
           }
 
           await tx.auditEvent.create({
@@ -564,6 +594,8 @@ const listMentorOwnSlots = async (req, res, next) => {
         bookings: { some: { status: "CONFIRMED" } },
       },
       include: {
+        release: { select: { slotType: true } },
+        capacity: { select: { max: true } },
         bookings: {
           where: { status: "CONFIRMED" },
           include: { student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } } },
@@ -572,9 +604,17 @@ const listMentorOwnSlots = async (req, res, next) => {
       orderBy: { startTime: "asc" },
     });
 
-    const bookedAndOngoing = upcomingBooked.map((s) => ({
+    // The "some CONFIRMED" filter above and the CONFIRMED-only bookings include
+    // below run as separate queries — a booking can flip status (unassign,
+    // reassign, swap, attendance) in the gap between them, leaving s.bookings
+    // empty here even though the slot matched. Drop those instead of crashing
+    // on participants[0]; the next refetch will reflect the new state correctly.
+    // `participants` holds every confirmed seat on the slot — length 1 for
+    // CV/CV-HR, up to `capacity` for GD/CASE.
+    const bookedAndOngoing = upcomingBooked.filter((s) => s.bookings.length > 0).map((s) => ({
       id:           s.id,
-      bookingId:    s.bookings[0].id,
+      slotType:     s.release?.slotType ?? "CV",
+      capacity:     s.capacity?.max ?? 1,
       startTime:    s.startTime,
       endTime:      s.endTime,
       date:         new Date(s.startTime).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
@@ -582,12 +622,14 @@ const listMentorOwnSlots = async (req, res, next) => {
       venue:        s.venue,
       delayMinutes: s.delayMinutes,
       meetingLink:  s.meetingLink ?? null,
-      student: {
-        name:    s.bookings[0].student?.name ?? "—",
-        email:   s.bookings[0].student?.email ?? null,
-        pgp:     s.bookings[0].student?.studentProfile?.pgpId ?? "N/A",
-        purpose: s.bookings[0].focus,
-      },
+      participants: s.bookings.map((b) => ({
+        bookingId: b.id,
+        name:      b.student?.name ?? "—",
+        email:     b.student?.email ?? null,
+        pgp:       b.student?.studentProfile?.pgpId ?? "N/A",
+        purpose:   b.focus,
+        role:      b.role,
+      })),
     }));
 
     // Split by whether the session has already started — surfaced as separate
@@ -601,7 +643,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       where: { mentorProfileId: mentorProfile.id, startTime: { gte: now }, retired: false },
       include: {
         bookings: { where: { status: { not: "CANCELLED" } } },
-        release: { select: { cohortOnly: true } },
+        release: { select: { cohortOnly: true, slotType: true } },
       },
       orderBy: { startTime: "asc" },
     });
@@ -613,6 +655,7 @@ const listMentorOwnSlots = async (req, res, next) => {
         time: fmtSlotTime(s.startTime, s.endTime),
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
+        slotType: s.release?.slotType ?? "CV",
         meetingLink: s.meetingLink ?? null,
         published: s.published,
       }));

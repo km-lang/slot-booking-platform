@@ -29,6 +29,21 @@ enum BookingStatus {
   NO_SHOW
 }
 
+// CV: today's 1:1 review slots (including the "cv_hr" focus variant — see
+// Booking.focus). GD/CASE are multi-participant, mentor-chosen capacity.
+enum SlotType {
+  CV
+  GD
+  CASE
+}
+
+// Only meaningful on a CASE booking — self-selected by the student at booking
+// time. Null for CV/GD bookings.
+enum ParticipantRole {
+  SOLVER
+  SHADOW
+}
+
 enum WarnType {
   WARNING // 3 warnings auto-convert to 1 STRIKE via bookingController
   STRIKE  // directly feeds ban evaluation
@@ -157,6 +172,8 @@ model BookingRelease {
   venue           String
   cohortOnly      Boolean  @default(false)
   meetingLink     String?  // default Google Meet (or other) link applied to every slot created in this batch
+  slotType        SlotType @default(CV)
+  capacity        Int      @default(1) // participants per slot; CV always 1, GD/CASE mentor-chosen (CASE >= 2)
   createdAt       DateTime @default(now())
 
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
@@ -208,9 +225,13 @@ model SlotWaitlist {
 
 // Separate table so max capacity is configurable per slot without touching Slot itself
 model SlotCapacity {
-  slotId  String @id
-  max     Int    @default(1)
-  current Int    @default(0)
+  slotId        String  @id
+  max           Int     @default(1)
+  current       Int     @default(0)
+  solverClaimed Boolean @default(false) // CASE slots only — atomically flipped alongside
+                                         // current when a student claims the Solver seat,
+                                         // same one-UPDATE pattern as the capacity claim
+                                         // itself. Always false for CV/GD slots.
 
   slot Slot @relation(fields: [slotId], references: [id])
 }
@@ -220,7 +241,8 @@ model Booking {
   slotId          String
   studentUserId   String
   mentorProfileId String        // denormalized from Slot at creation — backs the one-active-booking-per-mentor constraint below
-  focus           String        // "overall" | "workex" | "por"
+  focus           String?       // "overall" | "workex" | "por" | "cv_hr" — CV slots only, null for GD/CASE
+  role            ParticipantRole? // CASE slots only — SOLVER or SHADOW, self-selected at booking time
   idempotencyKey  String        @unique // client-generated UUID; replays return existing booking
   status          BookingStatus @default(CONFIRMED)
   allocatedBy     String?       // mentor's email, if this booking was directly allocated rather than self-booked

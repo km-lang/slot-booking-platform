@@ -14,7 +14,11 @@ const FOCUS_LABELS = {
   overall: "Overall CV Review",
   workex:  "Work Experience",
   por:     "POR / ECA",
+  cv_hr:   "CV-HR",
 };
+
+const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study" };
+const ROLE_LABELS = { SOLVER: "Solver", SHADOW: "Shadow" };
 
 const fmt = (d) =>
   new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -64,6 +68,7 @@ export default function MentorBookingView() {
 
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [purpose, setPurpose] = useState("");
+  const [role, setRole] = useState(""); // CASE slots only — "SOLVER" | "SHADOW"
   const [idempotencyKey, setIdempotencyKey] = useState(null);
 
   const bookMutation = useBookSlot(mentorId);
@@ -87,17 +92,28 @@ export default function MentorBookingView() {
   const openSheet = (slot) => {
     setSelectedSlot(slot);
     setPurpose("");
+    setRole("");
     setIdempotencyKey(crypto.randomUUID());
   };
 
   const handleAction = () => {
     bookMutation.mutate(
-      { slotId: selectedSlot.id, focus: purpose, idempotencyKey },
-      // On a 409 (someone else booked it first) we deliberately leave the sheet open —
-      // the error message renders below and the slot list behind it has already
-      // refreshed (see useBookSlot's onError) to show the slot as taken.
+      { slotId: selectedSlot.id, focus: purpose, role, idempotencyKey },
+      // On a 409 (someone else booked it first, or someone else claimed Solver) we
+      // deliberately leave the sheet open — the error message renders below and the
+      // slot list behind it has already refreshed (see useBookSlot's onError) to
+      // show the slot's current state.
       { onSuccess: () => setSelectedSlot(null) },
     );
+  };
+
+  // What's required to submit depends on the slot type — CV needs a focus, CASE
+  // needs a role, GD needs neither.
+  const canSubmit = (slot) => {
+    if (!slot) return false;
+    if (slot.slotType === "CASE") return !!role;
+    if (slot.slotType === "GD") return true;
+    return !!purpose;
   };
 
   // mentorId can go briefly undefined during the exit-transition render pass when
@@ -147,7 +163,7 @@ export default function MentorBookingView() {
           </p>
         )}
         <p className="text-[10px] font-bold text-emerald-700/40 uppercase tracking-widest mt-1">
-          {group === "none" ? "Non Disha Mentor" : `${group.toUpperCase()} MENTOR`}
+          {group === "none" ? "Non Disha Mentor" : group ? `${group.toUpperCase()} MENTOR` : ""}
         </p>
       </div>
 
@@ -192,9 +208,19 @@ export default function MentorBookingView() {
                           Cohort Only
                         </span>
                       )}
+                      {SLOT_TYPE_LABELS[slot.slotType] && (
+                        <span className="flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
+                          {SLOT_TYPE_LABELS[slot.slotType]} · {slot.seatsTaken}/{slot.seatsMax}
+                        </span>
+                      )}
                       {isMine && slot.focus && (
                         <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px] uppercase">
                           {FOCUS_LABELS[slot.focus] ?? slot.focus}
+                        </span>
+                      )}
+                      {isMine && slot.role && (
+                        <span className="flex items-center gap-1 text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded text-[10px] uppercase">
+                          {ROLE_LABELS[slot.role] ?? slot.role}
                         </span>
                       )}
                       {isMine && slot.delayMinutes > 0 && (
@@ -257,7 +283,7 @@ export default function MentorBookingView() {
                         Book
                       </button>
                     )}
-                    {slot.status === "BOOKED_BY_OTHER" && (
+                    {slot.status === "FULL" && (
                       <WaitlistButton slot={slot} mentorId={mentorId} />
                     )}
                   </div>
@@ -298,24 +324,63 @@ export default function MentorBookingView() {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
-                  Session Focus (Required)
-                </label>
-                <div className="relative">
-                  <select
-                    value={purpose}
-                    onChange={(e) => setPurpose(e.target.value)}
-                    className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 shadow-sm appearance-none cursor-pointer"
-                  >
-                    <option value="" disabled>Select your focus…</option>
-                    {Object.entries(FOCUS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={18} className="absolute right-4 top-3 text-emerald-900/30 pointer-events-none" />
+              {selectedSlot.slotType === "CASE" ? (
+                <div className="mb-6">
+                  <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
+                    Your Role (Required)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      disabled={selectedSlot.solverTaken}
+                      onClick={() => setRole("SOLVER")}
+                      className={`py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                        ${role === "SOLVER" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-200 text-emerald-900/70 hover:bg-emerald-50"}`}
+                    >
+                      Solver
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRole("SHADOW")}
+                      className={`py-3 rounded-xl text-sm font-bold border transition-colors
+                        ${role === "SHADOW" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-200 text-emerald-900/70 hover:bg-emerald-50"}`}
+                    >
+                      Shadow
+                    </button>
+                  </div>
+                  {selectedSlot.solverTaken && (
+                    <p className="text-[10px] font-bold text-emerald-700/50 mt-2">
+                      Solver seat is already taken — join as a Shadow.
+                    </p>
+                  )}
                 </div>
-              </div>
+              ) : selectedSlot.slotType === "GD" ? (
+                <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                  <p className="text-xs font-bold text-indigo-800">Group Discussion</p>
+                  <p className="text-[11px] font-semibold text-indigo-700/70 mt-1">
+                    {selectedSlot.seatsTaken}/{selectedSlot.seatsMax} participants joined so far
+                  </p>
+                </div>
+              ) : (
+                <div className="mb-6">
+                  <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
+                    Session Focus (Required)
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={purpose}
+                      onChange={(e) => setPurpose(e.target.value)}
+                      className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 text-sm font-bold text-emerald-950 outline-none focus:border-emerald-500 shadow-sm appearance-none cursor-pointer"
+                    >
+                      <option value="" disabled>Select your focus…</option>
+                      {Object.entries(FOCUS_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={18} className="absolute right-4 top-3 text-emerald-900/30 pointer-events-none" />
+                  </div>
+                </div>
+              )}
               <div className="flex items-start gap-2 bg-red-50 p-3 rounded-xl mb-6">
                 <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
                 <p className="text-[11px] font-bold text-red-900/80 leading-tight">
@@ -333,10 +398,10 @@ export default function MentorBookingView() {
               )}
 
               <button
-                disabled={bookConflict ? false : !purpose || isProcessing}
+                disabled={bookConflict ? false : !canSubmit(selectedSlot) || isProcessing}
                 onClick={bookConflict ? () => setSelectedSlot(null) : handleAction}
                 className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200
-                  ${bookConflict || (!isProcessing && purpose)
+                  ${bookConflict || (!isProcessing && canSubmit(selectedSlot))
                     ? "bg-emerald-900 text-white shadow-[0_8px_20px_rgba(0,0,0,0.2)] active:scale-95"
                     : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
               >

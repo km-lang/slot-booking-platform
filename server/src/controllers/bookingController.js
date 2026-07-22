@@ -4,7 +4,8 @@ const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
 const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } = require("../lib/calendarInvite");
 
-const ALLOWED_FOCUS = ["overall", "workex", "por"];
+const ALLOWED_FOCUS = ["overall", "workex", "por", "cv_hr"]; // CV slots only
+const ALLOWED_ROLES = ["SOLVER", "SHADOW"]; // CASE slots only, self-selected by the student
 
 // Records a strike and, if the new strike count exactly matches a seeded
 // BanPolicyTier threshold, opens a Ban for the duration that tier specifies.
@@ -21,11 +22,26 @@ const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = 
   return { ban: null };
 };
 
+// "CV Review" / "Group Discussion" / "Case Study" — used for both the ICS summary
+// and the confirmation email's plain-language description. CASE additionally
+// names the student's self-selected role since that's the one thing that
+// distinguishes their seat from anyone else's in the same slot.
+const describeSession = (slotType, focus, role) => {
+  if (slotType === "GD") return { label: "Group Discussion", description: "Group Discussion session via Parthsaarthi." };
+  if (slotType === "CASE") {
+    const roleLabel = role === "SOLVER" ? "Solver" : "Shadow";
+    return { label: "Case Study", description: `Case Study session (${roleLabel}) via Parthsaarthi.` };
+  }
+  const focusLabel = focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : focus === "cv_hr" ? "CV-HR" : "Overall CV";
+  return { label: "CV Review", description: `${focusLabel} review session via Parthsaarthi.` };
+};
+
 // Sends the booking confirmation email + calendar invite to both parties. Shared by
 // self-service booking and mentor-initiated allocation — the resulting email is
 // identical either way, since from the student's inbox the outcome is the same: a
-// confirmed session.
-const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUserId }) => {
+// confirmed session. Only the one new participant + mentor are notified — GD/CASE
+// group-mates don't need each other's calendar entries.
+const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, role, studentUserId }) => {
   prisma.user.findUnique({
     where: { id: studentUserId },
     select: { name: true, email: true, studentProfile: { select: { pgpId: true } } },
@@ -41,8 +57,7 @@ const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUse
 
     const mentorName = mentorUser?.user?.name ?? "your mentor";
     const studentName = student?.name ?? student?.email ?? "your mentee";
-
-    const focusDescription = `${focus === "workex" ? "Work Experience" : focus === "por" ? "POR / ECA" : "Overall CV"} review session via Parthsaarthi.`;
+    const { label: sessionLabel, description: focusDescription } = describeSession(claimedSlot.release.slotType, focus, role);
 
     const icsContent = buildSessionEvent({
       uid: booking.id,
@@ -51,7 +66,7 @@ const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUse
       status: "CONFIRMED",
       startTime: claimedSlot.startTime,
       endTime: claimedSlot.endTime,
-      summary: `CV Review: ${studentName} × ${mentorName}`,
+      summary: `${sessionLabel}: ${studentName} × ${mentorName}`,
       description: focusDescription,
       location: claimedSlot.venue,
       meetingLink: claimedSlot.meetingLink ?? null,
@@ -63,7 +78,7 @@ const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUse
       ],
     });
     const calendarLink = buildGoogleCalendarLink({
-      summary: `CV Review: ${studentName} × ${mentorName}`,
+      summary: `${sessionLabel}: ${studentName} × ${mentorName}`,
       description: focusDescription,
       location: claimedSlot.venue,
       startTime: claimedSlot.startTime,
@@ -83,6 +98,9 @@ const sendBookingConfirmationEmails = ({ claimedSlot, booking, focus, studentUse
       venue:        claimedSlot.venue,
       meetingLink:  claimedSlot.meetingLink ?? null,
       focus,
+      // CV keeps its per-focus label (mailer derives "Overall CV Review" etc. itself);
+      // GD/CASE have no focus, so hand mailer the already-composed label directly.
+      ...(claimedSlot.release.slotType !== "CV" && { sessionLabel }),
       icsContent,
       calendarLink,
     }).catch((e) => console.error("[mailer] booking confirmation:", e.message));
@@ -107,7 +125,7 @@ const hasActiveBan = (userId) =>
 // (allocateSlot). Returns a result object rather than throwing, so both callers
 // can map { ok, status, error } straight onto their HTTP response without
 // duplicating any of the race-safety or eligibility logic.
-const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempotencyKey, allocatedBy = null }) => {
+const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, idempotencyKey, allocatedBy = null }) => {
   const existing = await prisma.booking.findUnique({ where: { idempotencyKey } });
   if (existing) {
     if (existing.studentUserId !== studentUserId) {
@@ -143,7 +161,28 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempot
     return { ok: false, status: 409, error: "Slot is full" };
   }
 
+  // focus/role are slot-type-specific — CV (including cv_hr) needs a focus and no
+  // role, CASE needs a role and no focus, GD needs neither. Validated here rather
+  // than upfront in the route handlers since only this function knows the slot's
+  // type at this point.
+  const slotType = claimedSlot.release.slotType;
+  if (slotType === "CV") {
+    if (!ALLOWED_FOCUS.includes(focus)) {
+      return { ok: false, status: 400, error: "focus (overall|workex|por|cv_hr) is required for this slot" };
+    }
+    role = null;
+  } else if (slotType === "GD") {
+    focus = null;
+    role = null;
+  } else if (slotType === "CASE") {
+    if (!ALLOWED_ROLES.includes(role)) {
+      return { ok: false, status: 400, error: "role (SOLVER|SHADOW) is required for this slot" };
+    }
+    focus = null;
+  }
+
   const SLOT_FULL = Symbol("slot full");
+  const SOLVER_TAKEN = Symbol("solver seat already taken");
   const MENTOR_CONFLICT = Symbol("already booked with this mentor");
   try {
     const booking = await prisma.$transaction(async (tx) => {
@@ -152,12 +191,25 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempot
       // most `max` of them can ever see rowCount 1. A separate read-then-write here
       // (read capacity, decide, write) leaves a gap concurrent requests can all walk
       // through at once — confirmed empirically: that exact shape let 7 students book
-      // a 1-capacity slot under concurrent load before this fix.
-      const claims = await tx.$executeRaw`
-        UPDATE "SlotCapacity" SET current = current + 1
-        WHERE "slotId" = ${slotId} AND current < max
-      `;
-      if (claims === 0) throw SLOT_FULL;
+      // a 1-capacity slot under concurrent load before this fix. The Solver claim
+      // reuses the exact same pattern, just with solverClaimed folded into the same
+      // one-statement UPDATE instead of a separate read-then-write.
+      const claims = role === "SOLVER"
+        ? await tx.$executeRaw`
+            UPDATE "SlotCapacity" SET current = current + 1, "solverClaimed" = true
+            WHERE "slotId" = ${slotId} AND current < max AND "solverClaimed" = false
+          `
+        : await tx.$executeRaw`
+            UPDATE "SlotCapacity" SET current = current + 1
+            WHERE "slotId" = ${slotId} AND current < max
+          `;
+      if (claims === 0) {
+        if (role === "SOLVER") {
+          const cap = await tx.slotCapacity.findUnique({ where: { slotId } });
+          throw cap && cap.current >= cap.max ? SLOT_FULL : SOLVER_TAKEN;
+        }
+        throw SLOT_FULL;
+      }
 
       let created;
       try {
@@ -167,6 +219,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempot
             studentUserId,
             mentorProfileId: claimedSlot.mentorProfileId,
             focus,
+            role,
             idempotencyKey,
             status: "CONFIRMED",
             allocatedBy,
@@ -191,6 +244,9 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempot
     if (err === SLOT_FULL) {
       return { ok: false, status: 409, error: "Someone else just booked this slot — please refresh and try another" };
     }
+    if (err === SOLVER_TAKEN) {
+      return { ok: false, status: 409, error: "Someone already claimed the Solver seat — please choose Shadow instead" };
+    }
     if (err === MENTOR_CONFLICT) {
       return { ok: false, status: 409, error: "This student already has an active booking with this mentor" };
     }
@@ -204,21 +260,22 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, idempot
 
 const createBooking = async (req, res, next) => {
   try {
-    const { slotId, focus, idempotencyKey } = req.body;
-    if (!slotId || !idempotencyKey || !ALLOWED_FOCUS.includes(focus)) {
-      return res
-        .status(400)
-        .json({ error: "slotId, focus (overall|workex|por), and idempotencyKey are required" });
+    // focus (CV/CV-HR) vs role (CASE) are validated inside claimSlotAndCreateBooking,
+    // which is the only place that knows the slot's type — GD needs neither.
+    const { slotId, focus, role, idempotencyKey } = req.body;
+    if (!slotId || !idempotencyKey) {
+      return res.status(400).json({ error: "slotId and idempotencyKey are required" });
     }
 
-    const result = await claimSlotAndCreateBooking({ slotId, studentUserId: req.user.sub, focus, idempotencyKey });
+    const result = await claimSlotAndCreateBooking({ slotId, studentUserId: req.user.sub, focus, role, idempotencyKey });
     if (!result.ok) return res.status(result.status).json({ error: result.error });
     if (result.replay) return res.status(200).json(result.booking);
 
     sendBookingConfirmationEmails({
       claimedSlot: result.claimedSlot,
       booking: result.booking,
-      focus,
+      focus: result.booking.focus,
+      role: result.booking.role,
       studentUserId: req.user.sub,
     });
 
@@ -262,9 +319,9 @@ const searchStudentsForAllocation = async (req, res, next) => {
 
 const allocateSlot = async (req, res, next) => {
   try {
-    const { pgpId, focus } = req.body;
-    if (!pgpId || !ALLOWED_FOCUS.includes(focus)) {
-      return res.status(400).json({ error: "pgpId and focus (overall|workex|por) are required" });
+    const { pgpId, focus, role } = req.body;
+    if (!pgpId) {
+      return res.status(400).json({ error: "pgpId is required" });
     }
 
     const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
@@ -287,6 +344,7 @@ const allocateSlot = async (req, res, next) => {
       slotId: slot.id,
       studentUserId: studentProfile.userId,
       focus,
+      role,
       idempotencyKey,
       allocatedBy: req.user.email,
     });
@@ -296,7 +354,8 @@ const allocateSlot = async (req, res, next) => {
     sendBookingConfirmationEmails({
       claimedSlot: result.claimedSlot,
       booking: result.booking,
-      focus,
+      focus: result.booking.focus,
+      role: result.booking.role,
       studentUserId: studentProfile.userId,
     });
 
@@ -619,6 +678,7 @@ const swapBookings = async (req, res, next) => {
           studentUserId: bookingB.studentUserId,
           mentorProfileId: mentorProfile.id,
           focus: bookingB.focus,
+          role: bookingB.role, // a Solver's seat stays a Solver seat through the swap
           idempotencyKey: `swap-${bookingA.slotId}-${bookingB.studentUserId}-${now}`,
           status: "CONFIRMED",
           allocatedBy: req.user.email,
@@ -630,6 +690,7 @@ const swapBookings = async (req, res, next) => {
           studentUserId: bookingA.studentUserId,
           mentorProfileId: mentorProfile.id,
           focus: bookingA.focus,
+          role: bookingA.role,
           idempotencyKey: `swap-${bookingB.slotId}-${bookingA.studentUserId}-${now}`,
           status: "CONFIRMED",
           allocatedBy: req.user.email,
@@ -727,12 +788,18 @@ const markAttendance = async (req, res, next) => {
       return res.status(400).json({ error: "status must be ATTENDED or NO_SHOW" });
     }
 
-    const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: req.user.sub } });
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where:   { userId: req.user.sub },
+      include: { user: { select: { name: true, email: true } } },
+    });
     if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
 
     const booking = await prisma.booking.findUnique({
       where: { id: req.params.id },
-      include: { slot: true },
+      include: {
+        slot: true,
+        student: { select: { name: true, email: true } },
+      },
     });
     if (!booking) return res.status(404).json({ error: "Booking not found" });
     if (booking.slot.mentorProfileId !== mentorProfile.id) {
@@ -745,11 +812,12 @@ const markAttendance = async (req, res, next) => {
       return res.status(400).json({ error: "Cannot mark attendance before the session has started" });
     }
 
-    await prisma.$transaction(async (tx) => {
+    const { ban } = await prisma.$transaction(async (tx) => {
       await tx.booking.update({ where: { id: booking.id }, data: { status } });
 
+      let strikeResult = { ban: null };
       if (status === "NO_SHOW") {
-        await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "No-show", req.user.email, req.user.sub);
+        strikeResult = await applyStrikeAndMaybeBan(tx, booking.studentUserId, booking.id, "No-show", req.user.email, req.user.sub);
       }
 
       await tx.auditEvent.create({
@@ -760,7 +828,25 @@ const markAttendance = async (req, res, next) => {
           entityId: booking.id,
         },
       });
+
+      return strikeResult;
     });
+
+    if (status === "NO_SHOW" && booking.student?.email) {
+      const fmtDate = (d) =>
+        new Date(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const fmtTime = (d) =>
+        new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+      mailer.sendNoShowStrikeToStudent({
+        studentEmail: booking.student.email,
+        studentName:  booking.student.name ?? booking.student.email,
+        mentorName:   mentorProfile.user?.name ?? mentorProfile.user?.email ?? "your mentor",
+        date:         fmtDate(booking.slot.startTime),
+        time:         fmtTime(booking.slot.startTime),
+        banApplied:   !!ban,
+        banDurationHours: ban?.endsAt ? Math.round((ban.endsAt.getTime() - Date.now()) / 3600000) : null,
+      }).catch((e) => console.error("[mailer] no-show strike:", e.message));
+    }
 
     res.json({ id: booking.id, status });
   } catch (err) {

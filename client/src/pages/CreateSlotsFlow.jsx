@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Repeat, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Plus, Repeat, AlertTriangle, CheckCircle2, Users } from "lucide-react";
 import { useCreateSlots, useLastUsedSlotDefaults, useMyUpcomingSlotTimes } from "../hooks/useApi";
 import AppShell from "../components/ui/AppShell";
 import PageHeader from "../components/ui/PageHeader";
@@ -20,10 +20,18 @@ const DRAFT_KEY = "parthsaarthi:createSlotsDraft";
 // the 400 instead of after.
 const MAX_OCCURRENCES_PER_BATCH = 60;
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const SLOT_TYPES = [
+  { value: "CV",   label: "CV Review" },
+  { value: "GD",   label: "Group Discussion" },
+  { value: "CASE", label: "Case Study" },
+];
 // Quick-fill shortcuts for the Ends field — not the only way to set it, the field
-// itself is always directly typeable/editable.
+// itself (both Day and Time) is always directly editable.
 const QUICK_DURATIONS_MIN = [60, 120, 180, 240];
-const toMinutesOfDay = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+// Day/Time inputs — Start Day, Start Time, End Day, End Time — sized 10% down
+// from the app's standard field (px-3 py-3 / text-sm = 12px/12px/14px).
+const COMPACT_FIELD_CLASS =
+  "w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-[10.8px] py-[10.8px] text-[12.6px] font-bold text-emerald-950 outline-none";
 
 export default function CreateSlotsFlow() {
   const navigate = useNavigate();
@@ -44,7 +52,10 @@ export default function CreateSlotsFlow() {
 
   const [startDate, setStartDate]     = useState(today);
   const [startTime, setStartTime]     = useState("14:00");
+  const [endDate, setEndDate]         = useState(today);
   const [endTime, setEndTime]         = useState("16:00");
+  const [slotType, setSlotType]       = useState("CV");
+  const [capacity, setCapacity]       = useState(4); // GD/CASE only — participants per slot
   const [slotDuration, setSlotDuration]         = useState(30);
   const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(VENUE_OPTIONS[0]);
@@ -75,7 +86,10 @@ export default function CreateSlotsFlow() {
         const d = JSON.parse(raw);
         if (d.startDate) setStartDate(d.startDate);
         if (d.startTime) setStartTime(d.startTime);
+        if (d.endDate) setEndDate(d.endDate);
         if (d.endTime) setEndTime(d.endTime);
+        if (d.slotType) setSlotType(d.slotType);
+        if (d.capacity) setCapacity(d.capacity);
         if (d.slotDuration) setSlotDuration(d.slotDuration);
         if (typeof d.isCustomDuration === "boolean") setIsCustomDuration(d.isCustomDuration);
         if (d.selectedVenue) setSelectedVenue(d.selectedVenue);
@@ -106,11 +120,11 @@ export default function CreateSlotsFlow() {
   useEffect(() => {
     if (!hydratedRef.current) return; // don't stomp a draft mid-restore
     const draft = {
-      startDate, startTime, endTime, slotDuration, isCustomDuration,
+      startDate, startTime, endDate, endTime, slotType, capacity, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil,
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [startDate, startTime, endTime, slotDuration, isCustomDuration,
+  }, [startDate, startTime, endDate, endTime, slotType, capacity, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil]);
 
   // First time Repeat Weekly is switched on, pre-check the start date's own
@@ -129,15 +143,14 @@ export default function CreateSlotsFlow() {
   };
 
   // ── Occurrence generation ───────────────────────────────────────────────────
+  // Block length comes straight from the explicit start/end date+time delta —
+  // same calculation the original single-block form used — then that same
+  // duration is replayed onto every generated date below for Repeat Weekly.
   const [startHour, startMin] = startTime.split(":").map(Number);
-  const [endHour, endMin] = endTime.split(":").map(Number);
-  // If the end clock-time is at or before the start clock-time, it's read as
-  // crossing into the next day (e.g. 11:30 PM → 12:00 AM), same inference the
-  // old separate end-date field made explicit.
-  const spansMidnight = toMinutesOfDay(endTime) <= toMinutesOfDay(startTime);
-  const blockMinutes = spansMidnight
-    ? (24 * 60 - toMinutesOfDay(startTime)) + toMinutesOfDay(endTime)
-    : toMinutesOfDay(endTime) - toMinutesOfDay(startTime);
+  const startDateTimeMs = new Date(`${startDate}T${startTime}:00`).getTime();
+  const endDateTimeMs = new Date(`${endDate}T${endTime}:00`).getTime();
+  const blockMinutes = Math.round((endDateTimeMs - startDateTimeMs) / 60000);
+  const spansMidnight = endDate !== startDate;
 
   const occurrenceDates = useMemo(() => {
     const [y, m, d] = startDate.split("-").map(Number);
@@ -157,14 +170,12 @@ export default function CreateSlotsFlow() {
   const occurrences = useMemo(
     () => occurrenceDates.map((d) => {
       const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), startHour, startMin);
-      let end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), endHour, endMin);
-      if (spansMidnight) end = new Date(end.getTime() + 24 * 60 * 60000);
-      return { start, end };
+      return { start, end: new Date(start.getTime() + blockMinutes * 60000) };
     }),
-    [occurrenceDates, startHour, startMin, endHour, endMin, spansMidnight],
+    [occurrenceDates, startHour, startMin, blockMinutes],
   );
 
-  const perOccurrenceSlotCount = slotDuration > 0 ? Math.floor(blockMinutes / slotDuration) : 0;
+  const perOccurrenceSlotCount = slotDuration > 0 ? Math.max(0, Math.floor(blockMinutes / slotDuration)) : 0;
   const totalSlotCount = perOccurrenceSlotCount * occurrences.length;
   const hitOccurrenceCap = repeatWeekly && occurrenceDates.length === MAX_OCCURRENCES_PER_BATCH;
 
@@ -201,6 +212,8 @@ export default function CreateSlotsFlow() {
         venue: selectedVenue,
         cohortOnly,
         publish: publishNow,
+        slotType,
+        ...(slotType !== "CV" && { capacity }),
         ...(isOnlineVenue && meetingLink.trim() && { meetingLink: meetingLink.trim() }),
       },
       {
@@ -260,6 +273,39 @@ export default function CreateSlotsFlow() {
           {step === 1 && (
             <div className="space-y-4">
               <div>
+                <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Slot Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {SLOT_TYPES.map((t) => (
+                    <button key={t.value} type="button" onClick={() => setSlotType(t.value)}
+                      className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${slotType === t.value ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {slotType !== "CV" && (
+                  <div className="mt-3 bg-white border border-emerald-900/10 rounded-xl p-3">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800/60 uppercase">
+                        <Users size={12} /> Participants Per Slot
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setCapacity((c) => Math.max(2, c - 1))}
+                          className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-sm">−</button>
+                        <span className="w-6 text-center font-black text-emerald-950 text-sm">{capacity}</span>
+                        <button type="button" onClick={() => setCapacity((c) => Math.min(30, c + 1))}
+                          className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-sm">+</button>
+                      </div>
+                    </div>
+                    {slotType === "CASE" && (
+                      <p className="text-[10px] font-bold text-emerald-700/50 mt-2">
+                        1 Solver + {capacity - 1} Shadow{capacity - 1 !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div>
                 <p className="text-[10px] font-bold text-emerald-800/60 uppercase mb-1">
                   {repeatWeekly ? "First Occurrence" : "Starts"}
                 </p>
@@ -267,26 +313,27 @@ export default function CreateSlotsFlow() {
                   <div className="min-w-0">
                     <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Day</label>
                     <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                      className={COMPACT_FIELD_CLASS} />
                     <p className="text-[10px] font-bold text-emerald-700/50 mt-1">{weekdayLong(startDate)}</p>
                   </div>
                   <div className="min-w-0">
                     <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Time</label>
-                    <TimeField value={startTime} onChange={setStartTime}
-                      className="w-full min-w-0 bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                    <TimeField value={startTime} onChange={setStartTime} className={COMPACT_FIELD_CLASS} />
                   </div>
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[10px] font-bold text-emerald-800/60 uppercase">Ends</label>
+                  <p className="text-[10px] font-bold text-emerald-800/60 uppercase">Ends</p>
                   <div className="flex gap-1">
                     {QUICK_DURATIONS_MIN.map((mins) => (
                       <button key={mins} type="button"
                         onClick={() => {
-                          const total = (toMinutesOfDay(startTime) + mins) % (24 * 60);
-                          setEndTime(`${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`);
+                          const start = new Date(`${startDate}T${startTime}:00`);
+                          const end = new Date(start.getTime() + mins * 60000);
+                          setEndDate(toLocalYYYYMMDD(end));
+                          setEndTime(`${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`);
                         }}
                         className="text-[10px] font-bold px-2 py-1 rounded-lg border border-emerald-900/10 text-emerald-700/70 hover:bg-emerald-50 hover:border-emerald-300 transition-colors">
                         +{mins / 60}h
@@ -294,8 +341,18 @@ export default function CreateSlotsFlow() {
                     ))}
                   </div>
                 </div>
-                <TimeField value={endTime} onChange={setEndTime}
-                  className="w-full bg-white border border-emerald-900/10 rounded-xl px-3 py-3 text-sm font-bold text-emerald-950 outline-none" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="min-w-0">
+                    <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Day</label>
+                    <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)}
+                      className={COMPACT_FIELD_CLASS} />
+                    <p className="text-[10px] font-bold text-emerald-700/50 mt-1">{weekdayLong(endDate)}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-[9px] font-bold text-emerald-700/50 uppercase mb-1">Time</label>
+                    <TimeField value={endTime} onChange={setEndTime} className={COMPACT_FIELD_CLASS} />
+                  </div>
+                </div>
                 {spansMidnight && (
                   <p className="text-[10px] font-bold text-emerald-700/50 mt-1.5">
                     Spans past midnight — ends the next day.
@@ -314,7 +371,9 @@ export default function CreateSlotsFlow() {
                 </div>
               ) : (
                 <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-                  <span className="text-xs font-bold text-red-600">Block length is shorter than one slot</span>
+                  <span className="text-xs font-bold text-red-600">
+                    {blockMinutes <= 0 ? "End time must be after start time" : "Block length is shorter than one slot"}
+                  </span>
                 </div>
               )}
 
@@ -436,6 +495,13 @@ export default function CreateSlotsFlow() {
 
               <div className="bg-white border border-emerald-900/10 rounded-2xl p-4 space-y-2">
                 <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700/50 mb-1">Review</p>
+                <div className="flex justify-between text-xs">
+                  <span className="font-semibold text-emerald-700/60">Type</span>
+                  <span className="font-bold text-emerald-950">
+                    {SLOT_TYPES.find((t) => t.value === slotType)?.label}
+                    {slotType !== "CV" && ` · ${capacity} per slot`}
+                  </span>
+                </div>
                 {repeatWeekly ? (
                   <>
                     <div className="flex justify-between text-xs">
@@ -449,7 +515,7 @@ export default function CreateSlotsFlow() {
                       <span className="font-bold text-emerald-950">{fmtTime(startTime)} – {fmtTime(endTime)}</span>
                     </div>
                   </>
-                ) : (
+                ) : startDate === endDate ? (
                   <>
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Date</span>
@@ -458,6 +524,17 @@ export default function CreateSlotsFlow() {
                     <div className="flex justify-between text-xs">
                       <span className="font-semibold text-emerald-700/60">Time</span>
                       <span className="font-bold text-emerald-950">{fmtTime(startTime)} – {fmtTime(endTime)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-xs">
+                      <span className="font-semibold text-emerald-700/60">Starts</span>
+                      <span className="font-bold text-emerald-950">{fmtDateDMY(startDate)}, {fmtTime(startTime)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="font-semibold text-emerald-700/60">Ends</span>
+                      <span className="font-bold text-emerald-950">{fmtDateDMY(endDate)}, {fmtTime(endTime)}</span>
                     </div>
                   </>
                 )}

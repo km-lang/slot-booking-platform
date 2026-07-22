@@ -372,8 +372,8 @@ export const useAllocateStudentSearch = (q) =>
 export const useAllocateSlot = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ slotId, pgpId, focus }) =>
-      apiFetch(`/slots/${slotId}/allocate`, { method: "POST", body: JSON.stringify({ pgpId, focus }) }),
+    mutationFn: ({ slotId, pgpId, focus, role }) =>
+      apiFetch(`/slots/${slotId}/allocate`, { method: "POST", body: JSON.stringify({ pgpId, focus, role }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.mentorDashboard() }),
   });
 };
