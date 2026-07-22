@@ -56,6 +56,8 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-07-22 | `74a9ba0` | fix | unassignBooking never released the slot's SlotCapacity seat, leaving it permanently unbookable |
+| 2026-07-22 | `fbcf7da` | docs | add CHANGE_MANAGEMENT.md changelog, require a log entry on every release |
 | 2026-07-22 | `58f92db` | chore | prune superseded DB backup dumps, keep only the 2 most recent |
 | 2026-07-22 | `386cdfc` | feat | GD/CASE group slot types with participant roles and capacity; restore Create Slots end-date control |
 | 2026-07-22 | `f43d629` | chore | DB snapshot before add_slot_types_and_roles migration (20260722-072632) |
