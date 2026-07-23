@@ -22,12 +22,20 @@ const getCountdown = (deadline) => {
 // Hours, not a slot count, since slots can be of any duration — lets the AIG admin
 // see how many mentoring hours were put on the calendar (across every mentor in
 // this AIG) for a given window, scoped by the session's own date (slot startTime),
-// not when it was created.
+// not when it was created. The cumulative number stays front and center (unchanged
+// from before), with a mentor dropdown underneath to drill into one mentor's own
+// total — or leave it on "All Mentors" to see every mentor's hours side by side,
+// which is what actually lets an AIG/Disha admin tell whether individual mentors
+// are meeting their own targets rather than just the org-wide total.
 function HoursReleasedCard({ aigSlug }) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [from, setFrom] = useState(todayStr);
   const [to, setTo] = useState(todayStr);
+  const [mentorFilter, setMentorFilter] = useState("all");
   const { data, isFetching, error } = useAigHoursReleased(aigSlug, from, to);
+
+  const byMentor = data?.byMentor ?? [];
+  const visibleMentors = mentorFilter === "all" ? byMentor : byMentor.filter((m) => m.mentorProfileId === mentorFilter);
 
   return (
     <Card>
@@ -54,17 +62,53 @@ function HoursReleasedCard({ aigSlug }) {
       {error ? (
         <div className="text-xs font-bold text-red-600">{error.message}</div>
       ) : (
-        <div className="flex items-end justify-between">
-          <div>
-            <div className="text-2xl font-black text-emerald-950">
-              {isFetching ? "—" : `${data?.hours ?? 0}h`}
+        <>
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <div className="text-2xl font-black text-emerald-950">
+                {isFetching ? "—" : `${data?.hours ?? 0}h`}
+              </div>
+              <div className="text-[10px] font-bold text-emerald-700/50 uppercase mt-0.5">Total Hours Released</div>
             </div>
-            <div className="text-[10px] font-bold text-emerald-700/50 uppercase mt-0.5">Total Hours Released</div>
+            <div className="text-xs font-semibold text-emerald-700/70">
+              {isFetching ? "" : `${data?.slotCount ?? 0} slot${data?.slotCount === 1 ? "" : "s"}`}
+            </div>
           </div>
-          <div className="text-xs font-semibold text-emerald-700/70">
-            {isFetching ? "" : `${data?.slotCount ?? 0} slot${data?.slotCount === 1 ? "" : "s"}`}
+
+          <div className="border-t border-emerald-900/10 pt-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[10px] font-bold text-emerald-700/50 uppercase tracking-widest">By Mentor</span>
+              <select
+                value={mentorFilter}
+                onChange={(e) => setMentorFilter(e.target.value)}
+                disabled={isFetching || byMentor.length === 0}
+                className="bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2 py-1.5 text-xs font-semibold outline-none focus:border-emerald-500 disabled:opacity-50 max-w-[60%]"
+              >
+                <option value="all">All Mentors ({byMentor.length})</option>
+                {byMentor.map((m) => (
+                  <option key={m.mentorProfileId} value={m.mentorProfileId}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {isFetching ? (
+              <div className="text-xs font-bold text-emerald-800/40 py-2">Loading…</div>
+            ) : byMentor.length === 0 ? (
+              <div className="text-xs font-bold text-emerald-800/40 py-2">No mentors in this AIG</div>
+            ) : (
+              <div className="divide-y divide-emerald-900/5 max-h-64 overflow-y-auto">
+                {visibleMentors.map((m) => (
+                  <div key={m.mentorProfileId} className="flex items-center justify-between py-2">
+                    <span className="text-xs font-bold text-emerald-950 truncate pr-2">{m.name}</span>
+                    <span className="text-xs font-semibold text-emerald-700/70 shrink-0">
+                      {m.hours}h <span className="text-emerald-700/40">· {m.slotCount} slot{m.slotCount === 1 ? "" : "s"}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
     </Card>
   );

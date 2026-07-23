@@ -113,7 +113,11 @@ const getAigOverview = async (req, res, next) => {
 // Total hours of slots scheduled (by session startTime, not creation date) within
 // [from, to], across every mentor in this AIG — hours rather than a slot count,
 // since slots can be of any duration. Same date-window semantics as the mentor's
-// own getSlotHoursReleased.
+// own getSlotHoursReleased. Also breaks the same total down per mentor (byMentor)
+// so the AIG/Disha admin can track individual mentors against their own targets,
+// not just the org-wide cumulative figure — every mentor currently in the AIG is
+// included even at 0h/0 slots, so someone who's released nothing this window is
+// visible rather than silently absent.
 const getAigSlotHoursReleased = async (req, res, next) => {
   try {
     const aig = await prisma.aIG.findUnique({ where: { slug: req.params.aigSlug } });
@@ -130,13 +134,34 @@ const getAigSlotHoursReleased = async (req, res, next) => {
     toDate.setHours(0, 0, 0, 0);
     toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
 
-    const slots = await prisma.slot.findMany({
-      where: { mentorProfile: { aigId: aig.id }, startTime: { gte: fromDate, lt: toDate }, retired: false },
-      select: { startTime: true, endTime: true },
-    });
-    const hours = slots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
+    const [mentors, slots] = await Promise.all([
+      prisma.mentorProfile.findMany({
+        where: { aigId: aig.id },
+        select: { id: true, slug: true, user: { select: { name: true } } },
+      }),
+      prisma.slot.findMany({
+        where: { mentorProfile: { aigId: aig.id }, startTime: { gte: fromDate, lt: toDate }, retired: false },
+        select: { startTime: true, endTime: true, mentorProfileId: true },
+      }),
+    ]);
 
-    res.json({ hours: +hours.toFixed(1), slotCount: slots.length });
+    const byMentorMap = new Map(
+      mentors.map((m) => [m.id, { mentorProfileId: m.id, slug: m.slug, name: m.user?.name ?? "—", hours: 0, slotCount: 0 }]),
+    );
+    for (const s of slots) {
+      const entry = byMentorMap.get(s.mentorProfileId);
+      if (!entry) continue; // mentor no longer in this AIG — shouldn't happen given the where clause above
+      entry.hours += (s.endTime - s.startTime) / 3600000;
+      entry.slotCount += 1;
+    }
+    const byMentor = [...byMentorMap.values()]
+      .map((m) => ({ ...m, hours: +m.hours.toFixed(1) }))
+      .sort((a, b) => b.hours - a.hours || a.name.localeCompare(b.name));
+
+    const hours = byMentor.reduce((sum, m) => sum + m.hours, 0);
+    const slotCount = byMentor.reduce((sum, m) => sum + m.slotCount, 0);
+
+    res.json({ hours: +hours.toFixed(1), slotCount, byMentor });
   } catch (err) {
     next(err);
   }
