@@ -56,6 +56,7 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-07-24 | `47c7d44` | feat | file-backed announcement/feedback popup (no DB) — one-time feature-log or star-rating prompts, per-user tracked in server/data/ |
 | 2026-07-24 | `b28e4bd` | feat | per-mentor hours breakdown on the AIG board (incl. Disha), filterable by mentor dropdown |
 | 2026-07-22 | `7807421` | fix | replace window.confirm()/alert() with an in-app ConfirmDialog in Mentor + Placement Admin dashboards — native dialogs are silently suppressed by some in-app browsers, making Unassign/Delete Slot appear to do nothing |
 | 2026-07-22 | `5f20a0c` | feat | dual-mode time input in Create Slots — type digits or pick via the native time picker |
