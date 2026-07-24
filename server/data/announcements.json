@@ -1,0 +1,11 @@
+[
+  {
+    "id": "2026-07-feedback-1",
+    "type": "feedback",
+    "title": "Quick question",
+    "message": "How has booking and managing sessions on Parthsaarthi been for you so far? Your rating helps us prioritise what to fix next.",
+    "active": true,
+    "roles": null,
+    "createdAt": "2026-07-24T00:00:00.000Z"
+  }
+]

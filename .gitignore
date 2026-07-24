@@ -20,3 +20,9 @@ server/public/
 # safety nets only, never committed (see README.deployment.md).
 server/public_backup_*/
 server/public_backups/
+
+# Runtime data for the announcement/feedback popup (server/src/lib/announcementsStore.js).
+# server/data/announcements.json (the authored content) IS committed — only the
+# user-response log is excluded, since it's generated data, not source, and grows
+# with every response the same way DB rows would.
+server/data/announcement_responses.json

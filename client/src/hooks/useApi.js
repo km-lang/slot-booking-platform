@@ -30,6 +30,7 @@ export const QK = {
   whitelist:       ()        => ["whitelist"],
   config:          ()        => ["config"],
   bans:            ()        => ["bans"],
+  pendingAnnouncement: ()    => ["pendingAnnouncement"],
 };
 
 // ── Query hooks ───────────────────────────────────────────────────────────────
@@ -47,6 +48,27 @@ export const useUpdateProfile = () => {
     mutationFn: (body) =>
       apiFetch("/profile", { method: "PATCH", body: JSON.stringify(body) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: QK.profile() }),
+  });
+};
+
+// Polled at a slow interval rather than only on mount — a new announcement can
+// get published at any time while a user's tab is already open (e.g. a mentor
+// dashboard left open all day), and this is the only signal that'll ever
+// surface it without a page reload.
+export const usePendingAnnouncement = (enabled = true) =>
+  useQuery({
+    queryKey: QK.pendingAnnouncement(),
+    queryFn:  () => apiFetch("/announcements/pending"),
+    refetchInterval: 5 * 60_000,
+    enabled,
+  });
+
+export const useRespondToAnnouncement = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, response, rating }) =>
+      apiFetch(`/announcements/${id}/respond`, { method: "POST", body: JSON.stringify({ response, rating }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: QK.pendingAnnouncement() }),
   });
 };
 

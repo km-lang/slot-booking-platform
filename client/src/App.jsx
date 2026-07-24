@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import RequireRole from "./components/RequireRole";
 import PageTransition from "./components/ui/PageTransition";
+import AnnouncementPopup from "./components/AnnouncementPopup";
 import StudentLayout from "./pages/StudentLayout";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentMyBookings from "./pages/StudentMyBookings";
@@ -23,6 +24,8 @@ const t = (element) => <PageTransition>{element}</PageTransition>;
 
 function App() {
   return (
+    <>
+    <AnnouncementPopup />
     <Routes>
       <Route path="/login" element={t(<LoginPage />)} />
       <Route path="/unauthorized" element={t(<UnauthorizedPage />)} />
@@ -67,6 +70,7 @@ function App() {
         <Route path="/admin/:aigSlug/mentor/:mentorSlug" element={t(<AigMentorDetail />)} />
       </Route>
     </Routes>
+    </>
   );
 }
 

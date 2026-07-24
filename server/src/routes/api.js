@@ -6,11 +6,12 @@ const router = express.Router();
 const { verifySession, requireRole, requireAigScope, requireMentorAigScope } = require("../middleware/auth");
 const { bookingRateLimiter } = require("../middleware/rateLimiter");
 
-const slotController    = require("../controllers/slotController");
-const bookingController = require("../controllers/bookingController");
-const adminController   = require("../controllers/adminController");
-const exportController  = require("../controllers/exportController");
-const profileController = require("../controllers/profileController");
+const slotController        = require("../controllers/slotController");
+const bookingController     = require("../controllers/bookingController");
+const adminController       = require("../controllers/adminController");
+const exportController      = require("../controllers/exportController");
+const profileController     = require("../controllers/profileController");
+const announcementController = require("../controllers/announcementController");
 
 // All routes below require a valid session JWT
 router.use(verifySession);
@@ -18,6 +19,12 @@ router.use(verifySession);
 // ── Profile ────────────────────────────────────────────────────────────────
 router.get("/profile",   profileController.getProfile);
 router.patch("/profile", profileController.updateProfile);
+
+// ── Announcements / feedback popup ────────────────────────────────────────
+// Role-agnostic — any authenticated user can have a pending prompt (roles are
+// filtered per-announcement server-side, see announcementController).
+router.get("/announcements/pending",      announcementController.getPendingAnnouncement);
+router.post("/announcements/:id/respond", announcementController.respondToAnnouncement);
 
 // ── AIGs ───────────────────────────────────────────────────────────────────
 // STUDENT: browses AIGs to find a mentor to book.
