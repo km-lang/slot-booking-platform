@@ -56,6 +56,9 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-07-25 | `53fcd04` | fix | CSV exports now use a signed download-link + real navigation instead of a JS blob download, fixing silent failures in in-app browsers |
+| 2026-07-25 | `d5c5d24` | fix | replace the last remaining alert() (Create Slots skip notice) with an in-app banner |
+| 2026-07-25 | `fb4952b` | feat | extend JWT session length from 8h to 48h |
 | 2026-07-24 | `47c7d44` | feat | file-backed announcement/feedback popup (no DB) — one-time feature-log or star-rating prompts, per-user tracked in server/data/ |
 | 2026-07-24 | `b28e4bd` | feat | per-mentor hours breakdown on the AIG board (incl. Disha), filterable by mentor dropdown |
 | 2026-07-22 | `7807421` | fix | replace window.confirm()/alert() with an in-app ConfirmDialog in Mentor + Placement Admin dashboards — native dialogs are silently suppressed by some in-app browsers, making Unassign/Delete Slot appear to do nothing |
