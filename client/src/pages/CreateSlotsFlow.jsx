@@ -220,11 +220,16 @@ export default function CreateSlotsFlow() {
         onSuccess: (res) => {
           localStorage.removeItem(DRAFT_KEY);
           const skippedCount = res?.skipped?.length ?? 0;
-          if (skippedCount > 0 || conflictCount > 0) {
-            const totalSkipped = skippedCount + conflictCount;
-            alert(`Created ${res.slotsCreated} slot${res.slotsCreated === 1 ? "" : "s"} across ${res.releaseIds.length} day${res.releaseIds.length === 1 ? "" : "s"}. ${totalSkipped} occurrence${totalSkipped === 1 ? "" : "s"} skipped due to overlap.`);
-          }
-          navigate("/mentor");
+          // Passed via navigation state rather than alert() — some in-app browsers
+          // (WhatsApp, Instagram webviews) silently suppress window.alert(), which
+          // would leave a mentor with skipped occurrences none the wiser (see
+          // MentorDashboard's ConfirmDialog for the same root cause elsewhere).
+          // MentorDashboard reads this on mount and shows it as a dismissible banner.
+          const notice =
+            skippedCount > 0 || conflictCount > 0
+              ? `Created ${res.slotsCreated} slot${res.slotsCreated === 1 ? "" : "s"} across ${res.releaseIds.length} day${res.releaseIds.length === 1 ? "" : "s"}. ${skippedCount + conflictCount} occurrence${skippedCount + conflictCount === 1 ? "" : "s"} skipped due to overlap.`
+              : null;
+          navigate("/mentor", { state: notice ? { slotCreationNotice: notice } : undefined });
         },
       },
     );

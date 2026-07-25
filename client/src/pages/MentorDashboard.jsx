@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Plus, Users, CheckCircle, XCircle,
   ChevronLeft, ChevronRight, Trash2, AlertTriangle, Calendar,
@@ -935,6 +935,17 @@ function HoursReleasedCard() {
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function MentorDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Slot-creation partial-skip notice, handed off via navigation state instead
+  // of alert() (CreateSlotsFlow.jsx) — cleared immediately so it doesn't
+  // resurface on a refresh or on navigating back to this page later.
+  const [slotCreationNotice, setSlotCreationNotice] = useState(location.state?.slotCreationNotice ?? null);
+  useEffect(() => {
+    if (location.state?.slotCreationNotice) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data, isLoading, error } = useMentorDashboard();
   const bookedSessions    = data?.bookedSessions ?? [];
@@ -1451,6 +1462,16 @@ export default function MentorDashboard() {
               <div className="bg-red-600 text-white text-sm font-bold rounded-xl shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
                 <span>{actionError}</span>
                 <button onClick={() => setActionError(null)} className="shrink-0 text-white/80 hover:text-white" title="Dismiss">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+          {slotCreationNotice && (
+            <div className="fixed bottom-4 left-4 right-4 z-[110] max-w-md md:max-w-2xl lg:max-w-4xl mx-auto">
+              <div className="bg-amber-500 text-white text-sm font-bold rounded-xl shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
+                <span>{slotCreationNotice}</span>
+                <button onClick={() => setSlotCreationNotice(null)} className="shrink-0 text-white/80 hover:text-white" title="Dismiss">
                   <X size={16} />
                 </button>
               </div>
