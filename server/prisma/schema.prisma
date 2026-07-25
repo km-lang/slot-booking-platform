@@ -246,7 +246,7 @@ model Booking {
   idempotencyKey  String        @unique // client-generated UUID; replays return existing booking
   status          BookingStatus @default(CONFIRMED)
   allocatedBy     String?       // mentor's email, if this booking was directly allocated rather than self-booked
-  cancelledBy     Role?         // who cancelled it — only ever STUDENT today, no mentor-cancel path exists
+  cancelledBy     Role?         // who cancelled it — STUDENT (legacy, self-cancel is now disabled) or MENTOR (unassign/delete)
   cancelledAt     DateTime?
   createdAt       DateTime      @default(now())
 

@@ -6,7 +6,7 @@ const USER_KEY  = "parthsaarthi_user";
 export const API_BASE = `${import.meta.env.BASE_URL}api`;
 
 // localStorage so the session survives tab close and browser restart.
-// The JWT itself expires in 8h and is silently refreshed before that point.
+// The JWT itself expires in 48h and is silently refreshed before that point.
 export function getToken()       { return localStorage.getItem(TOKEN_KEY); }
 export function getStoredUser()  { const r = localStorage.getItem(USER_KEY); return r ? JSON.parse(r) : null; }
 export function setSession(token, user) {
@@ -93,32 +93,23 @@ export async function apiFetch(path, options = {}) {
   return res.json();
 }
 
-// CSV export endpoints return a file body, not JSON — separate from apiFetch but
-// shares its auth handling (silent refresh, 401 → logout) so an export doesn't fail
-// just because the token happened to be near expiry.
-export async function downloadFile(path, filename) {
-  const token = await getValidToken();
-  const headers = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`${API_BASE}${path}`, { headers });
-
-  if (res.status === 401) {
-    clearSession();
-    window.location.hash = "#/login";
-    throw new Error("Session expired");
-  }
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Export failed (${res.status})`);
-  }
-
-  const blob = await res.blob();
-  const href = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href, download: filename });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(href);
+// CSV exports go through a two-step, token-link flow rather than fetch()-ing
+// the CSV as a blob and triggering a[download].click() — that blob/download
+// trick is silently broken in several mobile in-app browsers (WhatsApp,
+// Instagram, LinkedIn webviews): the download attribute gets ignored, so it
+// either opens the blob in a viewer or does nothing at all, with no error.
+// A real page navigation doesn't have that problem — every browser engine,
+// embedded or not, honors a Content-Disposition: attachment response header
+// on an actual GET, and same-origin "attachment" navigations don't actually
+// replace the visible page, they just trigger the native save/share sheet.
+// `path` is the same direct-download path callers always passed (e.g.
+// "/cohort/export") — internally redirected to that route's `-link` sibling,
+// which mints a short-lived signed token via the normal authenticated
+// apiFetch; that token is the sole proof of authorization for the plain
+// navigation to /export/download, which can't carry an Authorization header.
+// `filename` is accepted for backward compatibility with existing call sites
+// but is no longer used — the server's Content-Disposition header decides it.
+export async function downloadFile(path, _filename) {
+  const { token } = await apiFetch(`${path}-link`);
+  window.location.href = `${API_BASE}/export/download?token=${encodeURIComponent(token)}`;
 }

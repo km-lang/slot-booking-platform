@@ -13,6 +13,14 @@ const exportController      = require("../controllers/exportController");
 const profileController     = require("../controllers/profileController");
 const announcementController = require("../controllers/announcementController");
 
+// Reachable via a real browser navigation (window.location.href), not a
+// fetch() — so it can't carry an Authorization header the way every other
+// route here can. Deliberately placed before verifySession: the short-lived
+// signed token in the query string (minted by the authenticated *-export-link
+// routes below) is its own proof of authorization, verified inside the
+// handler itself. See exportController.downloadWithToken for why this exists.
+router.get("/export/download", exportController.downloadWithToken);
+
 // All routes below require a valid session JWT
 router.use(verifySession);
 
@@ -123,6 +131,7 @@ router.delete(
 // POST   /api/bookings/swap            mentor: trade students between two of their own bookings
 router.get("/bookings/mine", requireRole("STUDENT"), bookingController.getMyBookings);
 router.get("/bookings/export", requireRole("STUDENT"), exportController.exportMyBookings);
+router.get("/bookings/export-link", requireRole("STUDENT"), exportController.getMyBookingsExportToken);
 router.post("/bookings", bookingRateLimiter, requireRole("STUDENT"), bookingController.createBooking);
 router.post(
   "/bookings/:id/attendance",
@@ -153,6 +162,7 @@ router.post(
 // ── Cohort (mentor) ────────────────────────────────────────────────────────
 router.get("/cohort",        requireRole("MENTOR"), slotController.getMentorCohort);
 router.get("/cohort/export", requireRole("MENTOR"), exportController.exportMentorCohort);
+router.get("/cohort/export-link", requireRole("MENTOR"), exportController.getMentorCohortExportToken);
 
 // ── AIG Admin ──────────────────────────────────────────────────────────────
 router.get(
@@ -166,6 +176,12 @@ router.get(
   requireRole("AIGs"),
   requireAigScope("aigSlug"),
   exportController.exportAigRoster,
+);
+router.get(
+  "/admin/aig/:aigSlug/export-link",
+  requireRole("AIGs"),
+  requireAigScope("aigSlug"),
+  exportController.getAigRosterExportToken,
 );
 router.get(
   "/admin/aig/:aigSlug/hours-released",
@@ -237,5 +253,6 @@ router.patch("/admin/bans/:id/lift", requireRole("SuperADMIN"), adminController.
 
 // ── Data Export ────────────────────────────────────────────────────────────
 router.get("/admin/export/roster", requireRole("SuperADMIN"), exportController.exportAdminRoster);
+router.get("/admin/export/roster-link", requireRole("SuperADMIN"), exportController.getAdminRosterExportToken);
 
 module.exports = router;
