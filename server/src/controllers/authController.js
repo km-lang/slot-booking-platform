@@ -70,7 +70,7 @@ const googleSignIn = async (req, res, next) => {
 
     const token = jwt.sign(sessionPayload, process.env.JWT_SECRET, {
       algorithm: "HS256",
-      expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+      expiresIn: process.env.JWT_EXPIRES_IN || "48h",
     });
 
     res.json({
@@ -117,7 +117,7 @@ const refreshToken = async (req, res, next) => {
 
     const token = jwt.sign(sessionPayload, process.env.JWT_SECRET, {
       algorithm: "HS256",
-      expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+      expiresIn: process.env.JWT_EXPIRES_IN || "48h",
     });
 
     res.json({ token });
