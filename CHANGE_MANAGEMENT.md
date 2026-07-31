@@ -56,6 +56,8 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-07-31 | `c37889d` | feat | Case slot descriptions, mandatory Solver on the last open seat, new Stock Pitch slot type (4-way header: CV/HR, GD, Stock Pitch, Case Study), seat counts on Open Slots cards — adds SlotType.STOCK_PITCH + BookingRelease.caseDescription |
+| 2026-07-31 | `b46480d` | chore | DB snapshot before add_case_description_and_stock_pitch migration (20260731-111411) |
 | 2026-07-25 | `53fcd04` | fix | CSV exports now use a signed download-link + real navigation instead of a JS blob download, fixing silent failures in in-app browsers |
 | 2026-07-25 | `d5c5d24` | fix | replace the last remaining alert() (Create Slots skip notice) with an in-app banner |
 | 2026-07-25 | `fb4952b` | feat | extend JWT session length from 8h to 48h |
