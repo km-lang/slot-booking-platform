@@ -30,11 +30,14 @@ enum BookingStatus {
 }
 
 // CV: today's 1:1 review slots (including the "cv_hr" focus variant — see
-// Booking.focus). GD/CASE are multi-participant, mentor-chosen capacity.
+// Booking.focus). STOCK_PITCH is also 1:1 (a student's sector/stock pitch for
+// interview prep) but has no focus sub-selector, unlike CV. GD/CASE are
+// multi-participant, mentor-chosen capacity.
 enum SlotType {
   CV
   GD
   CASE
+  STOCK_PITCH
 }
 
 // Only meaningful on a CASE booking — self-selected by the student at booking
@@ -173,7 +176,8 @@ model BookingRelease {
   cohortOnly      Boolean  @default(false)
   meetingLink     String?  // default Google Meet (or other) link applied to every slot created in this batch
   slotType        SlotType @default(CV)
-  capacity        Int      @default(1) // participants per slot; CV always 1, GD/CASE mentor-chosen (CASE >= 2)
+  capacity        Int      @default(1) // participants per slot; CV/STOCK_PITCH always 1, GD/CASE mentor-chosen (CASE >= 2)
+  caseDescription String?  // CASE slots only — the case being reviewed, shown to students before they book (~200 words)
   createdAt       DateTime @default(now())
 
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])

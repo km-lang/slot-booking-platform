@@ -159,7 +159,7 @@ const listSlots = async (req, res, next) => {
       include: {
         capacity: true,
         bookings: { where: { status: "CONFIRMED" } },
-        release: { select: { cohortOnly: true, slotType: true } },
+        release: { select: { cohortOnly: true, slotType: true, caseDescription: true } },
         waitlist: { where: { studentUserId: req.user.sub }, select: { id: true } },
       },
       orderBy: { startTime: "asc" },
@@ -194,7 +194,10 @@ const listSlots = async (req, res, next) => {
             slotType,
             seatsTaken,
             seatsMax,
-            ...(slotType === "CASE" && { solverTaken: slot.capacity?.solverClaimed ?? false }),
+            ...(slotType === "CASE" && {
+              solverTaken: slot.capacity?.solverClaimed ?? false,
+              caseDescription: slot.release?.caseDescription ?? null,
+            }),
             delayMinutes: slot.delayMinutes ?? 0,
             onWaitlist: slot.waitlist.length > 0,
             // Only reveal the meeting link and mentor contact details once the student
@@ -251,7 +254,10 @@ const getLastUsedSlotDefaults = async (req, res, next) => {
 // no-overlap constraint) so one day colliding with an existing slot doesn't block
 // the rest of the batch — it's just reported back in `skipped` instead.
 const MAX_OCCURRENCES_PER_BATCH = 60;
-const SLOT_TYPES = ["CV", "GD", "CASE"];
+const SLOT_TYPES = ["CV", "GD", "CASE", "STOCK_PITCH"];
+// ~200 words at a generous average word length — a soft ceiling, not a strict
+// word-count parser, so it never surprises a mentor mid-paste.
+const CASE_DESCRIPTION_MAX_LENGTH = 1600;
 
 const releaseSlots = async (req, res, next) => {
   try {
@@ -271,17 +277,29 @@ const releaseSlots = async (req, res, next) => {
 
     const slotType = req.body.slotType ?? "CV";
     if (!SLOT_TYPES.includes(slotType)) {
-      return res.status(400).json({ error: "slotType must be one of CV, GD, CASE" });
+      return res.status(400).json({ error: "slotType must be one of CV, GD, CASE, STOCK_PITCH" });
     }
-    // CV (including its cv_hr focus variant) stays a hard 1 regardless of what's
-    // sent — GD/CASE need a mentor-chosen capacity, CASE additionally needs room
-    // for both the 1 Solver seat and at least 1 Shadow seat.
+    // CV (including its cv_hr focus variant) and STOCK_PITCH stay a hard 1:1
+    // regardless of what's sent — GD/CASE need a mentor-chosen capacity, CASE
+    // additionally needs room for both the 1 Solver seat and at least 1 Shadow seat.
     let capacity = 1;
-    if (slotType !== "CV") {
+    if (slotType === "GD" || slotType === "CASE") {
       capacity = Number(req.body.capacity);
       if (!Number.isInteger(capacity) || capacity < 2) {
         return res.status(400).json({ error: `capacity must be an integer of at least 2 for ${slotType} slots` });
       }
+    }
+
+    // Case description — CASE slots only, optional but capped so it can't balloon
+    // into an essay; shown to students before they book so they know what the
+    // case is about ahead of time.
+    let caseDescription = null;
+    if (slotType === "CASE") {
+      const raw = (req.body.caseDescription ?? "").trim();
+      if (raw.length > CASE_DESCRIPTION_MAX_LENGTH) {
+        return res.status(400).json({ error: `caseDescription must be ${CASE_DESCRIPTION_MAX_LENGTH} characters or fewer (~200 words)` });
+      }
+      caseDescription = raw || null;
     }
 
     const rawOccurrences = Array.isArray(req.body.occurrences) && req.body.occurrences.length > 0
@@ -340,6 +358,7 @@ const releaseSlots = async (req, res, next) => {
               meetingLink: meetingLink || null,
               slotType,
               capacity,
+              caseDescription,
             },
           });
 
@@ -644,7 +663,8 @@ const listMentorOwnSlots = async (req, res, next) => {
       where: { mentorProfileId: mentorProfile.id, startTime: { gte: now }, retired: false },
       include: {
         bookings: { where: { status: { not: "CANCELLED" } } },
-        release: { select: { cohortOnly: true, slotType: true } },
+        capacity: { select: { max: true, current: true } },
+        release: { select: { cohortOnly: true, slotType: true, caseDescription: true } },
       },
       orderBy: { startTime: "asc" },
     });
@@ -657,6 +677,14 @@ const listMentorOwnSlots = async (req, res, next) => {
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
         slotType: s.release?.slotType ?? "CV",
+        // Seat count for multi-participant types (GD/CASE) — this list only ever
+        // holds zero-booking slots today (see the .filter above), so seatsTaken is
+        // always 0 here, but the mentor dashboard shows it explicitly rather than
+        // showing nothing, which previously left "0 booked" indistinguishable from
+        // "no seat concept at all" for these slot types.
+        seatsMax: s.capacity?.max ?? 1,
+        seatsTaken: s.capacity?.current ?? 0,
+        ...(s.release?.slotType === "CASE" && { caseDescription: s.release?.caseDescription ?? null }),
         meetingLink: s.meetingLink ?? null,
         published: s.published,
       }));

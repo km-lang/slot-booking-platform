@@ -17,7 +17,8 @@ const FOCUS_LABELS = {
   cv_hr:   "CV-HR",
 };
 
-const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study" };
+const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study", STOCK_PITCH: "Stock Pitch" };
+const MULTI_PARTICIPANT_TYPES = ["GD", "CASE"];
 const ROLE_LABELS = { SOLVER: "Solver", SHADOW: "Shadow" };
 
 const fmt = (d) =>
@@ -108,11 +109,11 @@ export default function MentorBookingView() {
   };
 
   // What's required to submit depends on the slot type — CV needs a focus, CASE
-  // needs a role, GD needs neither.
+  // needs a role, GD/STOCK_PITCH need neither.
   const canSubmit = (slot) => {
     if (!slot) return false;
     if (slot.slotType === "CASE") return !!role;
-    if (slot.slotType === "GD") return true;
+    if (slot.slotType === "GD" || slot.slotType === "STOCK_PITCH") return true;
     return !!purpose;
   };
 
@@ -210,7 +211,8 @@ export default function MentorBookingView() {
                       )}
                       {SLOT_TYPE_LABELS[slot.slotType] && (
                         <span className="flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
-                          {SLOT_TYPE_LABELS[slot.slotType]} · {slot.seatsTaken}/{slot.seatsMax}
+                          {SLOT_TYPE_LABELS[slot.slotType]}
+                          {MULTI_PARTICIPANT_TYPES.includes(slot.slotType) && ` · ${slot.seatsTaken}/${slot.seatsMax}`}
                         </span>
                       )}
                       {isMine && slot.focus && (
@@ -324,41 +326,69 @@ export default function MentorBookingView() {
                 </div>
               </div>
 
-              {selectedSlot.slotType === "CASE" ? (
-                <div className="mb-6">
-                  <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
-                    Your Role (Required)
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      disabled={selectedSlot.solverTaken}
-                      onClick={() => setRole("SOLVER")}
-                      className={`py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed
-                        ${role === "SOLVER" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-200 text-emerald-900/70 hover:bg-emerald-50"}`}
-                    >
-                      Solver
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRole("SHADOW")}
-                      className={`py-3 rounded-xl text-sm font-bold border transition-colors
-                        ${role === "SHADOW" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-200 text-emerald-900/70 hover:bg-emerald-50"}`}
-                    >
-                      Shadow
-                    </button>
-                  </div>
-                  {selectedSlot.solverTaken && (
-                    <p className="text-[10px] font-bold text-emerald-700/50 mt-2">
-                      Solver seat is already taken — join as a Shadow.
-                    </p>
-                  )}
-                </div>
-              ) : selectedSlot.slotType === "GD" ? (
+              {selectedSlot.slotType === "CASE" ? (() => {
+                // Every Case slot needs exactly one Solver — if this is the last open
+                // seat and nobody's claimed Solver yet, Shadow is disabled so the last
+                // person in is forced to be the Solver (mirrors the server-side guard
+                // in claimSlotAndCreateBooking, which would reject a Shadow claim here
+                // anyway — this just keeps the student from hitting that as an error).
+                const lastSeatNeedsSolver = !selectedSlot.solverTaken && (selectedSlot.seatsMax - selectedSlot.seatsTaken === 1);
+                return (
+                  <>
+                    {selectedSlot.caseDescription && (
+                      <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                        <p className="text-[10px] font-black text-indigo-800 uppercase tracking-widest mb-1.5">The Case</p>
+                        <p className="text-xs font-semibold text-indigo-900/80 whitespace-pre-wrap">{selectedSlot.caseDescription}</p>
+                      </div>
+                    )}
+                    <div className="mb-6">
+                      <label className="block text-[11px] font-bold text-emerald-800/60 uppercase tracking-widest mb-2">
+                        Your Role (Required)
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={selectedSlot.solverTaken}
+                          onClick={() => setRole("SOLVER")}
+                          className={`py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                            ${role === "SOLVER" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-200 text-emerald-900/70 hover:bg-emerald-50"}`}
+                        >
+                          Solver
+                        </button>
+                        <button
+                          type="button"
+                          disabled={lastSeatNeedsSolver}
+                          onClick={() => setRole("SHADOW")}
+                          className={`py-3 rounded-xl text-sm font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+                            ${role === "SHADOW" ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-200 text-emerald-900/70 hover:bg-emerald-50"}`}
+                        >
+                          Shadow
+                        </button>
+                      </div>
+                      {selectedSlot.solverTaken ? (
+                        <p className="text-[10px] font-bold text-emerald-700/50 mt-2">
+                          Solver seat is already taken — join as a Shadow.
+                        </p>
+                      ) : lastSeatNeedsSolver ? (
+                        <p className="text-[10px] font-bold text-amber-700 mt-2">
+                          This is the last open seat and every Case slot needs a Solver — you'll be joining as the Solver.
+                        </p>
+                      ) : null}
+                    </div>
+                  </>
+                );
+              })() : selectedSlot.slotType === "GD" ? (
                 <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
                   <p className="text-xs font-bold text-indigo-800">Group Discussion</p>
                   <p className="text-[11px] font-semibold text-indigo-700/70 mt-1">
                     {selectedSlot.seatsTaken}/{selectedSlot.seatsMax} participants joined so far
+                  </p>
+                </div>
+              ) : selectedSlot.slotType === "STOCK_PITCH" ? (
+                <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                  <p className="text-xs font-bold text-indigo-800">Stock Pitch Review</p>
+                  <p className="text-[11px] font-semibold text-indigo-700/70 mt-1">
+                    Come prepared to present your sector/stock pitch.
                   </p>
                 </div>
               ) : (

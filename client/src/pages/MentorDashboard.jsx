@@ -31,7 +31,8 @@ const FOCUS_LABELS = {
   cv_hr:   "CV-HR",
 };
 
-const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study" };
+const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study", STOCK_PITCH: "Stock Pitch" };
+const MULTI_PARTICIPANT_TYPES = ["GD", "CASE"];
 
 const DELAY_PRESETS = [5, 10, 15, 20, 30];
 
@@ -1367,7 +1368,10 @@ export default function MentorDashboard() {
                       <div className="font-bold text-emerald-950 text-sm mb-1">{slot.time}</div>
                       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest">
                         {SLOT_TYPE_LABELS[slot.slotType] && (
-                          <span className="bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded">{SLOT_TYPE_LABELS[slot.slotType]}</span>
+                          <span className="bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded">
+                            {SLOT_TYPE_LABELS[slot.slotType]}
+                            {MULTI_PARTICIPANT_TYPES.includes(slot.slotType) && ` · ${slot.seatsTaken}/${slot.seatsMax}`}
+                          </span>
                         )}
                         {slot.cohortOnly && (
                           <span className="bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">Cohort Only</span>

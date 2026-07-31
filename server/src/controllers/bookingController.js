@@ -28,6 +28,7 @@ const applyStrikeAndMaybeBan = async (tx, userId, bookingId, reason, issuedBy = 
 // distinguishes their seat from anyone else's in the same slot.
 const describeSession = (slotType, focus, role) => {
   if (slotType === "GD") return { label: "Group Discussion", description: "Group Discussion session via Parthsaarthi." };
+  if (slotType === "STOCK_PITCH") return { label: "Stock Pitch", description: "Stock Pitch review session via Parthsaarthi." };
   if (slotType === "CASE") {
     const roleLabel = role === "SOLVER" ? "Solver" : "Shadow";
     return { label: "Case Study", description: `Case Study session (${roleLabel}) via Parthsaarthi.` };
@@ -171,7 +172,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
       return { ok: false, status: 400, error: "focus (overall|workex|por|cv_hr) is required for this slot" };
     }
     role = null;
-  } else if (slotType === "GD") {
+  } else if (slotType === "GD" || slotType === "STOCK_PITCH") {
     focus = null;
     role = null;
   } else if (slotType === "CASE") {
@@ -183,6 +184,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
 
   const SLOT_FULL = Symbol("slot full");
   const SOLVER_TAKEN = Symbol("solver seat already taken");
+  const LAST_SEAT_NEEDS_SOLVER = Symbol("last seat must be the solver");
   const MENTOR_CONFLICT = Symbol("already booked with this mentor");
   try {
     const booking = await prisma.$transaction(async (tx) => {
@@ -193,11 +195,20 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
       // through at once — confirmed empirically: that exact shape let 7 students book
       // a 1-capacity slot under concurrent load before this fix. The Solver claim
       // reuses the exact same pattern, just with solverClaimed folded into the same
-      // one-statement UPDATE instead of a separate read-then-write.
+      // one-statement UPDATE instead of a separate read-then-write. The Shadow claim
+      // additionally refuses to take the very last open seat while no Solver has
+      // claimed one yet — otherwise a CASE slot could fill entirely with Shadows and
+      // never get a Solver at all, since nothing else forces one to be picked.
       const claims = role === "SOLVER"
         ? await tx.$executeRaw`
             UPDATE "SlotCapacity" SET current = current + 1, "solverClaimed" = true
             WHERE "slotId" = ${slotId} AND current < max AND "solverClaimed" = false
+          `
+        : role === "SHADOW"
+        ? await tx.$executeRaw`
+            UPDATE "SlotCapacity" SET current = current + 1
+            WHERE "slotId" = ${slotId} AND current < max
+              AND NOT (current = max - 1 AND "solverClaimed" = false)
           `
         : await tx.$executeRaw`
             UPDATE "SlotCapacity" SET current = current + 1
@@ -207,6 +218,10 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
         if (role === "SOLVER") {
           const cap = await tx.slotCapacity.findUnique({ where: { slotId } });
           throw cap && cap.current >= cap.max ? SLOT_FULL : SOLVER_TAKEN;
+        }
+        if (role === "SHADOW") {
+          const cap = await tx.slotCapacity.findUnique({ where: { slotId } });
+          throw cap && cap.current >= cap.max ? SLOT_FULL : LAST_SEAT_NEEDS_SOLVER;
         }
         throw SLOT_FULL;
       }
@@ -246,6 +261,9 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
     }
     if (err === SOLVER_TAKEN) {
       return { ok: false, status: 409, error: "Someone already claimed the Solver seat — please choose Shadow instead" };
+    }
+    if (err === LAST_SEAT_NEEDS_SOLVER) {
+      return { ok: false, status: 409, error: "This is the last open seat and every Case slot needs a Solver — please choose Solver instead" };
     }
     if (err === MENTOR_CONFLICT) {
       return { ok: false, status: 409, error: "This student already has an active booking with this mentor" };

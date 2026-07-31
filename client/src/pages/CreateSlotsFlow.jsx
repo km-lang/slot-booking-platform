@@ -21,10 +21,15 @@ const DRAFT_KEY = "parthsaarthi:createSlotsDraft";
 const MAX_OCCURRENCES_PER_BATCH = 60;
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const SLOT_TYPES = [
-  { value: "CV",   label: "CV Review" },
-  { value: "GD",   label: "Group Discussion" },
-  { value: "CASE", label: "Case Study" },
+  { value: "CV",          label: "CV/HR" },
+  { value: "GD",          label: "Group Discussion" },
+  { value: "STOCK_PITCH", label: "Stock Pitch" },
+  { value: "CASE",        label: "Case Study" },
 ];
+const MULTI_PARTICIPANT_TYPES = ["GD", "CASE"];
+// Soft ceiling matching the server's CASE_DESCRIPTION_MAX_LENGTH — a plain
+// character cap standing in for "~200 words" without parsing actual words.
+const CASE_DESCRIPTION_MAX_LENGTH = 1600;
 // Quick-fill shortcuts for the Ends field — not the only way to set it, the field
 // itself (both Day and Time) is always directly editable.
 const QUICK_DURATIONS_MIN = [60, 120, 180, 240];
@@ -56,6 +61,7 @@ export default function CreateSlotsFlow() {
   const [endTime, setEndTime]         = useState("16:00");
   const [slotType, setSlotType]       = useState("CV");
   const [capacity, setCapacity]       = useState(4); // GD/CASE only — participants per slot
+  const [caseDescription, setCaseDescription] = useState(""); // CASE only
   const [slotDuration, setSlotDuration]         = useState(30);
   const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(VENUE_OPTIONS[0]);
@@ -90,6 +96,7 @@ export default function CreateSlotsFlow() {
         if (d.endTime) setEndTime(d.endTime);
         if (d.slotType) setSlotType(d.slotType);
         if (d.capacity) setCapacity(d.capacity);
+        if (typeof d.caseDescription === "string") setCaseDescription(d.caseDescription);
         if (d.slotDuration) setSlotDuration(d.slotDuration);
         if (typeof d.isCustomDuration === "boolean") setIsCustomDuration(d.isCustomDuration);
         if (d.selectedVenue) setSelectedVenue(d.selectedVenue);
@@ -120,11 +127,11 @@ export default function CreateSlotsFlow() {
   useEffect(() => {
     if (!hydratedRef.current) return; // don't stomp a draft mid-restore
     const draft = {
-      startDate, startTime, endDate, endTime, slotType, capacity, slotDuration, isCustomDuration,
+      startDate, startTime, endDate, endTime, slotType, capacity, caseDescription, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil,
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [startDate, startTime, endDate, endTime, slotType, capacity, slotDuration, isCustomDuration,
+  }, [startDate, startTime, endDate, endTime, slotType, capacity, caseDescription, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil]);
 
   // First time Repeat Weekly is switched on, pre-check the start date's own
@@ -213,7 +220,8 @@ export default function CreateSlotsFlow() {
         cohortOnly,
         publish: publishNow,
         slotType,
-        ...(slotType !== "CV" && { capacity }),
+        ...(MULTI_PARTICIPANT_TYPES.includes(slotType) && { capacity }),
+        ...(slotType === "CASE" && caseDescription.trim() && { caseDescription: caseDescription.trim() }),
         ...(isOnlineVenue && meetingLink.trim() && { meetingLink: meetingLink.trim() }),
       },
       {
@@ -279,7 +287,7 @@ export default function CreateSlotsFlow() {
             <div className="space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Slot Type</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {SLOT_TYPES.map((t) => (
                     <button key={t.value} type="button" onClick={() => setSlotType(t.value)}
                       className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${slotType === t.value ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
@@ -287,7 +295,7 @@ export default function CreateSlotsFlow() {
                     </button>
                   ))}
                 </div>
-                {slotType !== "CV" && (
+                {MULTI_PARTICIPANT_TYPES.includes(slotType) && (
                   <div className="mt-3 bg-white border border-emerald-900/10 rounded-xl p-3">
                     <div className="flex items-center justify-between">
                       <label className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800/60 uppercase">
@@ -303,9 +311,29 @@ export default function CreateSlotsFlow() {
                     </div>
                     {slotType === "CASE" && (
                       <p className="text-[10px] font-bold text-emerald-700/50 mt-2">
-                        1 Solver + {capacity - 1} Shadow{capacity - 1 !== 1 ? "s" : ""}
+                        1 Solver + {capacity - 1} Shadow{capacity - 1 !== 1 ? "s" : ""} — every Case slot requires exactly one Solver
                       </p>
                     )}
+                  </div>
+                )}
+                {slotType === "CASE" && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-emerald-800/60 uppercase">
+                        Case Description <span className="text-emerald-700/40 font-semibold normal-case">(optional — shown to students before they book)</span>
+                      </label>
+                      <span className={`text-[10px] font-bold ${caseDescription.length > CASE_DESCRIPTION_MAX_LENGTH ? "text-red-600" : "text-emerald-700/40"}`}>
+                        {caseDescription.length}/{CASE_DESCRIPTION_MAX_LENGTH}
+                      </span>
+                    </div>
+                    <textarea
+                      value={caseDescription}
+                      onChange={(e) => setCaseDescription(e.target.value)}
+                      maxLength={CASE_DESCRIPTION_MAX_LENGTH}
+                      rows={5}
+                      placeholder="Briefly describe the case — industry, situation, what students should come prepared with…"
+                      className="w-full bg-white border border-emerald-900/10 rounded-xl px-4 py-3 text-sm font-semibold text-emerald-950 outline-none resize-none"
+                    />
                   </div>
                 )}
               </div>
@@ -504,9 +532,15 @@ export default function CreateSlotsFlow() {
                   <span className="font-semibold text-emerald-700/60">Type</span>
                   <span className="font-bold text-emerald-950">
                     {SLOT_TYPES.find((t) => t.value === slotType)?.label}
-                    {slotType !== "CV" && ` · ${capacity} per slot`}
+                    {MULTI_PARTICIPANT_TYPES.includes(slotType) && ` · ${capacity} per slot`}
                   </span>
                 </div>
+                {slotType === "CASE" && caseDescription.trim() && (
+                  <div className="text-xs">
+                    <span className="font-semibold text-emerald-700/60 block mb-1">Case Description</span>
+                    <p className="font-semibold text-emerald-950 bg-[var(--color-bg)] rounded-lg p-2.5 whitespace-pre-wrap">{caseDescription.trim()}</p>
+                  </div>
+                )}
                 {repeatWeekly ? (
                   <>
                     <div className="flex justify-between text-xs">
