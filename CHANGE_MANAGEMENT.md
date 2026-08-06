@@ -52,6 +52,13 @@ new entries should always carry a real prefix.
 <!-- Newest release at the top of each month's table. Add new months above
      the previous one, immediately under this comment. -->
 
+### August 2026
+
+| Date | Commit | Type | Summary |
+|---|---|---|---|
+| 2026-08-06 | `bfef239` | feat | Single-Solver Case slots (capacity 1, no Shadow), one-active-booking-per-mentor limit now scoped per slotType+focus instead of per mentor overall, swap blocked across slot types/CASE roles, fixed reassign/unassign/swap emails hardcoding "CV Review", Disha/AIG admin slot count now excludes unbooked slots — adds `Booking.slotType` and `booking_one_active_per_mentor_type` index |
+| 2026-08-06 | `fa02b9b` | chore | DB snapshot before add_booking_slot_type_and_per_type_mentor_limit migration (20260806-120853) |
+
 ### July 2026
 
 | Date | Commit | Type | Summary |
