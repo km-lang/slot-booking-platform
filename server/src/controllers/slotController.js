@@ -280,13 +280,18 @@ const releaseSlots = async (req, res, next) => {
       return res.status(400).json({ error: "slotType must be one of CV, GD, CASE, STOCK_PITCH" });
     }
     // CV (including its cv_hr focus variant) and STOCK_PITCH stay a hard 1:1
-    // regardless of what's sent — GD/CASE need a mentor-chosen capacity, CASE
-    // additionally needs room for both the 1 Solver seat and at least 1 Shadow seat.
+    // regardless of what's sent — GD/CASE need a mentor-chosen capacity. GD needs
+    // at least 2 (it's a group). CASE allows 1 — a Solver-only session with no
+    // Shadow seat at all — or 2+ for the usual 1 Solver + Shadow(s) mix; the
+    // mandatory-Solver claim guard in claimSlotAndCreateBooking already handles a
+    // capacity of 1 correctly since the one seat is simultaneously "current" and
+    // "the last seat", so Shadow can never claim it.
     let capacity = 1;
     if (slotType === "GD" || slotType === "CASE") {
       capacity = Number(req.body.capacity);
-      if (!Number.isInteger(capacity) || capacity < 2) {
-        return res.status(400).json({ error: `capacity must be an integer of at least 2 for ${slotType} slots` });
+      const minCapacity = slotType === "GD" ? 2 : 1;
+      if (!Number.isInteger(capacity) || capacity < minCapacity) {
+        return res.status(400).json({ error: `capacity must be an integer of at least ${minCapacity} for ${slotType} slots` });
       }
     }
 

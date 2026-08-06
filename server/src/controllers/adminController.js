@@ -118,6 +118,10 @@ const getAigOverview = async (req, res, next) => {
 // not just the org-wide cumulative figure — every mentor currently in the AIG is
 // included even at 0h/0 slots, so someone who's released nothing this window is
 // visible rather than silently absent.
+// slotCount deliberately excludes empty slots (capacity.current === 0, i.e. nobody
+// has booked it) — the Disha/AIG admin wants a count of slots actually put to use,
+// not just released. `hours` is left as total released hours regardless of booking
+// status, since that wasn't asked to change.
 const getAigSlotHoursReleased = async (req, res, next) => {
   try {
     const aig = await prisma.aIG.findUnique({ where: { slug: req.params.aigSlug } });
@@ -141,7 +145,7 @@ const getAigSlotHoursReleased = async (req, res, next) => {
       }),
       prisma.slot.findMany({
         where: { mentorProfile: { aigId: aig.id }, startTime: { gte: fromDate, lt: toDate }, retired: false },
-        select: { startTime: true, endTime: true, mentorProfileId: true },
+        select: { startTime: true, endTime: true, mentorProfileId: true, capacity: { select: { current: true } } },
       }),
     ]);
 
@@ -152,7 +156,7 @@ const getAigSlotHoursReleased = async (req, res, next) => {
       const entry = byMentorMap.get(s.mentorProfileId);
       if (!entry) continue; // mentor no longer in this AIG — shouldn't happen given the where clause above
       entry.hours += (s.endTime - s.startTime) / 3600000;
-      entry.slotCount += 1;
+      if ((s.capacity?.current ?? 0) > 0) entry.slotCount += 1;
     }
     const byMentor = [...byMentorMap.values()]
       .map((m) => ({ ...m, hours: +m.hours.toFixed(1) }))

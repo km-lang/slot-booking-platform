@@ -136,9 +136,13 @@ function AllocateSheet({ slot, isOpen, onClose }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null); // { pgpId, name, email, cohortLabel }
   const [focus, setFocus] = useState("overall");
-  const [role, setRole] = useState("SHADOW"); // CASE only
+  const [role, setRole] = useState("SOLVER"); // CASE only — SOLVER is always valid, unlike SHADOW on a 1-seat slot
   const allocate = useAllocateSlot();
   const slotType = slot?.slotType ?? "CV";
+  // This list only ever holds unbooked slots (seatsTaken is always 0 here), so a
+  // capacity-1 CASE slot always needs its one seat to be the Solver — mirrors the
+  // server-side guard in claimSlotAndCreateBooking / the student booking sheet.
+  const lastSeatNeedsSolver = slotType === "CASE" && (slot?.seatsMax ?? 1) - (slot?.seatsTaken ?? 0) === 1;
 
   // Only search while the mentor is still typing — once a student is picked, the
   // dropdown closes and re-editing the text clears the selection.
@@ -156,8 +160,12 @@ function AllocateSheet({ slot, isOpen, onClose }) {
 
   const handleSubmit = () => {
     if (!selected || !slot) return;
+    // role can be left over from a previously-opened slot (this sheet's state
+    // isn't reset per-slot) — force it back to the only valid choice rather than
+    // relying on the disabled button alone to have caught it.
+    const effectiveRole = lastSeatNeedsSolver ? "SOLVER" : role;
     allocate.mutate(
-      { slotId: slot.id, pgpId: selected.pgpId, focus: slotType === "CV" ? focus : undefined, role: slotType === "CASE" ? role : undefined },
+      { slotId: slot.id, pgpId: selected.pgpId, focus: slotType === "CV" ? focus : undefined, role: slotType === "CASE" ? effectiveRole : undefined },
       { onSuccess: onClose },
     );
   };
@@ -226,12 +234,19 @@ function AllocateSheet({ slot, isOpen, onClose }) {
               <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Role</label>
               <div className="grid grid-cols-2 gap-2">
                 {["SOLVER", "SHADOW"].map((r) => (
-                  <button key={r} type="button" onClick={() => setRole(r)}
-                    className={`py-2 rounded-xl text-[11px] font-bold border transition-colors ${role === r ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
+                  <button key={r} type="button"
+                    disabled={r === "SHADOW" && lastSeatNeedsSolver}
+                    onClick={() => setRole(r)}
+                    className={`py-2 rounded-xl text-[11px] font-bold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${role === r ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-[var(--color-bg)] border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
                     {r === "SOLVER" ? "Solver" : "Shadow"}
                   </button>
                 ))}
               </div>
+              {lastSeatNeedsSolver && (
+                <p className="text-[10px] font-bold text-amber-700 mt-2">
+                  This slot has only one seat, so it must be filled as the Solver.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -589,7 +604,7 @@ const ROLE_BADGE = {
 function ParticipantActions({ participant, session, onAttendance, pendingBookingId, onReassign, onSwap, onUnassign, pendingUnassignId, hasStarted, isOverdue }) {
   const isPending = pendingBookingId === participant.bookingId;
   const isUnassignPending = pendingUnassignId === participant.bookingId;
-  const asBooking = { bookingId: participant.bookingId, student: { name: participant.name, pgp: participant.pgp }, date: session.date, time: session.time, endTime: session.endTime };
+  const asBooking = { bookingId: participant.bookingId, student: { name: participant.name, pgp: participant.pgp }, date: session.date, time: session.time, endTime: session.endTime, slotType: session.slotType, role: participant.role ?? null };
 
   return (
     <>
@@ -1001,10 +1016,22 @@ export default function MentorDashboard() {
       date: s.date,
       time: s.time,
       endTime: s.endTime,
+      slotType: s.slotType,
+      role: p.role ?? null,
     })),
   );
+  // Server rejects a swap across slot types, and for CASE across roles (it'd
+  // desync SlotCapacity.solverClaimed / risk two Solvers in one slot — see
+  // swapBookings) — filtered out here too so the picker never offers a choice
+  // that would just come back as an error.
   const swapCandidates = allBookedParticipants.filter(
-    (c) => c.bookingId !== swapTarget?.bookingId && new Date(c.endTime) > new Date(),
+    (c) =>
+      c.bookingId !== swapTarget?.bookingId &&
+      new Date(c.endTime) > new Date() &&
+      (!swapTarget || (
+        c.slotType === swapTarget.slotType &&
+        (swapTarget.slotType !== "CASE" || c.role === swapTarget.role)
+      )),
   );
 
   const handleAttendance = (bookingId, status) => {

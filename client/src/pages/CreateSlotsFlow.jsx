@@ -289,7 +289,12 @@ export default function CreateSlotsFlow() {
                 <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1">Slot Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   {SLOT_TYPES.map((t) => (
-                    <button key={t.value} type="button" onClick={() => setSlotType(t.value)}
+                    <button key={t.value} type="button" onClick={() => {
+                      setSlotType(t.value);
+                      // GD always needs 2+; switching away from a 1-seat CASE slot
+                      // must not carry an invalid capacity over to GD.
+                      if (t.value === "GD") setCapacity((c) => Math.max(2, c));
+                    }}
                       className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${slotType === t.value ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}>
                       {t.label}
                     </button>
@@ -302,7 +307,7 @@ export default function CreateSlotsFlow() {
                         <Users size={12} /> Participants Per Slot
                       </label>
                       <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => setCapacity((c) => Math.max(2, c - 1))}
+                        <button type="button" onClick={() => setCapacity((c) => Math.max(slotType === "CASE" ? 1 : 2, c - 1))}
                           className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-sm">−</button>
                         <span className="w-6 text-center font-black text-emerald-950 text-sm">{capacity}</span>
                         <button type="button" onClick={() => setCapacity((c) => Math.min(30, c + 1))}
@@ -311,7 +316,9 @@ export default function CreateSlotsFlow() {
                     </div>
                     {slotType === "CASE" && (
                       <p className="text-[10px] font-bold text-emerald-700/50 mt-2">
-                        1 Solver + {capacity - 1} Shadow{capacity - 1 !== 1 ? "s" : ""} — every Case slot requires exactly one Solver
+                        {capacity === 1
+                          ? "1 Solver, no Shadow seats — a one-on-one Case session"
+                          : `1 Solver + ${capacity - 1} Shadow${capacity - 1 !== 1 ? "s" : ""} — every Case slot requires exactly one Solver`}
                       </p>
                     )}
                   </div>

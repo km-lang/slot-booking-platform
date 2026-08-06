@@ -233,6 +233,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
             slotId,
             studentUserId,
             mentorProfileId: claimedSlot.mentorProfileId,
+            slotType,
             focus,
             role,
             idempotencyKey,
@@ -243,7 +244,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
       } catch (err) {
         // Two unique constraints can fire here: idempotencyKey (already ruled out by
         // the upfront check above, bar a genuine concurrent replay) and the partial
-        // index enforcing one active booking per student-mentor pair.
+        // index enforcing one active booking per student-mentor-slotType-focus combo.
         if (err.code === "P2002" && !JSON.stringify(err.meta ?? {}).includes("idempotencyKey")) {
           throw MENTOR_CONFLICT;
         }
@@ -266,7 +267,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
       return { ok: false, status: 409, error: "This is the last open seat and every Case slot needs a Solver — please choose Solver instead" };
     }
     if (err === MENTOR_CONFLICT) {
-      return { ok: false, status: 409, error: "This student already has an active booking with this mentor" };
+      return { ok: false, status: 409, error: "This student already has an active booking of this type with this mentor" };
     }
     if (err.code === "P2002") {
       const replay = await prisma.booking.findUnique({ where: { idempotencyKey } });
@@ -436,13 +437,23 @@ const reassignBooking = async (req, res, next) => {
       return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
     }
 
+    // Mirrors the DB constraint's scope (studentUserId, mentorProfileId, slotType,
+    // focus) — a conflict here is only real if it's the same slot type and, for CV,
+    // the same focus. A CASE booking elsewhere with this mentor is no longer a
+    // blocker for a CV-HR reassignment, for example.
     const conflict = await prisma.booking.findFirst({
-      where: { studentUserId: newStudentProfile.userId, mentorProfileId: mentorProfile.id, status: "CONFIRMED" },
+      where: {
+        studentUserId: newStudentProfile.userId,
+        mentorProfileId: mentorProfile.id,
+        status: "CONFIRMED",
+        slotType: booking.slot.release.slotType,
+        focus: booking.focus,
+      },
     });
     if (conflict) {
       return res
         .status(409)
-        .json({ error: "This student already has an active booking with this mentor — use Swap instead" });
+        .json({ error: "This student already has an active booking of this type with this mentor — use Swap instead" });
     }
 
     const oldStudent = booking.student;
@@ -474,6 +485,8 @@ const reassignBooking = async (req, res, next) => {
       const date = fmtDate(booking.slot.startTime);
       const time = fmtTime(booking.slot.startTime);
       const sequence = booking.slot.icsSequence + 1; // must exceed any prior reschedule/cancel's sequence
+      const { label: sessionLabel, description: sessionDescription } =
+        describeSession(booking.slot.release.slotType, booking.focus, booking.role);
 
       if (newStudentProfile.user?.email) {
         const newIcs = buildSessionEvent({
@@ -483,8 +496,8 @@ const reassignBooking = async (req, res, next) => {
           status: "CONFIRMED",
           startTime: booking.slot.startTime,
           endTime: booking.slot.endTime,
-          summary: `CV Review: ${newStudentName} × ${mentorName}`,
-          description: "CV Review session via Parthsaarthi.",
+          summary: `${sessionLabel}: ${newStudentName} × ${mentorName}`,
+          description: sessionDescription,
           location: booking.slot.venue,
           meetingLink: booking.slot.meetingLink ?? null,
           organizerEmail: CALENDAR_ORGANIZER_EMAIL,
@@ -495,8 +508,8 @@ const reassignBooking = async (req, res, next) => {
           ],
         });
         const newCalendarLink = buildGoogleCalendarLink({
-          summary: `CV Review: ${newStudentName} × ${mentorName}`,
-          description: "CV Review session via Parthsaarthi.",
+          summary: `${sessionLabel}: ${newStudentName} × ${mentorName}`,
+          description: sessionDescription,
           location: booking.slot.venue,
           startTime: booking.slot.startTime,
           endTime: booking.slot.endTime,
@@ -525,7 +538,7 @@ const reassignBooking = async (req, res, next) => {
           status: "CANCELLED",
           startTime: booking.slot.startTime,
           endTime: booking.slot.endTime,
-          summary: `CV Review: ${oldStudentName} × ${mentorName}`,
+          summary: `${sessionLabel}: ${oldStudentName} × ${mentorName}`,
           description: "This session was reassigned to another student via Parthsaarthi.",
           location: booking.slot.venue,
           organizerEmail: CALENDAR_ORGANIZER_EMAIL,
@@ -565,7 +578,7 @@ const unassignBooking = async (req, res, next) => {
     const booking = await prisma.booking.findUnique({
       where: { id: req.params.id },
       include: {
-        slot: true,
+        slot: { include: { release: true } },
         student: { select: { name: true, email: true } },
       },
     });
@@ -613,6 +626,7 @@ const unassignBooking = async (req, res, next) => {
       const fmtTime = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
       const mentorName = mentorProfile.user?.name ?? "your mentor";
       const studentName = booking.student.name ?? booking.student.email;
+      const { label: sessionLabel } = describeSession(booking.slot.release.slotType, booking.focus, booking.role);
       const icsContent = buildSessionEvent({
         uid: booking.id,
         sequence: updatedSlot.icsSequence,
@@ -620,7 +634,7 @@ const unassignBooking = async (req, res, next) => {
         status: "CANCELLED",
         startTime: booking.slot.startTime,
         endTime: booking.slot.endTime,
-        summary: `CV Review: ${studentName} × ${mentorName}`,
+        summary: `${sessionLabel}: ${studentName} × ${mentorName}`,
         description: "This session was cancelled via Parthsaarthi.",
         location: booking.slot.venue,
         organizerEmail: CALENDAR_ORGANIZER_EMAIL,
@@ -647,10 +661,12 @@ const unassignBooking = async (req, res, next) => {
 // Trades which student sits on which of the mentor's own two confirmed
 // bookings — e.g. two students both want to swap their session times. Deletes
 // and recreates both Booking rows rather than updating studentUserId in place:
-// both rows share the same mentorProfileId, and booking_one_active_per_mentor
-// (a plain, non-deferrable partial unique index on (studentUserId,
-// mentorProfileId) WHERE status='CONFIRMED') would transiently collide if
-// updated one at a time — row A would briefly duplicate row B's still-unswapped
+// both rows share the same mentorProfileId (and, since the equality check above
+// requires it, the same slotType/focus bucket too), and
+// booking_one_active_per_mentor_type (a plain, non-deferrable partial unique index
+// on (studentUserId, mentorProfileId, slotType, COALESCE(focus, ''))
+// WHERE status='CONFIRMED') would transiently collide if updated one at a time —
+// row A would briefly duplicate row B's still-unswapped
 // student before the second update lands. Deleting both first removes the
 // conflicting index entries before either new row is inserted, so there's no
 // intermediate colliding state. StudentWarning.bookingId has no DB-level FK
@@ -684,6 +700,20 @@ const swapBookings = async (req, res, next) => {
       if (b.status !== "CONFIRMED") return res.status(400).json({ error: "Booking is not active" });
       if (b.slot.endTime <= new Date()) return res.status(400).json({ error: "This session has already ended" });
     }
+    // Swap only trades which student sits in an existing seat — it never touches
+    // SlotCapacity (see comment above). For a CASE seat, role travels with the
+    // booking, so swapping a Solver seat for a Shadow seat (or for a seat in a
+    // different slot type entirely) would leave that slot's solverClaimed flag
+    // out of sync with reality, or — if the destination slot already has its own
+    // Solver — create a second SOLVER-role booking in one slot. Both seats must
+    // be the same slot type, and for CASE, the same role, so a swap never changes
+    // either slot's solver/shadow makeup.
+    if (bookingA.slot.release.slotType !== bookingB.slot.release.slotType) {
+      return res.status(400).json({ error: "Cannot swap sessions of different types" });
+    }
+    if (bookingA.slot.release.slotType === "CASE" && bookingA.role !== bookingB.role) {
+      return res.status(400).json({ error: "Cannot swap a Solver seat with a Shadow seat — swap with another same-role booking instead" });
+    }
 
     const [studentAProfile, studentBProfile] = await Promise.all([
       prisma.studentProfile.findUnique({ where: { userId: bookingA.studentUserId } }),
@@ -711,6 +741,7 @@ const swapBookings = async (req, res, next) => {
           slotId: bookingA.slotId,
           studentUserId: bookingB.studentUserId,
           mentorProfileId: mentorProfile.id,
+          slotType: bookingA.slot.release.slotType, // same as bookingB's — enforced above
           focus: bookingB.focus,
           role: bookingB.role, // a Solver's seat stays a Solver seat through the swap
           idempotencyKey: `swap-${bookingA.slotId}-${bookingB.studentUserId}-${now}`,
@@ -723,6 +754,7 @@ const swapBookings = async (req, res, next) => {
           slotId: bookingB.slotId,
           studentUserId: bookingA.studentUserId,
           mentorProfileId: mentorProfile.id,
+          slotType: bookingA.slot.release.slotType,
           focus: bookingA.focus,
           role: bookingA.role,
           idempotencyKey: `swap-${bookingB.slotId}-${bookingA.studentUserId}-${now}`,
@@ -755,12 +787,16 @@ const swapBookings = async (req, res, next) => {
       // Reuse each student's OLD booking id as the ICS uid — their calendar app then
       // recognises this as an update to the event they already have, not a stray new one.
       const sequence = Math.max(bookingA.slot.icsSequence, bookingB.slot.icsSequence) + 1;
+      // Slot type is guaranteed equal (checked above); each student keeps their own
+      // focus/role through the swap, only the slot/time changes.
+      const { label: labelA } = describeSession(bookingA.slot.release.slotType, bookingA.focus, bookingA.role);
+      const { label: labelB } = describeSession(bookingB.slot.release.slotType, bookingB.focus, bookingB.role);
 
-      const buildMoveIcs = (uid, studentEmail, name, otherName, fromSlot, toSlot) => ({
+      const buildMoveIcs = (uid, studentEmail, name, otherName, fromSlot, toSlot, sessionLabel) => ({
         icsContent: buildSessionEvent({
           uid, sequence, method: "REQUEST", status: "CONFIRMED",
           startTime: toSlot.startTime, endTime: toSlot.endTime,
-          summary: `CV Review: ${name} × ${otherName}`,
+          summary: `${sessionLabel}: ${name} × ${otherName}`,
           description: "This session's time was swapped with another student's via Parthsaarthi.",
           location: toSlot.venue, meetingLink: toSlot.meetingLink ?? null,
           organizerEmail: CALENDAR_ORGANIZER_EMAIL, organizerName: "Parthsaarthi",
@@ -770,7 +806,7 @@ const swapBookings = async (req, res, next) => {
           ],
         }),
         calendarLink: buildGoogleCalendarLink({
-          summary: `CV Review: ${name} × ${otherName}`,
+          summary: `${sessionLabel}: ${name} × ${otherName}`,
           description: "This session's time was swapped with another student's.",
           location: toSlot.venue, startTime: toSlot.startTime, endTime: toSlot.endTime,
         }),
@@ -781,8 +817,8 @@ const swapBookings = async (req, res, next) => {
         },
       });
 
-      const eventA = buildMoveIcs(bookingA.id, bookingA.student?.email, studentAName, mentorName, bookingA.slot, bookingB.slot);
-      const eventB = buildMoveIcs(bookingB.id, bookingB.student?.email, studentBName, mentorName, bookingB.slot, bookingA.slot);
+      const eventA = buildMoveIcs(bookingA.id, bookingA.student?.email, studentAName, mentorName, bookingA.slot, bookingB.slot, labelA);
+      const eventB = buildMoveIcs(bookingB.id, bookingB.student?.email, studentBName, mentorName, bookingB.slot, bookingA.slot, labelB);
 
       if (bookingA.student?.email) {
         mailer.sendRescheduleNotification({

@@ -176,7 +176,7 @@ model BookingRelease {
   cohortOnly      Boolean  @default(false)
   meetingLink     String?  // default Google Meet (or other) link applied to every slot created in this batch
   slotType        SlotType @default(CV)
-  capacity        Int      @default(1) // participants per slot; CV/STOCK_PITCH always 1, GD/CASE mentor-chosen (CASE >= 2)
+  capacity        Int      @default(1) // participants per slot; CV/STOCK_PITCH always 1, GD/CASE mentor-chosen (GD >= 2, CASE >= 1)
   caseDescription String?  // CASE slots only — the case being reviewed, shown to students before they book (~200 words)
   createdAt       DateTime @default(now())
 
@@ -244,8 +244,9 @@ model Booking {
   id              String        @id @default(cuid())
   slotId          String
   studentUserId   String
-  mentorProfileId String        // denormalized from Slot at creation — backs the one-active-booking-per-mentor constraint below
-  focus           String?       // "overall" | "workex" | "por" | "cv_hr" — CV slots only, null for GD/CASE
+  mentorProfileId String        // denormalized from Slot at creation — backs the one-active-booking-per-mentor-per-type constraint below
+  slotType        SlotType      // denormalized from Slot.release at creation — same reason as mentorProfileId, backs the same constraint
+  focus           String?       // "overall" | "workex" | "por" | "cv_hr" — CV slots only, null for GD/CASE/STOCK_PITCH
   role            ParticipantRole? // CASE slots only — SOLVER or SHADOW, self-selected at booking time
   idempotencyKey  String        @unique // client-generated UUID; replays return existing booking
   status          BookingStatus @default(CONFIRMED)
@@ -258,9 +259,12 @@ model Booking {
   student       User          @relation(fields: [studentUserId], references: [id])
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
 
-  // A student may hold at most one CONFIRMED booking per mentor at a time — enforced
-  // as a partial unique index (status = 'CONFIRMED') in the migration SQL, since Prisma's
-  // schema DSL can't express a conditional unique constraint directly.
+  // A student may hold at most one CONFIRMED booking per (mentor, slotType, focus) at
+  // a time — e.g. a CASE booking and a CV-HR booking with the same mentor can coexist,
+  // but not two CASE bookings, and not two CV bookings of the same focus. Enforced as a
+  // partial unique index on (studentUserId, mentorProfileId, slotType, COALESCE(focus, ''))
+  // WHERE status = 'CONFIRMED' in the migration SQL, since Prisma's schema DSL can't
+  // express a conditional/expression unique constraint directly.
 }
 
 // ─── Penalties & Bans ─────────────────────────────────────────────────────────
