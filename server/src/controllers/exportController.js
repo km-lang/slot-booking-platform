@@ -2,6 +2,7 @@
 
 const jwt    = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
+const { cohortMemberWhere } = require("../lib/cohortMembership");
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -47,28 +48,26 @@ const buildMentorCohortCsv = async (mentorUserId) => {
   if (!mentorProfile.cohortId) return { status: 404, error: "No cohort assigned" };
 
   const now = new Date();
-  const cohort = await prisma.cohort.findUnique({
-    where: { id: mentorProfile.cohortId },
+  const cohort = await prisma.cohort.findUnique({ where: { id: mentorProfile.cohortId } });
+  if (!cohort) return { status: 404, error: "Cohort not found" };
+
+  const studentProfiles = await prisma.studentProfile.findMany({
+    where: cohortMemberWhere(mentorProfile.cohortId),
     include: {
-      studentProfiles: {
+      user: {
         include: {
-          user: {
-            include: {
-              bookings: true,
-              bans: { where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] } },
-            },
-          },
+          bookings: true,
+          bans: { where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] } },
         },
       },
     },
   });
-  if (!cohort) return { status: 404, error: "Cohort not found" };
 
   const fmtDate = (d) =>
     d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
 
   const headers = ["Name", "PGP ID", "Email", "Slots Taken", "Sessions Attended", "Last Review Date", "Status", "Banned"];
-  const dataRows = cohort.studentProfiles.map((sp) => {
+  const dataRows = studentProfiles.map((sp) => {
     const u        = sp.user;
     const attended = u.bookings.filter((b) => b.status === "ATTENDED");
     const active   = u.bookings.filter((b) => b.status !== "CANCELLED");

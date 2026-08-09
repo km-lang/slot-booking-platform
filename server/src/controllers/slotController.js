@@ -3,6 +3,7 @@
 const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
 const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } = require("../lib/calendarInvite");
+const { isCohortMember, cohortMemberWhere } = require("../lib/cohortMembership");
 
 const listAigs = async (_req, res, next) => {
   try {
@@ -62,10 +63,9 @@ const listMentors = async (req, res, next) => {
     // Only students booking for themselves need cohort eligibility factored into the count —
     // without this, a student could see "5 Slots" on a mentor and find most are cohort-only
     // slots they're not actually eligible to book.
-    let studentCohortId = null;
+    let studentProfile = null;
     if (req.user.role === "STUDENT") {
-      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
-      studentCohortId = sp?.cohortId ?? null;
+      studentProfile = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
     }
 
     const where =
@@ -102,7 +102,7 @@ const listMentors = async (req, res, next) => {
         liveSlots: m.slots.filter((s) => {
           const open = !s.capacity || s.capacity.current < s.capacity.max;
           if (!open) return false;
-          const restricted = s.release?.cohortOnly && (studentCohortId === null || studentCohortId !== m.cohortId);
+          const restricted = s.release?.cohortOnly && !isCohortMember(studentProfile, m.cohortId);
           return !restricted;
         }).length,
       })),
@@ -146,12 +146,11 @@ const listSlots = async (req, res, next) => {
     // Eligibility for cohort-only slots — surfaced as a distinct status below so the UI can
     // show ineligible slots as restricted up front, instead of inviting a "Book" tap that
     // would only fail with a 403 once the student reaches the confirm step.
-    let studentCohortId = null;
+    let studentProfile = null;
     if (req.user.role === "STUDENT") {
-      const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
-      studentCohortId = sp?.cohortId ?? null;
+      studentProfile = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
     }
-    const isCohortMember = studentCohortId !== null && studentCohortId === mentor.cohortId;
+    const studentIsCohortMember = isCohortMember(studentProfile, mentor.cohortId);
 
     const now = new Date();
     const slots = await prisma.slot.findMany({
@@ -169,7 +168,7 @@ const listSlots = async (req, res, next) => {
       slots
         // Cohort-restricted slots aren't just unbookable for non-members — they shouldn't
         // appear in their list at all, so filter them out before mapping to the response.
-        .filter((slot) => !(slot.release?.cohortOnly ?? false) || isCohortMember)
+        .filter((slot) => !(slot.release?.cohortOnly ?? false) || studentIsCohortMember)
         .map((slot) => {
           const myBooking = slot.bookings.find((b) => b.studentUserId === req.user.sub);
           const cohortOnly = slot.release?.cohortOnly ?? false;
@@ -537,31 +536,29 @@ const getMentorCohort = async (req, res, next) => {
     if (!mentorProfile.cohortId) return res.status(404).json({ error: "No cohort assigned" });
 
     const now = new Date();
-    const cohort = await prisma.cohort.findUnique({
-      where: { id: mentorProfile.cohortId },
+    const cohort = await prisma.cohort.findUnique({ where: { id: mentorProfile.cohortId } });
+    if (!cohort) return res.status(404).json({ error: "Cohort not found" });
+
+    const studentProfiles = await prisma.studentProfile.findMany({
+      where: cohortMemberWhere(mentorProfile.cohortId),
       include: {
-        studentProfiles: {
+        user: {
           include: {
-            user: {
-              include: {
-                bookings: true,
-                bans: {
-                  where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
-                },
-              },
+            bookings: true,
+            bans: {
+              where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
             },
           },
         },
       },
     });
-    if (!cohort) return res.status(404).json({ error: "Cohort not found" });
 
     const fmtDate = (d) =>
       d
         ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })
         : "—";
 
-    const members = cohort.studentProfiles.map((sp) => {
+    const members = studentProfiles.map((sp) => {
       const activeBookings = sp.user.bookings.filter((b) => b.status !== "CANCELLED");
       const attended = sp.user.bookings
         .filter((b) => b.status === "ATTENDED")
@@ -768,7 +765,7 @@ const listMentorOwnSlots = async (req, res, next) => {
     let cohortStats = { totalMentees: 0, totalSlotsTaken: 0 };
     if (mentorProfile.cohortId) {
       const [menteeCount, bookingCount] = await Promise.all([
-        prisma.studentProfile.count({ where: { cohortId: mentorProfile.cohortId } }),
+        prisma.studentProfile.count({ where: cohortMemberWhere(mentorProfile.cohortId) }),
         // "Taken" means the slot was claimed, whether or not the mentee actually
         // showed — same status set as the per-mentee count on the Cohort Tracker
         // page (getMentorCohort's activeBookings), so the two screens' numbers
@@ -1249,7 +1246,7 @@ const joinWaitlist = async (req, res, next) => {
     }
     if (slot.release?.cohortOnly) {
       const sp = await prisma.studentProfile.findUnique({ where: { userId: req.user.sub } });
-      if (!sp || sp.cohortId !== slot.mentorProfile.cohortId) {
+      if (!isCohortMember(sp, slot.mentorProfile.cohortId)) {
         return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
       }
     }

@@ -26,3 +26,7 @@ server/public_backups/
 # user-response log is excluded, since it's generated data, not source, and grows
 # with every response the same way DB rows would.
 server/data/announcement_responses.json
+
+# One-off, uncommitted production data-migration scripts (see README.deployment.md /
+# CHANGE_MANAGEMENT.md convention) — never meant to be part of the committed history.
+server/scripts/_*.js

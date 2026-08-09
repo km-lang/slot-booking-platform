@@ -110,13 +110,15 @@ model User {
 }
 
 model StudentProfile {
-  id       String  @id @default(cuid())
-  userId   String  @unique
-  pgpId    String  @unique // e.g. "25110"
-  cohortId String?
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  pgpId         String  @unique // e.g. "25110"
+  cohortId      String?
+  sigfiCohortId String? // independent SIGFi-program cohort slot, alongside cohortId (e.g. Disha) — see server/src/lib/cohortMembership.js
 
-  user   User    @relation(fields: [userId], references: [id])
-  cohort Cohort? @relation(fields: [cohortId], references: [id])
+  user        User    @relation(fields: [userId], references: [id])
+  cohort      Cohort? @relation("StudentPrimaryCohort", fields: [cohortId], references: [id])
+  sigfiCohort Cohort? @relation("StudentSigfiCohort", fields: [sigfiCohortId], references: [id])
 }
 
 model MentorProfile {
@@ -158,10 +160,11 @@ model Cohort {
   label  String // e.g. "Q4"
   aigId  String
 
-  aig              AIG               @relation(fields: [aigId], references: [id])
-  studentProfiles  StudentProfile[]
-  mentorProfiles   MentorProfile[]
-  whitelistEntries AccessWhitelist[]
+  aig                  AIG               @relation(fields: [aigId], references: [id])
+  studentProfiles      StudentProfile[]  @relation("StudentPrimaryCohort")
+  sigfiStudentProfiles StudentProfile[]  @relation("StudentSigfiCohort")
+  mentorProfiles       MentorProfile[]
+  whitelistEntries     AccessWhitelist[]
 }
 
 // ─── Slots & Bookings ─────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 "use strict";
 
 const prisma = require("../lib/prisma");
+const { cohortMemberWhere } = require("../lib/cohortMembership");
 
 // Kept consistent with mailer.js and exportController.js's FOCUS_DISPLAY —
 // same booking focus should read the same everywhere it's displayed.
@@ -30,24 +31,38 @@ const getAigOverview = async (req, res, next) => {
       ? Math.max(0, Math.ceil((new Date(cvFreezeDeadline) - now) / 86400000))
       : null;
 
-    const cohorts = await prisma.cohort.findMany({
+    const cohortsRaw = await prisma.cohort.findMany({
       where: { aigId: aig.id },
       include: {
         mentorProfiles: { select: { id: true, slug: true, user: { select: { name: true } } } },
-        studentProfiles: {
+      },
+    });
+
+    // Cohort membership comes via either the primary cohortId slot or the
+    // independent sigfiCohortId slot (see server/src/lib/cohortMembership.js) —
+    // fetch every matching student in one query, then bucket by whichever slot
+    // matched one of this AIG's own cohorts.
+    const cohortIds = cohortsRaw.map((c) => c.id);
+    const matchedStudents = await prisma.studentProfile.findMany({
+      where: { OR: [{ cohortId: { in: cohortIds } }, { sigfiCohortId: { in: cohortIds } }] },
+      include: {
+        user: {
           include: {
-            user: {
-              include: {
-                bookings: { where: { status: { in: ["CONFIRMED", "ATTENDED"] } } },
-                bans: {
-                  where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
-                },
-              },
+            bookings: { where: { status: { in: ["CONFIRMED", "ATTENDED"] } } },
+            bans: {
+              where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
             },
           },
         },
       },
     });
+    const studentsByCohortId = new Map();
+    for (const sp of matchedStudents) {
+      const cid = cohortIds.includes(sp.cohortId) ? sp.cohortId : sp.sigfiCohortId;
+      if (!studentsByCohortId.has(cid)) studentsByCohortId.set(cid, []);
+      studentsByCohortId.get(cid).push(sp);
+    }
+    const cohorts = cohortsRaw.map((c) => ({ ...c, studentProfiles: studentsByCohortId.get(c.id) ?? [] }));
 
     // Batch-level readiness (students with ≥1 ATTENDED booking)
     const allStudents = cohorts.flatMap((c) => c.studentProfiles);
@@ -239,9 +254,6 @@ const getBatchOverview = async (_req, res, next) => {
       prisma.cohort.findMany({
         include: {
           aig: { select: { name: true, slug: true } },
-          studentProfiles: {
-            select: { user: { select: { bookings: { select: { status: true } } } } },
-          },
           mentorProfiles: {
             select: { user: { select: { name: true } } },
           },
@@ -249,6 +261,22 @@ const getBatchOverview = async (_req, res, next) => {
         orderBy: { aig: { name: "asc" } },
       }),
     ]);
+
+    // Cohort membership comes via either the primary cohortId slot or the
+    // independent sigfiCohortId slot (see server/src/lib/cohortMembership.js) —
+    // fetch every matching student in one query, then bucket by whichever slot matched.
+    const allCohortIds = cohorts.map((c) => c.id);
+    const allMatchedStudents = await prisma.studentProfile.findMany({
+      where: { OR: [{ cohortId: { in: allCohortIds } }, { sigfiCohortId: { in: allCohortIds } }] },
+      select: { cohortId: true, sigfiCohortId: true, user: { select: { bookings: { select: { status: true } } } } },
+    });
+    const studentsByCohortId = new Map();
+    for (const sp of allMatchedStudents) {
+      const cid = allCohortIds.includes(sp.cohortId) ? sp.cohortId : sp.sigfiCohortId;
+      if (!studentsByCohortId.has(cid)) studentsByCohortId.set(cid, []);
+      studentsByCohortId.get(cid).push(sp);
+    }
+    for (const c of cohorts) c.studentProfiles = studentsByCohortId.get(c.id) ?? [];
 
     const dayKey = (d) => d.toISOString().split("T")[0];
     const trendMap = {};
@@ -527,31 +555,34 @@ const getMentorSessionDetail = async (req, res, next) => {
       include: {
         user:   { select: { name: true, email: true } },
         aig:    { select: { slug: true, name: true } },
-        cohort: {
-          include: {
-            studentProfiles: {
-              include: {
-                user: {
-                  select: {
-                    name:     true,
-                    email:    true,
-                    bookings: {
-                      where:  { status: { in: ["CONFIRMED", "ATTENDED", "NO_SHOW"] } },
-                      select: { id: true, status: true },
-                    },
-                  },
-                },
-              },
-              orderBy: { pgpId: "asc" },
-            },
-          },
-        },
+        cohort: { select: { label: true } },
       },
     });
 
     if (!mentorProfile) return res.status(404).json({ error: "Mentor not found" });
 
     // AIG scope already enforced by requireMentorAigScope middleware (routes/api.js)
+
+    // Cohort membership comes via either the primary cohortId slot or the
+    // independent sigfiCohortId slot (see server/src/lib/cohortMembership.js).
+    const cohortStudentProfiles = mentorProfile.cohortId
+      ? await prisma.studentProfile.findMany({
+          where: cohortMemberWhere(mentorProfile.cohortId),
+          include: {
+            user: {
+              select: {
+                name:     true,
+                email:    true,
+                bookings: {
+                  where:  { status: { in: ["CONFIRMED", "ATTENDED", "NO_SHOW"] } },
+                  select: { id: true, status: true },
+                },
+              },
+            },
+          },
+          orderBy: { pgpId: "asc" },
+        })
+      : [];
 
     // All bookings for this mentor's slots
     const bookings = await prisma.booking.findMany({
@@ -584,7 +615,7 @@ const getMentorSessionDetail = async (req, res, next) => {
     };
 
     // Cohort student list with their cleared status
-    const students = (mentorProfile.cohort?.studentProfiles ?? []).map((sp) => {
+    const students = cohortStudentProfiles.map((sp) => {
       const attended = sp.user.bookings.some((b) => b.status === "ATTENDED");
       const booked   = sp.user.bookings.length > 0;
       return {

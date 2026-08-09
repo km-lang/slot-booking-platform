@@ -3,6 +3,7 @@
 const prisma  = require("../lib/prisma");
 const mailer  = require("../lib/mailer");
 const { buildSessionEvent, buildGoogleCalendarLink, CALENDAR_ORGANIZER_EMAIL } = require("../lib/calendarInvite");
+const { isCohortMember } = require("../lib/cohortMembership");
 
 const ALLOWED_FOCUS = ["overall", "workex", "por", "cv_hr"]; // CV slots only
 const ALLOWED_ROLES = ["SOLVER", "SHADOW"]; // CASE slots only, self-selected by the student
@@ -154,7 +155,7 @@ const claimSlotAndCreateBooking = async ({ slotId, studentUserId, focus, role, i
   }
   if (claimedSlot.release.cohortOnly) {
     const studentProfile = await prisma.studentProfile.findUnique({ where: { userId: studentUserId } });
-    if (!studentProfile || studentProfile.cohortId !== claimedSlot.mentorProfile.cohortId) {
+    if (!isCohortMember(studentProfile, claimedSlot.mentorProfile.cohortId)) {
       return { ok: false, status: 403, error: "This slot is reserved for the mentor's cohort" };
     }
   }
@@ -433,7 +434,7 @@ const reassignBooking = async (req, res, next) => {
       return res.status(403).json({ error: "Booking is currently closed" });
     }
 
-    if (booking.slot.release.cohortOnly && newStudentProfile.cohortId !== mentorProfile.cohortId) {
+    if (booking.slot.release.cohortOnly && !isCohortMember(newStudentProfile, mentorProfile.cohortId)) {
       return res.status(403).json({ error: "This slot is reserved for the mentor's cohort" });
     }
 
@@ -725,10 +726,10 @@ const swapBookings = async (req, res, next) => {
     // Cohort restrictions are set per BookingRelease batch, not per mentor, so
     // slot A and slot B can legitimately have different cohortOnly settings
     // even though they're the same mentor's own slots.
-    if (bookingA.slot.release.cohortOnly && studentBProfile?.cohortId !== mentorProfile.cohortId) {
+    if (bookingA.slot.release.cohortOnly && !isCohortMember(studentBProfile, mentorProfile.cohortId)) {
       return res.status(403).json({ error: "One of these slots is reserved for the mentor's cohort" });
     }
-    if (bookingB.slot.release.cohortOnly && studentAProfile?.cohortId !== mentorProfile.cohortId) {
+    if (bookingB.slot.release.cohortOnly && !isCohortMember(studentAProfile, mentorProfile.cohortId)) {
       return res.status(403).json({ error: "One of these slots is reserved for the mentor's cohort" });
     }
 
