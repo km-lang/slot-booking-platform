@@ -56,6 +56,9 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-08-09 | `2150288` | chore | DB snapshot before SIGFi cohort import (20260809-105710) — import itself run separately via uncommitted `server/scripts/_import-sigfi-cohorts.js`, creating 7 Cohorts under the SIGFI AIG and setting `sigfiCohortId` on 154 matched StudentProfiles |
+| 2026-08-09 | `6939708` | feat | New SIGFi cohort system, fully isolated from Disha — adds `StudentProfile.sigfiCohortId` as an independent second cohort slot alongside `cohortId`, so a student can hold a Disha and a SIGFi cohort assignment at once; cohort-gating/roster logic updated to check both |
+| 2026-08-09 | `ca6713b` | chore | DB snapshot before add_sigfi_cohort_id migration (20260809-103554) |
 | 2026-08-06 | `bfef239` | feat | Single-Solver Case slots (capacity 1, no Shadow), one-active-booking-per-mentor limit now scoped per slotType+focus instead of per mentor overall, swap blocked across slot types/CASE roles, fixed reassign/unassign/swap emails hardcoding "CV Review", Disha/AIG admin slot count now excludes unbooked slots — adds `Booking.slotType` and `booking_one_active_per_mentor_type` index |
 | 2026-08-06 | `fa02b9b` | chore | DB snapshot before add_booking_slot_type_and_per_type_mentor_limit migration (20260806-120853) |
 
