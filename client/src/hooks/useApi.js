@@ -14,6 +14,7 @@ export const QK = {
   mentorDashboard: ()        => ["mentorDashboard"],
   mentorHistory:   (page)    => ["mentorHistory", page],
   mentorCohort:    ()        => ["mentorCohort"],
+  menteeSummary:   (id, from, to) => ["menteeSummary", id, from, to],
   mentorHoursReleased: (from, to) => ["mentorHoursReleased", from, to],
   lastUsedSlotDefaults: () => ["lastUsedSlotDefaults"],
   myUpcomingSlotTimes: () => ["myUpcomingSlotTimes"],
@@ -137,6 +138,14 @@ export const useMentorCohort = () =>
   useQuery({
     queryKey: QK.mentorCohort(),
     queryFn:  () => apiFetch("/cohort"),
+  });
+
+// from/to are optional — omitting them returns all-time totals for the student.
+export const useMenteeSummary = (studentProfileId, from, to) =>
+  useQuery({
+    queryKey: QK.menteeSummary(studentProfileId, from, to),
+    queryFn:  () => apiFetch(`/cohort/${studentProfileId}/summary${from && to ? `?from=${from}&to=${to}` : ""}`),
+    enabled:  !!studentProfileId,
   });
 
 // Lazily enabled — only fires once the mentor has picked both ends of the range.

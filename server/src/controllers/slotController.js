@@ -536,7 +536,10 @@ const getMentorCohort = async (req, res, next) => {
     if (!mentorProfile.cohortId) return res.status(404).json({ error: "No cohort assigned" });
 
     const now = new Date();
-    const cohort = await prisma.cohort.findUnique({ where: { id: mentorProfile.cohortId } });
+    const cohort = await prisma.cohort.findUnique({
+      where: { id: mentorProfile.cohortId },
+      include: { aig: { select: { slug: true } } },
+    });
     if (!cohort) return res.status(404).json({ error: "Cohort not found" });
 
     const studentProfiles = await prisma.studentProfile.findMany({
@@ -579,8 +582,82 @@ const getMentorCohort = async (req, res, next) => {
     });
 
     res.json({
-      cohort: { id: cohort.id, label: cohort.label, memberCount: members.length },
+      cohort: { id: cohort.id, label: cohort.label, memberCount: members.length, aigSlug: cohort.aig?.slug ?? null },
       members,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getMentorCohortStudentSummary = async (req, res, next) => {
+  try {
+    const mentorProfile = await prisma.mentorProfile.findUnique({
+      where: { userId: req.user.sub },
+      include: { aig: { select: { slug: true } } },
+    });
+    if (!mentorProfile) return res.status(403).json({ error: "No mentor profile for this account" });
+    // Deliberately Disha-only for now — not extended to SIGFi (or any other AIG) mentors.
+    if (mentorProfile.aig?.slug !== "disha") {
+      return res.status(403).json({ error: "This feature is only available for Disha mentors" });
+    }
+
+    const studentProfile = await prisma.studentProfile.findUnique({
+      where: { id: req.params.studentProfileId },
+      include: { user: { select: { name: true } } },
+    });
+    if (!studentProfile) return res.status(404).json({ error: "Student not found" });
+
+    // Same membership check used for booking gating — a mentor may only see
+    // students in their own cohort, not an arbitrary student.
+    if (!isCohortMember(studentProfile, mentorProfile.cohortId)) {
+      return res.status(403).json({ error: "This student is not in your cohort" });
+    }
+
+    // Optional date filter — same from/to parsing + inclusive-of-the-whole-"to"-day
+    // normalization as getSlotHoursReleased/getAigSlotHoursReleased. Unlike those,
+    // both are optional here: omitting them keeps the all-time totals this feature
+    // shipped with.
+    const { from, to } = req.query;
+    let slotStartFilter;
+    if (from || to) {
+      if (!from || !to) return res.status(400).json({ error: "from and to are required together" });
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: "Invalid from/to date" });
+      }
+      fromDate.setHours(0, 0, 0, 0);
+      toDate.setHours(0, 0, 0, 0);
+      toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
+      slotStartFilter = { gte: fromDate, lt: toDate };
+    }
+
+    // "Taken" and platform-wide scope match getMentorCohort's own slotsTaken
+    // above, so this detail view never contradicts the number on the list row.
+    const bookings = await prisma.booking.findMany({
+      where: {
+        studentUserId: studentProfile.userId,
+        status: { not: "CANCELLED" },
+        ...(slotStartFilter && { slot: { startTime: slotStartFilter } }),
+      },
+      include: { slot: { select: { startTime: true, endTime: true } } },
+    });
+
+    const byType = { CV: 0, GD: 0, CASE: 0, STOCK_PITCH: 0 };
+    let totalHours = 0;
+    for (const b of bookings) {
+      byType[b.slotType] = (byType[b.slotType] ?? 0) + 1;
+      totalHours += (b.slot.endTime - b.slot.startTime) / 3600000;
+    }
+
+    res.json({
+      id: studentProfile.id,
+      name: studentProfile.user.name,
+      pgp: studentProfile.pgpId,
+      totalSlots: bookings.length,
+      byType,
+      totalHours: +totalHours.toFixed(1),
     });
   } catch (err) {
     next(err);
@@ -1297,4 +1374,5 @@ module.exports = {
   joinWaitlist,
   leaveWaitlist,
   getMentorCohort,
+  getMentorCohortStudentSummary,
 };

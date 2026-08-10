@@ -163,6 +163,7 @@ router.post(
 router.get("/cohort",        requireRole("MENTOR"), slotController.getMentorCohort);
 router.get("/cohort/export", requireRole("MENTOR"), exportController.exportMentorCohort);
 router.get("/cohort/export-link", requireRole("MENTOR"), exportController.getMentorCohortExportToken);
+router.get("/cohort/:studentProfileId/summary", requireRole("MENTOR"), slotController.getMentorCohortStudentSummary);
 
 // ── AIG Admin ──────────────────────────────────────────────────────────────
 router.get(
