@@ -15,7 +15,8 @@ export default function MentorCohortDetails() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMentee, setSelectedMentee] = useState(null);
-  // Empty by default — all-time totals, matching the current row's Slots Taken figure.
+  // Cohort-level filter — one shared range for whichever mentee's summary you open,
+  // not reset per mentee. Empty by default — all-time totals.
   const [summaryFrom, setSummaryFrom] = useState("");
   const [summaryTo, setSummaryTo] = useState("");
 
@@ -24,12 +25,9 @@ export default function MentorCohortDetails() {
   const { data: summary, isLoading: summaryLoading, error: summaryError } = useMenteeSummary(selectedMentee?.id, summaryFrom, summaryTo);
   const cohort  = data?.cohort  ?? null;
   const members = data?.members ?? [];
-
-  const openMenteeSummary = (mentee) => {
-    setSummaryFrom("");
-    setSummaryTo("");
-    setSelectedMentee(mentee);
-  };
+  // Student detail summary (and its date filter) is Disha-only for now — not
+  // extended to SIGFi (or any other AIG) cohorts.
+  const isDisha = cohort?.aigSlug === "disha";
 
   const handleExport = () => {
     exportMutation.mutate(
@@ -82,7 +80,7 @@ export default function MentorCohortDetails() {
       }
     >
         <main className="flex-1 px-4 py-6 overflow-y-auto">
-          <div className="relative mb-6">
+          <div className="relative mb-4">
             <Search size={18} className="absolute left-3 top-3.5 text-emerald-900/40" />
             <input
               type="text"
@@ -92,6 +90,40 @@ export default function MentorCohortDetails() {
               className="w-full bg-white border border-emerald-900/10 rounded-xl pl-10 pr-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500 shadow-sm"
             />
           </div>
+
+          {isDisha && (
+            <div className="mb-6">
+              <div className="text-[9px] font-bold text-emerald-800/50 uppercase tracking-widest mb-1.5">
+                Mentee Summary Date Filter
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={summaryFrom}
+                  max={summaryTo || undefined}
+                  onChange={(e) => setSummaryFrom(e.target.value)}
+                  className="flex-1 min-w-0 bg-white border border-emerald-900/10 rounded-xl px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500 shadow-sm"
+                />
+                <span className="text-emerald-700/50 text-xs font-bold shrink-0">to</span>
+                <input
+                  type="date"
+                  value={summaryTo}
+                  min={summaryFrom || undefined}
+                  onChange={(e) => setSummaryTo(e.target.value)}
+                  className="flex-1 min-w-0 bg-white border border-emerald-900/10 rounded-xl px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500 shadow-sm"
+                />
+              </div>
+              {(summaryFrom || summaryTo) && (
+                <button
+                  type="button"
+                  onClick={() => { setSummaryFrom(""); setSummaryTo(""); }}
+                  className="text-[11px] font-bold text-emerald-700/60 hover:text-emerald-700 underline underline-offset-2 mt-1.5"
+                >
+                  Clear filter (show all-time)
+                </button>
+              )}
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-xs font-bold text-red-700 mb-4">
@@ -113,9 +145,6 @@ export default function MentorCohortDetails() {
               filteredMembers.map((mentee) => {
                 const isWarning = mentee.status === "Action Needed";
                 const isReady   = mentee.status === "Reviewed";
-                // Student detail summary is Disha-only for now — not extended to SIGFi
-                // (or any other AIG) cohorts, so the name is only clickable there.
-                const isDisha = cohort?.aigSlug === "disha";
 
                 return (
                   <div key={mentee.id} className="p-4">
@@ -124,7 +153,7 @@ export default function MentorCohortDetails() {
                         {isDisha ? (
                           <button
                             type="button"
-                            onClick={() => openMenteeSummary(mentee)}
+                            onClick={() => setSelectedMentee(mentee)}
                             className="font-bold text-[15px] text-emerald-950 leading-tight text-left hover:text-emerald-700 hover:underline underline-offset-2 transition-colors"
                           >
                             {mentee.name}
@@ -186,35 +215,10 @@ export default function MentorCohortDetails() {
 
         <Sheet isOpen={!!selectedMentee} onClose={() => setSelectedMentee(null)}>
           <h3 className="font-black text-lg text-emerald-950">{selectedMentee?.name}</h3>
-          <div className="text-xs font-bold text-emerald-700/60 mb-4">{selectedMentee?.pgp}</div>
-
-          <div className="flex items-center gap-2 mb-1">
-            <input
-              type="date"
-              value={summaryFrom}
-              max={summaryTo || undefined}
-              onChange={(e) => setSummaryFrom(e.target.value)}
-              className="flex-1 min-w-0 bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
-            />
-            <span className="text-emerald-700/50 text-xs font-bold shrink-0">to</span>
-            <input
-              type="date"
-              value={summaryTo}
-              min={summaryFrom || undefined}
-              onChange={(e) => setSummaryTo(e.target.value)}
-              className="flex-1 min-w-0 bg-emerald-50/50 border border-emerald-900/10 rounded-lg px-2.5 py-2 text-xs font-semibold outline-none focus:border-emerald-500"
-            />
+          <div className="text-xs font-bold text-emerald-700/60">{selectedMentee?.pgp}</div>
+          <div className="text-[11px] font-bold text-emerald-700/50 mb-4">
+            {summaryFrom && summaryTo ? `${summaryFrom} to ${summaryTo}` : "All-time"}
           </div>
-          {(summaryFrom || summaryTo) && (
-            <button
-              type="button"
-              onClick={() => { setSummaryFrom(""); setSummaryTo(""); }}
-              className="text-[11px] font-bold text-emerald-700/60 hover:text-emerald-700 underline underline-offset-2 mb-3"
-            >
-              Clear filter (show all-time)
-            </button>
-          )}
-          {!(summaryFrom || summaryTo) && <div className="mb-3" />}
 
           {summaryLoading ? (
             <div className="text-sm text-emerald-800/50">Loading…</div>
