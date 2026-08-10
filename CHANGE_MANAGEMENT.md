@@ -56,6 +56,7 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-08-10 | `2d25342` | refactor | Mentee-summary date filter moved from per-student sheet to cohort level (one shared control above the member list, persists across which mentee you view) |
 | 2026-08-10 | `2f90512` | feat | Student booking summary on Cohort Tracker — clicking a mentee's name (Disha mentors only) shows total slots taken, breakdown by slot type, and total hours, with an optional date-range filter (all-time by default) |
 | 2026-08-09 | `2150288` | chore | DB snapshot before SIGFi cohort import (20260809-105710) — import itself run separately via uncommitted `server/scripts/_import-sigfi-cohorts.js`, creating 7 Cohorts under the SIGFI AIG and setting `sigfiCohortId` on 154 matched StudentProfiles |
 | 2026-08-09 | `6939708` | feat | New SIGFi cohort system, fully isolated from Disha — adds `StudentProfile.sigfiCohortId` as an independent second cohort slot alongside `cohortId`, so a student can hold a Disha and a SIGFi cohort assignment at once; cohort-gating/roster logic updated to check both |
