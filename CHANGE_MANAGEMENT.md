@@ -56,6 +56,8 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-08-13 | `386c15e` | chore | DB snapshot before add_case_domain migration (20260813-154405) |
+| 2026-08-13 | `322ad51` | feat | Domain tag on Case Study slots (Consulting/Marketing/Prodman/Operations/Genman/Finance) — mentors pick one when creating a CASE batch, shown to students on the slot list badge and in the booking sheet alongside the case description — adds `BookingRelease.domain`/`CaseDomain` enum |
 | 2026-08-13 | `586a6d4` | chore | DB snapshot before uncap_gd_case_mentor_booking_limit migration (20260813-150655) |
 | 2026-08-13 | `bae4564` | fix | Mentor Available Slots no longer drops a GD/CASE slot the instant one seat is filled (was hiding the Allocate button for remaining seats, e.g. Shadow after Solver was assigned) — fixed to check remaining capacity instead of zero bookings. Also removes the one-active-booking-per-mentor cap for GD and CASE — students can now hold multiple simultaneous GD/CASE bookings with the same mentor; CV/Stock Pitch unchanged — narrows `booking_one_active_per_mentor_type` |
 | 2026-08-10 | `2d25342` | refactor | Mentee-summary date filter moved from per-student sheet to cohort level (one shared control above the member list, persists across which mentee you view) |
