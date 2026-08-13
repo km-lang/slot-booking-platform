@@ -40,6 +40,17 @@ enum SlotType {
   STOCK_PITCH
 }
 
+// CASE slots only — an optional tag so students can tell what domain a case is
+// in while browsing, before opening it (see BookingRelease.domain).
+enum CaseDomain {
+  CONSULTING
+  MARKETING
+  PRODMAN
+  OPERATIONS
+  GENMAN
+  FINANCE
+}
+
 // Only meaningful on a CASE booking — self-selected by the student at booking
 // time. Null for CV/GD bookings.
 enum ParticipantRole {
@@ -181,6 +192,7 @@ model BookingRelease {
   slotType        SlotType @default(CV)
   capacity        Int      @default(1) // participants per slot; CV/STOCK_PITCH always 1, GD/CASE mentor-chosen (GD >= 2, CASE >= 1)
   caseDescription String?  // CASE slots only — the case being reviewed, shown to students before they book (~200 words)
+  domain          CaseDomain? // CASE slots only — shown to students browsing, before they open the slot
   createdAt       DateTime @default(now())
 
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])

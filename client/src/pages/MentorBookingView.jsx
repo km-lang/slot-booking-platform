@@ -20,6 +20,8 @@ const FOCUS_LABELS = {
 const SLOT_TYPE_LABELS = { GD: "Group Discussion", CASE: "Case Study", STOCK_PITCH: "Stock Pitch" };
 const MULTI_PARTICIPANT_TYPES = ["GD", "CASE"];
 const ROLE_LABELS = { SOLVER: "Solver", SHADOW: "Shadow" };
+// CASE slots only — matches the server's CaseDomain enum.
+const CASE_DOMAIN_LABELS = { CONSULTING: "Consulting", MARKETING: "Marketing", PRODMAN: "Prodman", OPERATIONS: "Operations", GENMAN: "Genman", FINANCE: "Finance" };
 
 const fmt = (d) =>
   new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -212,6 +214,7 @@ export default function MentorBookingView() {
                       {SLOT_TYPE_LABELS[slot.slotType] && (
                         <span className="flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded">
                           {SLOT_TYPE_LABELS[slot.slotType]}
+                          {slot.slotType === "CASE" && slot.domain && ` · ${CASE_DOMAIN_LABELS[slot.domain] ?? slot.domain}`}
                           {MULTI_PARTICIPANT_TYPES.includes(slot.slotType) && ` · ${slot.seatsTaken}/${slot.seatsMax}`}
                         </span>
                       )}
@@ -335,6 +338,11 @@ export default function MentorBookingView() {
                 const lastSeatNeedsSolver = !selectedSlot.solverTaken && (selectedSlot.seatsMax - selectedSlot.seatsTaken === 1);
                 return (
                   <>
+                    {selectedSlot.domain && (
+                      <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase px-1.5 py-0.5 rounded mb-2">
+                        {CASE_DOMAIN_LABELS[selectedSlot.domain] ?? selectedSlot.domain}
+                      </span>
+                    )}
                     {selectedSlot.caseDescription && (
                       <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
                         <p className="text-[10px] font-black text-indigo-800 uppercase tracking-widest mb-1.5">The Case</p>

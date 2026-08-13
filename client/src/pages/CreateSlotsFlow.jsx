@@ -30,6 +30,16 @@ const MULTI_PARTICIPANT_TYPES = ["GD", "CASE"];
 // Soft ceiling matching the server's CASE_DESCRIPTION_MAX_LENGTH — a plain
 // character cap standing in for "~200 words" without parsing actual words.
 const CASE_DESCRIPTION_MAX_LENGTH = 1600;
+// CASE slots only — optional domain tag, fixed set matching the server's
+// CASE_DOMAINS/CaseDomain enum.
+const CASE_DOMAINS = [
+  { value: "CONSULTING", label: "Consulting" },
+  { value: "MARKETING",  label: "Marketing" },
+  { value: "PRODMAN",    label: "Prodman" },
+  { value: "OPERATIONS", label: "Operations" },
+  { value: "GENMAN",     label: "Genman" },
+  { value: "FINANCE",    label: "Finance" },
+];
 // Quick-fill shortcuts for the Ends field — not the only way to set it, the field
 // itself (both Day and Time) is always directly editable.
 const QUICK_DURATIONS_MIN = [60, 120, 180, 240];
@@ -62,6 +72,7 @@ export default function CreateSlotsFlow() {
   const [slotType, setSlotType]       = useState("CV");
   const [capacity, setCapacity]       = useState(4); // GD/CASE only — participants per slot
   const [caseDescription, setCaseDescription] = useState(""); // CASE only
+  const [domain, setDomain] = useState(null); // CASE only, optional
   const [slotDuration, setSlotDuration]         = useState(30);
   const [isCustomDuration, setIsCustomDuration] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState(VENUE_OPTIONS[0]);
@@ -97,6 +108,7 @@ export default function CreateSlotsFlow() {
         if (d.slotType) setSlotType(d.slotType);
         if (d.capacity) setCapacity(d.capacity);
         if (typeof d.caseDescription === "string") setCaseDescription(d.caseDescription);
+        if (typeof d.domain === "string" || d.domain === null) setDomain(d.domain);
         if (d.slotDuration) setSlotDuration(d.slotDuration);
         if (typeof d.isCustomDuration === "boolean") setIsCustomDuration(d.isCustomDuration);
         if (d.selectedVenue) setSelectedVenue(d.selectedVenue);
@@ -127,11 +139,11 @@ export default function CreateSlotsFlow() {
   useEffect(() => {
     if (!hydratedRef.current) return; // don't stomp a draft mid-restore
     const draft = {
-      startDate, startTime, endDate, endTime, slotType, capacity, caseDescription, slotDuration, isCustomDuration,
+      startDate, startTime, endDate, endTime, slotType, capacity, caseDescription, domain, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil,
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [startDate, startTime, endDate, endTime, slotType, capacity, caseDescription, slotDuration, isCustomDuration,
+  }, [startDate, startTime, endDate, endTime, slotType, capacity, caseDescription, domain, slotDuration, isCustomDuration,
       selectedVenue, meetingLink, cohortOnly, publishNow, repeatWeekly, repeatDays, repeatUntil]);
 
   // First time Repeat Weekly is switched on, pre-check the start date's own
@@ -222,6 +234,7 @@ export default function CreateSlotsFlow() {
         slotType,
         ...(MULTI_PARTICIPANT_TYPES.includes(slotType) && { capacity }),
         ...(slotType === "CASE" && caseDescription.trim() && { caseDescription: caseDescription.trim() }),
+        ...(slotType === "CASE" && domain && { domain }),
         ...(isOnlineVenue && meetingLink.trim() && { meetingLink: meetingLink.trim() }),
       },
       {
@@ -321,6 +334,25 @@ export default function CreateSlotsFlow() {
                           : `1 Solver + ${capacity - 1} Shadow${capacity - 1 !== 1 ? "s" : ""} — every Case slot requires exactly one Solver`}
                       </p>
                     )}
+                  </div>
+                )}
+                {slotType === "CASE" && (
+                  <div className="mt-3">
+                    <label className="block text-[10px] font-bold text-emerald-800/60 uppercase mb-1.5">
+                      Domain <span className="text-emerald-700/40 font-semibold normal-case">(optional — shown to students browsing)</span>
+                    </label>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {CASE_DOMAINS.map((d) => (
+                        <button
+                          key={d.value}
+                          type="button"
+                          onClick={() => setDomain((cur) => (cur === d.value ? null : d.value))}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${domain === d.value ? "bg-emerald-100 border-emerald-500 text-emerald-800" : "bg-white border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50"}`}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {slotType === "CASE" && (
@@ -542,6 +574,12 @@ export default function CreateSlotsFlow() {
                     {MULTI_PARTICIPANT_TYPES.includes(slotType) && ` · ${capacity} per slot`}
                   </span>
                 </div>
+                {slotType === "CASE" && domain && (
+                  <div className="flex justify-between text-xs">
+                    <span className="font-semibold text-emerald-700/60">Domain</span>
+                    <span className="font-bold text-emerald-950">{CASE_DOMAINS.find((d) => d.value === domain)?.label}</span>
+                  </div>
+                )}
                 {slotType === "CASE" && caseDescription.trim() && (
                   <div className="text-xs">
                     <span className="font-semibold text-emerald-700/60 block mb-1">Case Description</span>

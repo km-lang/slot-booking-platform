@@ -158,7 +158,7 @@ const listSlots = async (req, res, next) => {
       include: {
         capacity: true,
         bookings: { where: { status: "CONFIRMED" } },
-        release: { select: { cohortOnly: true, slotType: true, caseDescription: true } },
+        release: { select: { cohortOnly: true, slotType: true, caseDescription: true, domain: true } },
         waitlist: { where: { studentUserId: req.user.sub }, select: { id: true } },
       },
       orderBy: { startTime: "asc" },
@@ -196,6 +196,7 @@ const listSlots = async (req, res, next) => {
             ...(slotType === "CASE" && {
               solverTaken: slot.capacity?.solverClaimed ?? false,
               caseDescription: slot.release?.caseDescription ?? null,
+              domain: slot.release?.domain ?? null,
             }),
             delayMinutes: slot.delayMinutes ?? 0,
             onWaitlist: slot.waitlist.length > 0,
@@ -257,6 +258,9 @@ const SLOT_TYPES = ["CV", "GD", "CASE", "STOCK_PITCH"];
 // ~200 words at a generous average word length — a soft ceiling, not a strict
 // word-count parser, so it never surprises a mentor mid-paste.
 const CASE_DESCRIPTION_MAX_LENGTH = 1600;
+// CASE slots only — optional domain tag, shown to students browsing before they
+// open a slot. Fixed set, not free text — matches the CaseDomain enum.
+const CASE_DOMAINS = ["CONSULTING", "MARKETING", "PRODMAN", "OPERATIONS", "GENMAN", "FINANCE"];
 
 const releaseSlots = async (req, res, next) => {
   try {
@@ -304,6 +308,15 @@ const releaseSlots = async (req, res, next) => {
         return res.status(400).json({ error: `caseDescription must be ${CASE_DESCRIPTION_MAX_LENGTH} characters or fewer (~200 words)` });
       }
       caseDescription = raw || null;
+    }
+
+    // Domain tag — CASE slots only, optional, fixed set (see CASE_DOMAINS).
+    let domain = null;
+    if (slotType === "CASE" && req.body.domain) {
+      if (!CASE_DOMAINS.includes(req.body.domain)) {
+        return res.status(400).json({ error: `domain must be one of ${CASE_DOMAINS.join(", ")}` });
+      }
+      domain = req.body.domain;
     }
 
     const rawOccurrences = Array.isArray(req.body.occurrences) && req.body.occurrences.length > 0
@@ -363,6 +376,7 @@ const releaseSlots = async (req, res, next) => {
               slotType,
               capacity,
               caseDescription,
+              domain,
             },
           });
 
@@ -743,7 +757,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       include: {
         bookings: { where: { status: { not: "CANCELLED" } } },
         capacity: { select: { max: true, current: true } },
-        release: { select: { cohortOnly: true, slotType: true, caseDescription: true } },
+        release: { select: { cohortOnly: true, slotType: true, caseDescription: true, domain: true } },
       },
       orderBy: { startTime: "asc" },
     });
@@ -767,7 +781,7 @@ const listMentorOwnSlots = async (req, res, next) => {
         // filled here (see the .filter above), so seatsTaken reflects real progress.
         seatsMax: s.capacity?.max ?? 1,
         seatsTaken: s.capacity?.current ?? 0,
-        ...(s.release?.slotType === "CASE" && { caseDescription: s.release?.caseDescription ?? null }),
+        ...(s.release?.slotType === "CASE" && { caseDescription: s.release?.caseDescription ?? null, domain: s.release?.domain ?? null }),
         meetingLink: s.meetingLink ?? null,
         published: s.published,
       }));
