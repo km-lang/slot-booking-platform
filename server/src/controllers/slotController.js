@@ -749,18 +749,22 @@ const listMentorOwnSlots = async (req, res, next) => {
     });
 
     const availableSlots = upcomingSlots
-      .filter((s) => s.bookings.length === 0)
+      // "Available" means still has open capacity, not "nobody's booked it yet" —
+      // a GD/CASE slot with e.g. 1 of 3 seats filled must stay here so the mentor
+      // can keep Allocating the rest (that button only lives in this list). Using
+      // bookings.length === 0 here previously hid any partially-filled multi-seat
+      // slot from Available Slots entirely, with no way to fill its remaining
+      // seats. For CV/Stock Pitch (capacity always 1) this is equivalent to the
+      // old check, since current hits max the instant one booking lands.
+      .filter((s) => (s.capacity?.current ?? 0) < (s.capacity?.max ?? 1))
       .map((s) => ({
         id: s.id,
         time: fmtSlotTime(s.startTime, s.endTime),
         venue: s.venue,
         cohortOnly: s.release?.cohortOnly ?? false,
         slotType: s.release?.slotType ?? "CV",
-        // Seat count for multi-participant types (GD/CASE) — this list only ever
-        // holds zero-booking slots today (see the .filter above), so seatsTaken is
-        // always 0 here, but the mentor dashboard shows it explicitly rather than
-        // showing nothing, which previously left "0 booked" indistinguishable from
-        // "no seat concept at all" for these slot types.
+        // Seat count for multi-participant types (GD/CASE) — can now be partially
+        // filled here (see the .filter above), so seatsTaken reflects real progress.
         seatsMax: s.capacity?.max ?? 1,
         seatsTaken: s.capacity?.current ?? 0,
         ...(s.release?.slotType === "CASE" && { caseDescription: s.release?.caseDescription ?? null }),

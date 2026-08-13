@@ -441,16 +441,20 @@ const reassignBooking = async (req, res, next) => {
     // Mirrors the DB constraint's scope (studentUserId, mentorProfileId, slotType,
     // focus) — a conflict here is only real if it's the same slot type and, for CV,
     // the same focus. A CASE booking elsewhere with this mentor is no longer a
-    // blocker for a CV-HR reassignment, for example.
-    const conflict = await prisma.booking.findFirst({
-      where: {
-        studentUserId: newStudentProfile.userId,
-        mentorProfileId: mentorProfile.id,
-        status: "CONFIRMED",
-        slotType: booking.slot.release.slotType,
-        focus: booking.focus,
-      },
-    });
+    // blocker for a CV-HR reassignment, for example. GD/CASE are uncapped per
+    // mentor entirely (booking_one_active_per_mentor_type excludes them), so this
+    // check is skipped for those types — must stay in sync with that index's scope.
+    const conflict = ["GD", "CASE"].includes(booking.slot.release.slotType)
+      ? null
+      : await prisma.booking.findFirst({
+          where: {
+            studentUserId: newStudentProfile.userId,
+            mentorProfileId: mentorProfile.id,
+            status: "CONFIRMED",
+            slotType: booking.slot.release.slotType,
+            focus: booking.focus,
+          },
+        });
     if (conflict) {
       return res
         .status(409)

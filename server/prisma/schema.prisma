@@ -262,12 +262,16 @@ model Booking {
   student       User          @relation(fields: [studentUserId], references: [id])
   mentorProfile MentorProfile @relation(fields: [mentorProfileId], references: [id])
 
-  // A student may hold at most one CONFIRMED booking per (mentor, slotType, focus) at
-  // a time — e.g. a CASE booking and a CV-HR booking with the same mentor can coexist,
-  // but not two CASE bookings, and not two CV bookings of the same focus. Enforced as a
-  // partial unique index on (studentUserId, mentorProfileId, slotType, COALESCE(focus, ''))
-  // WHERE status = 'CONFIRMED' in the migration SQL, since Prisma's schema DSL can't
-  // express a conditional/expression unique constraint directly.
+  // A student may hold at most one CONFIRMED CV or STOCK_PITCH booking per (mentor,
+  // slotType, focus) at a time — e.g. a CV-HR booking and a Stock Pitch booking with
+  // the same mentor can coexist, but not two CV bookings of the same focus. GD and
+  // CASE are deliberately excluded from this cap — a student may hold any number of
+  // simultaneous GD or CASE bookings with the same mentor. Enforced as a partial
+  // unique index on (studentUserId, mentorProfileId, slotType, COALESCE(focus, ''))
+  // WHERE status = 'CONFIRMED' AND slotType NOT IN ('GD', 'CASE') in the migration
+  // SQL, since Prisma's schema DSL can't express a conditional/expression unique
+  // constraint directly. reassignBooking's own conflict pre-check in
+  // bookingController.js must stay in sync with this same GD/CASE exemption.
 }
 
 // ─── Penalties & Bans ─────────────────────────────────────────────────────────
