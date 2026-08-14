@@ -872,7 +872,7 @@ const getStudentDetail = async (req, res, next) => {
     });
     if (!studentProfile) return res.status(404).json({ error: "Student not found" });
 
-    const [bookings, bans] = await Promise.all([
+    const [bookings, bans, warnings] = await Promise.all([
       prisma.booking.findMany({
         where: { studentUserId: studentProfile.user.id },
         include: {
@@ -885,6 +885,10 @@ const getStudentDetail = async (req, res, next) => {
       prisma.ban.findMany({
         where: { userId: studentProfile.user.id },
         orderBy: { startsAt: "desc" },
+      }),
+      prisma.studentWarning.findMany({
+        where: { userId: studentProfile.user.id },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -921,7 +925,39 @@ const getStudentDetail = async (req, res, next) => {
         endsAt: b.endsAt,
         liftedAt: b.liftedAt,
       })),
+      warnings: warnings.map((w) => ({
+        id: w.id,
+        type: w.type,
+        reason: w.reason,
+        issuedBy: w.issuedBy,
+        createdAt: w.createdAt,
+      })),
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// A strike/warning has no soft-delete field (unlike Ban's liftedAt/liftedBy) —
+// this is a real delete, per SuperADMIN request, logged via AuditEvent so a
+// permanent record survives even after the StudentWarning row is gone.
+const removeStrike = async (req, res, next) => {
+  try {
+    const warning = await prisma.studentWarning.findUnique({ where: { id: req.params.id } });
+    if (!warning) return res.status(404).json({ error: "Strike not found" });
+
+    await prisma.studentWarning.delete({ where: { id: warning.id } });
+    await prisma.auditEvent.create({
+      data: {
+        userId: req.user.sub,
+        action: "STRIKE_REMOVED",
+        entity: "StudentWarning",
+        entityId: warning.id,
+        meta: JSON.stringify({ studentUserId: warning.userId, reason: warning.reason, type: warning.type }),
+      },
+    });
+
+    res.json({ removed: true });
   } catch (err) {
     next(err);
   }
@@ -979,6 +1015,7 @@ module.exports = {
   setConfig,
   listBans,
   liftBan,
+  removeStrike,
   getOrgStats,
   listMentorStats,
   searchStudents,

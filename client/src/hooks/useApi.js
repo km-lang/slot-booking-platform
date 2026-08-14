@@ -495,6 +495,14 @@ export const useLiftBan = () => {
   });
 };
 
+export const useRemoveStrike = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }) => apiFetch(`/admin/strikes/${id}`, { method: "DELETE" }),
+    onSuccess: (_data, { pgpId }) => qc.invalidateQueries({ queryKey: QK.studentDetail(pgpId) }),
+  });
+};
+
 // ── CSV export ─────────────────────────────────────────────────────────────────
 // Shared by every "Export CSV" button (student bookings, mentor cohort, AIG roster,
 // batch roster) — gives each one isPending/isSuccess/isError instead of the

@@ -251,6 +251,7 @@ router.put("/admin/config/:key", requireRole("SuperADMIN"), adminController.setC
 // ── Ban Management (SuperADMIN only) ──────────────────────────────────────
 router.get("/admin/bans",          requireRole("SuperADMIN"), adminController.listBans);
 router.patch("/admin/bans/:id/lift", requireRole("SuperADMIN"), adminController.liftBan);
+router.delete("/admin/strikes/:id", requireRole("SuperADMIN"), adminController.removeStrike);
 
 // ── Data Export ────────────────────────────────────────────────────────────
 router.get("/admin/export/roster", requireRole("SuperADMIN"), exportController.exportAdminRoster);
