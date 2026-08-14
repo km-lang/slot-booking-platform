@@ -56,6 +56,8 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-08-14 | `c00ba47` | chore | DB snapshot before removing No-show strike on PGP42416 (Jason Wahlang) (20260814-203653) — strike removed via a script running the same delete+STRIKE_REMOVED-audit logic as the new removeStrike endpoint below |
+| 2026-08-14 | `e7ef4a7` | feat | SuperADMIN can remove student strikes from the UI — new Strikes section on the student-detail page (list + Remove action, confirm dialog, mirrors the existing Lift Ban flow) — hard-deletes the StudentWarning row, logs a STRIKE_REMOVED AuditEvent; no schema change |
 | 2026-08-13 | `386c15e` | chore | DB snapshot before add_case_domain migration (20260813-154405) |
 | 2026-08-13 | `322ad51` | feat | Domain tag on Case Study slots (Consulting/Marketing/Prodman/Operations/Genman/Finance) — mentors pick one when creating a CASE batch, shown to students on the slot list badge and in the booking sheet alongside the case description — adds `BookingRelease.domain`/`CaseDomain` enum |
 | 2026-08-13 | `586a6d4` | chore | DB snapshot before uncap_gd_case_mentor_booking_limit migration (20260813-150655) |
