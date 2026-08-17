@@ -981,11 +981,14 @@ const getSlotHoursReleased = async (req, res, next) => {
 
     const slots = await prisma.slot.findMany({
       where: { mentorProfileId: mentorProfile.id, startTime: { gte: fromDate, lt: toDate }, retired: false },
-      select: { startTime: true, endTime: true },
+      select: { startTime: true, endTime: true, capacity: { select: { current: true } } },
     });
     const hours = slots.reduce((sum, s) => sum + (s.endTime - s.startTime) / 3600000, 0);
+    // slotCount deliberately excludes empty slots (capacity.current === 0, i.e. nobody has
+    // booked it) to match the occupied-slot accounting semantics used by getAigSlotHoursReleased.
+    const slotCount = slots.filter((s) => (s.capacity?.current ?? 0) > 0).length;
 
-    res.json({ hours: +hours.toFixed(1), slotCount: slots.length });
+    res.json({ hours: +hours.toFixed(1), slotCount });
   } catch (err) {
     next(err);
   }

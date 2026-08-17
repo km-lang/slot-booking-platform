@@ -901,6 +901,8 @@ function CancelledSessionRow({ session }) {
 // Hours, not a slot count, since slots can be of any duration — lets the mentor
 // see how many mentoring hours they've put on the calendar for a given window,
 // scoped by the session's own date (slot startTime), not when it was created.
+// The "N slots" sub-label counts occupied slots only (>=1 booking), matching the
+// AIG accounting definition, not every slot released.
 function HoursReleasedCard() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [from, setFrom] = useState(todayStr);
