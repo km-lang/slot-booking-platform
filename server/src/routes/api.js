@@ -253,6 +253,17 @@ router.get("/admin/bans",          requireRole("SuperADMIN"), adminController.li
 router.patch("/admin/bans/:id/lift", requireRole("SuperADMIN"), adminController.liftBan);
 router.delete("/admin/strikes/:id", requireRole("SuperADMIN"), adminController.removeStrike);
 
+// ── Academic Secretary — read-only cross-group mentoring activity
+//    (ACADEMIC_SECY_VIEW). Deliberately its own narrow endpoint rather than a
+//    slice of the Placement Admin routes above: those all key off individual
+//    students (PGP/ABM batch rosters, names, emails) which this role must
+//    never see — only AIG/Disha/Crack Tank membership and slot activity.
+router.get(
+  "/admin/secy/mentor-activity",
+  requireRole("SuperADMIN", "ACADEMIC_SECY_VIEW"),
+  adminController.getGroupMentorActivity,
+);
+
 // ── Data Export ────────────────────────────────────────────────────────────
 router.get("/admin/export/roster", requireRole("SuperADMIN"), exportController.exportAdminRoster);
 router.get("/admin/export/roster-link", requireRole("SuperADMIN"), exportController.getAdminRosterExportToken);

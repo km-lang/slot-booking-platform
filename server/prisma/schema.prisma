@@ -20,6 +20,14 @@ enum Role {
   MENTOR
   AIGs
   SuperADMIN
+  // Read-only, cross-AIG — but deliberately NOT a slice of the Placements
+  // Admin dashboard: that dashboard is keyed off individual students (PGP/ABM
+  // rosters, names, emails), which this role must never see. Its own narrow
+  // endpoint (/admin/secy/mentor-activity) exposes only: the list of AIG/
+  // Disha/Crack Tank groups, their mentor members, and those mentors'
+  // slot hours/counts by SlotType within an optional date range — see
+  // adminController.getGroupMentorActivity and AcademicSecyDashboard.jsx.
+  ACADEMIC_SECY_VIEW
 }
 
 enum BookingStatus {

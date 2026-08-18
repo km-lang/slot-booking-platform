@@ -5,6 +5,7 @@ const ROLE_HOME = {
   MENTOR: () => "/mentor",
   SuperADMIN: () => "/admin/placements",
   AIGs: (user) => `/admin/${user.aigSlug}`,
+  ACADEMIC_SECY_VIEW: () => "/admin/secy",
 };
 
 export function getRoleHome(user) {
@@ -21,6 +22,7 @@ const ROLE_LABEL = {
   MENTOR: "Mentor",
   AIGs: "AIG Admin",
   SuperADMIN: "Super Admin",
+  ACADEMIC_SECY_VIEW: "Academic Secretary (View Only)",
 };
 
 export function getRoleLabel(user) {

@@ -28,6 +28,7 @@ export const QK = {
   allocateStudentSearch: (q) => ["allocateStudentSearch", q],
   studentDetail:   (pgpId)   => ["studentDetail", pgpId],
   adminCalendar:   (weekStart) => ["adminCalendar", weekStart],
+  secyMentorActivity: (from, to) => ["secyMentorActivity", from ?? null, to ?? null],
   whitelist:       ()        => ["whitelist"],
   config:          ()        => ["config"],
   bans:            ()        => ["bans"],
@@ -215,6 +216,14 @@ export const useMentorStats = () =>
   useQuery({
     queryKey: QK.mentorStats(),
     queryFn:  () => apiFetch("/admin/mentors"),
+  });
+
+// Academic Secretary's cross-group view — from/to are optional (unfiltered =
+// all-time) but must be supplied together, same contract as the server route.
+export const useSecyMentorActivity = (from, to) =>
+  useQuery({
+    queryKey: QK.secyMentorActivity(from, to),
+    queryFn:  () => apiFetch(`/admin/secy/mentor-activity${from && to ? `?from=${from}&to=${to}` : ""}`),
   });
 
 // Lazily enabled — only fires once the SuperAdmin types something in the search box.

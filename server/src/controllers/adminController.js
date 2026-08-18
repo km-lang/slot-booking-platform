@@ -404,7 +404,7 @@ const addToWhitelist = async (req, res, next) => {
   try {
     const { email, role, aigSlug } = req.body;
     if (!email || !role) return res.status(400).json({ error: "email and role are required" });
-    if (!["STUDENT", "MENTOR", "AIGs", "SuperADMIN"].includes(role)) {
+    if (!["STUDENT", "MENTOR", "AIGs", "SuperADMIN", "ACADEMIC_SECY_VIEW"].includes(role)) {
       return res.status(400).json({ error: "Invalid role" });
     }
 
@@ -829,6 +829,116 @@ const listMentorStats = async (_req, res, next) => {
   }
 };
 
+// ─── Academic Secretary (ACADEMIC_SECY_VIEW) ──────────────────────────────────
+// Read-only, cross-group summary for CV-point verification — every mentor who
+// belongs to an AIG/Disha/Crack Tank (mentorProfile.aigId set; independent
+// PGP2-student mentors are out of scope, since they aren't members of "the
+// above mentioned groups"), broken down by SlotType, over an optional [from,
+// to] window on the *session* date (Slot.startTime), not booking-creation
+// time. Deliberately excludes anything keyed by student identity (no PGP/ABM
+// roster, no names/emails) — see the Role enum comment in schema.prisma.
+const TAKEN_STATUSES = ["CONFIRMED", "ATTENDED", "NO_SHOW"];
+const SLOT_TYPES = ["CV", "GD", "CASE", "STOCK_PITCH"];
+
+const getGroupMentorActivity = async (req, res, next) => {
+  try {
+    const { from, to } = req.query;
+    let fromDate = null;
+    let toDate = null;
+    if (from || to) {
+      if (!from || !to) return res.status(400).json({ error: "Both from and to are required together" });
+      fromDate = new Date(from);
+      toDate = new Date(to);
+      if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: "Invalid from/to date" });
+      }
+      fromDate.setHours(0, 0, 0, 0);
+      toDate.setHours(0, 0, 0, 0);
+      toDate.setDate(toDate.getDate() + 1); // inclusive of the whole "to" day
+    }
+
+    const [groups, mentors, slots] = await Promise.all([
+      prisma.aIG.findMany({ orderBy: { name: "asc" } }),
+      prisma.mentorProfile.findMany({
+        where: { aigId: { not: null } },
+        select: {
+          id: true,
+          slug: true,
+          user: { select: { name: true } },
+          aig: { select: { slug: true, name: true, category: true } },
+        },
+        orderBy: { user: { name: "asc" } },
+      }),
+      prisma.slot.findMany({
+        where: {
+          retired: false,
+          mentorProfile: { aigId: { not: null } },
+          ...(fromDate ? { startTime: { gte: fromDate, lt: toDate } } : {}),
+        },
+        select: {
+          startTime: true,
+          endTime: true,
+          mentorProfileId: true,
+          release:  { select: { slotType: true } },
+          bookings: { where: { status: { in: TAKEN_STATUSES } }, select: { id: true } },
+        },
+      }),
+    ]);
+
+    const emptyByType = () => Object.fromEntries(SLOT_TYPES.map((t) => [t, { count: 0, hours: 0 }]));
+
+    // Seeded from the full mentor list (not just mentors with activity) so a
+    // group member with zero taken slots this window is still visible, rather
+    // than silently absent — same convention as getAigSlotHoursReleased.
+    const byMentorMap = new Map(
+      mentors.map((m) => [
+        m.id,
+        {
+          mentorId: m.id,
+          slug: m.slug,
+          name: m.user?.name ?? "—",
+          groupSlug: m.aig.slug,
+          groupName: m.aig.name,
+          groupCategory: m.aig.category,
+          byType: emptyByType(),
+          totalCount: 0,
+          totalHours: 0,
+        },
+      ]),
+    );
+
+    for (const s of slots) {
+      if (s.bookings.length === 0) continue; // released but never taken
+      const entry = byMentorMap.get(s.mentorProfileId);
+      if (!entry) continue; // shouldn't happen given the where clause above
+      const type = s.release?.slotType ?? "CV";
+      const hours = (s.endTime - s.startTime) / 3600000;
+      entry.byType[type].count += 1;
+      entry.byType[type].hours += hours;
+      entry.totalCount += 1;
+      entry.totalHours += hours;
+    }
+
+    const mentorRows = [...byMentorMap.values()]
+      .map((m) => ({
+        ...m,
+        byType: Object.fromEntries(
+          Object.entries(m.byType).map(([t, v]) => [t, { count: v.count, hours: +v.hours.toFixed(1) }]),
+        ),
+        totalHours: +m.totalHours.toFixed(1),
+      }))
+      .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.name.localeCompare(b.name));
+
+    res.json({
+      range: fromDate ? { from: fromDate.toISOString(), to: new Date(toDate.getTime() - 1).toISOString() } : null,
+      groups: groups.map((g) => ({ slug: g.slug, name: g.name, category: g.category })),
+      mentors: mentorRows,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── Student/Mentee History (SuperADMIN) ──────────────────────────────────────
 
 const searchStudents = async (req, res, next) => {
@@ -1018,6 +1128,7 @@ module.exports = {
   removeStrike,
   getOrgStats,
   listMentorStats,
+  getGroupMentorActivity,
   searchStudents,
   getStudentDetail,
   getCalendarWeek,

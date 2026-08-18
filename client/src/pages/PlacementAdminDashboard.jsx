@@ -712,6 +712,7 @@ const ROLE_TONE = {
   AIGs:       "warning",
   MENTOR:     "success",
   STUDENT:    "neutral",
+  ACADEMIC_SECY_VIEW: "info",
 };
 
 function WhitelistTab() {
@@ -766,6 +767,7 @@ function WhitelistTab() {
               <option value="MENTOR">MENTOR</option>
               <option value="AIGs">AIGs</option>
               <option value="SuperADMIN">SuperADMIN</option>
+              <option value="ACADEMIC_SECY_VIEW">ACADEMIC_SECY_VIEW (view only)</option>
             </select>
             {addRole === "AIGs" && (
               <select value={addAigSlug} onChange={(e) => setAddAigSlug(e.target.value)} required

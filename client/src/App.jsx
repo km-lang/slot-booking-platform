@@ -14,6 +14,7 @@ import AigAdminDashboard from "./pages/AigAdminDashboard";
 import AigMentorDetail from "./pages/AigMentorDetail";
 import AdminStudentDetail from "./pages/AdminStudentDetail";
 import PlacementAdminDashboard from "./pages/PlacementAdminDashboard";
+import AcademicSecyDashboard from "./pages/AcademicSecyDashboard";
 import ProfileSettings from "./pages/ProfileSettings";
 import LoginPage from "./pages/LoginPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -60,6 +61,12 @@ function App() {
         />
         <Route path="/admin/placements/mentor/:mentorSlug" element={t(<AigMentorDetail />)} />
         <Route path="/admin/placements/student/:pgpId" element={t(<AdminStudentDetail />)} />
+      </Route>
+
+      {/* Academic Secretary — read-only, cross-group mentoring activity only
+          (no student roster access). See AcademicSecyDashboard.jsx. */}
+      <Route element={<RequireRole role="ACADEMIC_SECY_VIEW" />}>
+        <Route path="/admin/secy" element={t(<AcademicSecyDashboard />)} />
       </Route>
 
       <Route element={<RequireRole role="AIGs" />}>

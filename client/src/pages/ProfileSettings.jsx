@@ -53,6 +53,7 @@ export default function ProfileSettings() {
   const backPath =
     profile?.role === "MENTOR"     ? "/mentor"
     : profile?.role === "SuperADMIN" ? "/admin/placements"
+    : profile?.role === "ACADEMIC_SECY_VIEW" ? "/admin/secy"
     : profile?.role === "AIGs"       ? "/admin/disha"
     : "/student";
 
