@@ -56,6 +56,8 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-08-18 | `bf00650` | feat | Add `ACADEMIC_SECY_VIEW` role — read-only, cross-group mentoring-activity view for the Academic Secretary (new `/admin/secy` page + `/admin/secy/mentor-activity` endpoint): lists AIG/Disha/Crack Tank groups, their mentor members, and slot hours/counts by SlotType within an optional date range; deliberately excludes all student-roster data (no PGP/ABM IDs, names, emails) and any whitelist/config/ban/export capability — adds `Role.ACADEMIC_SECY_VIEW` enum value (schema migration `20260817120000_add_academic_secy_view_role`) |
+| 2026-08-18 | `a12f20a` | chore | DB snapshot before add_academic_secy_view_role migration (20260818-112054) |
 | 2026-08-14 | `c00ba47` | chore | DB snapshot before removing No-show strike on PGP42416 (Jason Wahlang) (20260814-203653) — strike removed via a script running the same delete+STRIKE_REMOVED-audit logic as the new removeStrike endpoint below |
 | 2026-08-14 | `e7ef4a7` | feat | SuperADMIN can remove student strikes from the UI — new Strikes section on the student-detail page (list + Remove action, confirm dialog, mirrors the existing Lift Ban flow) — hard-deletes the StudentWarning row, logs a STRIKE_REMOVED AuditEvent; no schema change |
 | 2026-08-13 | `386c15e` | chore | DB snapshot before add_case_domain migration (20260813-154405) |
