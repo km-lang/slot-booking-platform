@@ -213,7 +213,13 @@ const getBatchOverview = async (_req, res, next) => {
       // Durations, not a count — slots can be of any length, so "utilization" is
       // measured in hours rather than number of slots. Retired (deleted) slots are
       // excluded — they no longer exist from the mentor's or student's point of view.
-      prisma.slot.findMany({ where: { retired: false }, select: { startTime: true, endTime: true } }),
+      // Capacity is included because a GD/CASE slot with capacity > 1 offers that many
+      // hours of mentoring capacity, not one — matches how completed hours are counted
+      // below (once per attended/confirmed booking, i.e. once per seat filled).
+      prisma.slot.findMany({
+        where: { retired: false },
+        select: { startTime: true, endTime: true, capacity: { select: { max: true } } },
+      }),
       prisma.booking.count({ where: { status: "NO_SHOW" } }),
       // A CONFIRMED booking whose slot has already ended and was never marked has an
       // unknown outcome — it shouldn't count as "utilized" alongside real ATTENDED
@@ -236,7 +242,10 @@ const getBatchOverview = async (_req, res, next) => {
         include: {
           user: { select: { name: true } },
           _count: { select: { slots: { where: { retired: false } } } },
-          slots: { where: { retired: false }, select: { startTime: true, endTime: true } },
+          slots: {
+            where: { retired: false },
+            select: { startTime: true, endTime: true, capacity: { select: { max: true } } },
+          },
         },
         orderBy: { slots: { _count: "desc" } },
       }),
@@ -310,8 +319,9 @@ const getBatchOverview = async (_req, res, next) => {
     }).sort((a, b) => a.orgName.localeCompare(b.orgName) || byCohortLabel(a, b));
 
     const toHours = (start, end) => (end - start) / 3600000;
+    const slotHours = (s) => toHours(s.startTime, s.endTime) * (s.capacity?.max ?? 1);
 
-    const totalSlotHours = allSlots.reduce((sum, s) => sum + toHours(s.startTime, s.endTime), 0);
+    const totalSlotHours = allSlots.reduce((sum, s) => sum + slotHours(s), 0);
     const utilizedHours = utilizedBookings.reduce((sum, b) => sum + toHours(b.slot.startTime, b.slot.endTime), 0);
 
     const coveragePct =
@@ -335,7 +345,7 @@ const getBatchOverview = async (_req, res, next) => {
             },
             select: { slot: { select: { startTime: true, endTime: true } } },
           });
-          const offeredHours = m.slots.reduce((sum, s) => sum + toHours(s.startTime, s.endTime), 0);
+          const offeredHours = m.slots.reduce((sum, s) => sum + slotHours(s), 0);
           const completedHours = completedBookings.reduce(
             (sum, b) => sum + toHours(b.slot.startTime, b.slot.endTime),
             0,
@@ -664,20 +674,28 @@ const getOrgStats = async (_req, res, next) => {
   try {
     const now = new Date();
     const toHours = (start, end) => (end - start) / 3600000;
+    const slotHours = (s) => toHours(s.startTime, s.endTime) * (s.capacity?.max ?? 1);
     const orgUnits = await prisma.aIG.findMany({
       include: {
         mentorProfiles: {
-          include: { slots: { where: { retired: false }, select: { startTime: true, endTime: true } } },
+          include: {
+            slots: {
+              where: { retired: false },
+              select: { startTime: true, endTime: true, capacity: { select: { max: true } } },
+            },
+          },
         },
       },
       orderBy: { name: "asc" },
     });
 
-    // Hours, not slot counts, since slots can be of any duration.
+    // Hours, not slot counts, since slots can be of any duration. Capacity-weighted so
+    // a GD/CASE slot with capacity > 1 offers that many people-hours, matching how
+    // completedHours counts once per booking (once per seat filled).
     const statsFor = async (mentorProfiles) => {
       const mentorIds = mentorProfiles.map((m) => m.id);
       const offeredHours = mentorProfiles.reduce(
-        (sum, m) => sum + m.slots.reduce((s, sl) => s + toHours(sl.startTime, sl.endTime), 0),
+        (sum, m) => sum + m.slots.reduce((s, sl) => s + slotHours(sl), 0),
         0,
       );
       // Same overdueUnmarked exclusion as listMentorStats/getBatchOverview — an
@@ -724,7 +742,12 @@ const getOrgStats = async (_req, res, next) => {
 
     const nonAigMentors = await prisma.mentorProfile.findMany({
       where: { aigId: null },
-      include: { slots: { where: { retired: false }, select: { startTime: true, endTime: true } } },
+      include: {
+        slots: {
+          where: { retired: false },
+          select: { startTime: true, endTime: true, capacity: { select: { max: true } } },
+        },
+      },
     });
     const nonAig = await statsFor(nonAigMentors);
 
@@ -764,7 +787,10 @@ const listMentorStats = async (_req, res, next) => {
         include: {
           user: { select: { name: true, email: true } },
           aig: { select: { slug: true, name: true } },
-          slots: { where: { retired: false }, select: { startTime: true, endTime: true } },
+          slots: {
+            where: { retired: false },
+            select: { startTime: true, endTime: true, capacity: { select: { max: true } } },
+          },
         },
         orderBy: { user: { name: "asc" } },
       }),
@@ -776,6 +802,7 @@ const listMentorStats = async (_req, res, next) => {
 
     const now = new Date();
     const toHours = (start, end) => (end - start) / 3600000;
+    const slotHours = (s) => toHours(s.startTime, s.endTime) * (s.capacity?.max ?? 1);
 
     const statsByMentor = {};
     for (const b of allBookings) {
@@ -797,7 +824,7 @@ const listMentorStats = async (_req, res, next) => {
     const rows = mentors.map((m) => {
       const s = statsByMentor[m.id] ?? { completedHours: 0, attended: 0, noShow: 0, cancelled: 0 };
       // Hours, not slot counts, since slots can be of any duration.
-      const offeredHours = m.slots.reduce((sum, sl) => sum + toHours(sl.startTime, sl.endTime), 0);
+      const offeredHours = m.slots.reduce((sum, sl) => sum + slotHours(sl), 0);
       const category = !m.aig
         ? m.mentorType === "PGP2_STUDENT_NO_AIG"
           ? "pgp2-mentors"
