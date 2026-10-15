@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Trash2, AlertTriangle, Calendar,
   Clock, Mail, Link as LinkIcon, Pencil, X,
   Send, UserPlus, UserMinus, Search, ShieldAlert, UserCog, ArrowLeftRight,
-  CalendarRange, MapPin,
+  CalendarRange, MapPin, Download, Loader2,
 } from "lucide-react";
 import {
   useMentorDashboard, useMentorHistory, useMarkAttendance,
@@ -13,7 +13,7 @@ import {
   useBulkDeleteSlots, useBulkSetMeetingLink,
   useBulkPublishSlots, useAllocateSlot, useAllocateStudentSearch,
   useApplyStrike, useReassignBooking, useUnassignBooking, useSwapBookings,
-  useMentorHoursReleased,
+  useMentorHoursReleased, useExportCsv,
 } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
@@ -973,6 +973,14 @@ export default function MentorDashboard() {
   const cancelledSessions = data?.cancelledSessions ?? [];
   const historyCount      = data?.historyCount ?? 0;
   const cohortStats       = data?.cohortStats ?? { totalMentees: 0, totalSlotsTaken: 0 };
+  // Only an explicit false hides the cohort card — while loading (undefined) it stays as before.
+  const hasCohort         = data?.hasCohort !== false;
+  const slotsExport       = useExportCsv();
+  const handleSlotsExport  = () =>
+    slotsExport.mutate(
+      { path: "/slots/mine/export", filename: "my-slots-taken.csv" },
+      { onSettled: () => setTimeout(() => slotsExport.reset(), 2500) },
+    );
 
   const [historyPage, setHistoryPage] = useState(1);
   const { data: historyData, isFetching: historyFetching } = useMentorHistory(historyPage);
@@ -1161,7 +1169,8 @@ export default function MentorDashboard() {
             <Plus size={20} /> Create Slots
           </button>
 
-          {/* Cohort Pulse */}
+          {/* Cohort Pulse — only for mentors who actually have a cohort */}
+          {hasCohort && (
           <div className="bg-emerald-900 rounded-2xl p-4 shadow-sm">
             <h3 className="text-emerald-50 text-xs font-bold uppercase tracking-widest flex items-center gap-1.5 mb-4">
               <Users size={14} /> My Cohort
@@ -1187,8 +1196,25 @@ export default function MentorDashboard() {
               View Cohort Details <ChevronRight size={14} />
             </button>
           </div>
+          )}
 
           <HoursReleasedCard />
+
+          {/* Download — this mentor's own taken slots only (scoped server-side by session) */}
+          <button
+            onClick={handleSlotsExport}
+            disabled={slotsExport.isPending || isLoading}
+            className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 font-bold py-3 rounded-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-40"
+          >
+            {slotsExport.isPending ? <Loader2 size={16} className="animate-spin" />
+              : slotsExport.isSuccess ? <CheckCircle size={16} className="text-emerald-600" />
+              : slotsExport.isError ? <XCircle size={16} className="text-red-600" />
+              : <Download size={16} />}
+            {slotsExport.isPending ? "Preparing…"
+              : slotsExport.isSuccess ? "Downloaded"
+              : slotsExport.isError ? (slotsExport.error?.message ?? "Download failed")
+              : "Download my slots taken (CSV)"}
+          </button>
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-xs font-bold text-red-700">

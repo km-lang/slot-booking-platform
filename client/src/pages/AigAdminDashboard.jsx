@@ -129,7 +129,7 @@ export default function AigAdminDashboard() {
 
   const handleExport = () => {
     exportMutation.mutate(
-      { path: `/admin/aig/${aigSlug}/export`, filename: `aig-${aigSlug}-roster.csv` },
+      { path: `/admin/aig/${aigSlug}/mentors-export`, filename: `aig-${aigSlug}-mentor-slots.csv` },
       { onSettled: () => setTimeout(() => exportMutation.reset(), 2500) },
     );
   };
@@ -169,7 +169,7 @@ export default function AigAdminDashboard() {
                   exportMutation.isPending ? "Exporting…"
                   : exportMutation.isSuccess ? "Downloaded"
                   : exportMutation.isError ? (exportMutation.error?.message ?? "Export failed")
-                  : "Export roster CSV"
+                  : "Download mentors & slots taken (CSV)"
                 }
               >
                 {exportMutation.isPending ? <Loader2 size={16} className="animate-spin" />

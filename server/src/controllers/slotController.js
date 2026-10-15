@@ -876,7 +876,7 @@ const listMentorOwnSlots = async (req, res, next) => {
       cohortStats = { totalMentees: menteeCount, totalSlotsTaken: bookingCount };
     }
 
-    res.json({ bookedSessions, ongoingSessions, availableSlots, expiredSlots, cancelledSessions, historyCount, cohortStats });
+    res.json({ bookedSessions, ongoingSessions, availableSlots, expiredSlots, cancelledSessions, historyCount, cohortStats, hasCohort: !!mentorProfile.cohortId });
   } catch (err) {
     next(err);
   }

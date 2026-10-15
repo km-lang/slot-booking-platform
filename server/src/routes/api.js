@@ -50,6 +50,8 @@ router.get("/mentors/:slug", requireRole("STUDENT"), slotController.getMentor);
 // GET  /api/slots?mentorSlug=evelyn-vance   student: list slots (auth-aware: marks bookedByMe)
 // POST /api/slots                           mentor: release a new block
 router.get("/slots/mine", requireRole("MENTOR"), slotController.listMentorOwnSlots);
+router.get("/slots/mine/export", requireRole("MENTOR"), exportController.exportMentorSlots);
+router.get("/slots/mine/export-link", requireRole("MENTOR"), exportController.getMentorSlotsExportToken);
 router.get("/slots/mine/history", requireRole("MENTOR"), slotController.getMentorHistory);
 router.get("/slots/hours-released", requireRole("MENTOR"), slotController.getSlotHoursReleased);
 router.get("/slots/last-used", requireRole("MENTOR"), slotController.getLastUsedSlotDefaults);
@@ -177,6 +179,18 @@ router.get(
   requireRole("AIGs"),
   requireAigScope("aigSlug"),
   exportController.exportAigRoster,
+);
+router.get(
+  "/admin/aig/:aigSlug/mentors-export",
+  requireRole("AIGs"),
+  requireAigScope("aigSlug"),
+  exportController.exportAigMentorSlots,
+);
+router.get(
+  "/admin/aig/:aigSlug/mentors-export-link",
+  requireRole("AIGs"),
+  requireAigScope("aigSlug"),
+  exportController.getAigMentorSlotsExportToken,
 );
 router.get(
   "/admin/aig/:aigSlug/export-link",

@@ -247,6 +247,92 @@ const buildMyBookingsCsv = async (studentUserId) => {
   return { body: csv(headers, dataRows), filename: `my-bookings-${new Date().toISOString().split("T")[0]}.csv` };
 };
 
+
+// ── Mentor slots-taken exports ────────────────────────────────────────────────
+// One row per *taken* booking (CONFIRMED / ATTENDED / NO_SHOW — the same rule as
+// the Academic Secretary dashboard's TAKEN_STATUSES, so every screen's numbers
+// reconcile; CANCELLED bookings and never-taken slots are excluded). Shared by the
+// individual-mentor download and the per-AIG mentor download. Scope comes ONLY
+// from the `mentorWhere` the caller builds from the authenticated session/claims —
+// never from request input — so a mentor can only ever get their own rows.
+const SLOT_TAKEN_STATUSES = ["CONFIRMED", "ATTENDED", "NO_SHOW"];
+const SLOT_TYPE_DISPLAY = { CV: "CV", GD: "Group Discussion", CASE: "Case Study", STOCK_PITCH: "Stock Pitch" };
+const ROLE_DISPLAY = { SOLVER: "Solver", SHADOW: "Shadow" };
+const IST = "Asia/Kolkata";
+const fmtD = (d) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: IST });
+const fmtT = (d) => new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: IST });
+
+const loadMentorSlotRows = async (mentorWhere, { withMentorColumns }) => {
+  const mentors = await prisma.mentorProfile.findMany({
+    where: mentorWhere,
+    select: { id: true, pgpId: true, mentorType: true, user: { select: { name: true, email: true } } },
+  });
+  const mentorById = new Map(mentors.map((m) => [m.id, m]));
+  const bookings = await prisma.booking.findMany({
+    where: { mentorProfileId: { in: [...mentorById.keys()] }, status: { in: SLOT_TAKEN_STATUSES } },
+    select: {
+      slotType: true, focus: true, role: true, status: true, mentorProfileId: true,
+      slot: { select: { startTime: true, endTime: true, venue: true, meetingLink: true } },
+      student: { select: { name: true, email: true, studentProfile: { select: { pgpId: true } } } },
+    },
+  });
+  bookings.sort((a, b) => b.slot.startTime - a.slot.startTime);
+
+  const headers = [
+    ...(withMentorColumns ? ["Mentor", "Mentor PGP ID", "Mentor Email", "Mentor Type"] : []),
+    "Date", "Start", "End", "Venue", "Slot Type", "Focus / Role",
+    "Student Name", "PGP ID", "Student Email", "Status", "Meeting Link",
+  ];
+  const mentorCells = (m) => (withMentorColumns ? [m.user?.name ?? "", m.pgpId, m.user?.email ?? "", m.mentorType] : []);
+  const blank = (n) => Array(n).fill("");
+
+  const rows = bookings.map((b) => {
+    const m = mentorById.get(b.mentorProfileId);
+    return [
+      ...mentorCells(m),
+      fmtD(b.slot.startTime), fmtT(b.slot.startTime), fmtT(b.slot.endTime), b.slot.venue,
+      SLOT_TYPE_DISPLAY[b.slotType] ?? b.slotType,
+      b.slotType === "CASE" ? (ROLE_DISPLAY[b.role] ?? "") : (FOCUS_DISPLAY[b.focus] ?? b.focus ?? ""),
+      b.student?.name ?? "", b.student?.studentProfile?.pgpId ?? "", b.student?.email ?? "",
+      STATUS_DISPLAY[b.status] ?? b.status, b.slot.meetingLink ?? "",
+    ];
+  });
+
+  // Mentors with nothing taken still get a visible row, so a file is never a
+  // bare header (which reads as "the export is broken").
+  const withRows = new Set(bookings.map((b) => b.mentorProfileId));
+  for (const m of mentors) {
+    if (withRows.has(m.id)) continue;
+    const cells = [...mentorCells(m), "No slots taken yet", ...blank(headers.length - mentorCells(m).length - 1)];
+    rows.push(cells);
+  }
+  if (withMentorColumns) rows.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  return { headers, rows, mentorCount: mentors.length };
+};
+
+const buildMentorSlotsCsv = async (mentorUserId) => {
+  const mentorProfile = await prisma.mentorProfile.findUnique({ where: { userId: mentorUserId } });
+  if (!mentorProfile) return { status: 403, error: "No mentor profile" };
+  const { headers, rows } = await loadMentorSlotRows({ id: mentorProfile.id }, { withMentorColumns: false });
+  return {
+    body: csv(headers, rows),
+    filename: `my-slots-taken-${safeFilenamePart(mentorProfile.pgpId)}-${new Date().toISOString().split("T")[0]}.csv`,
+  };
+};
+
+// Built from mentor membership (MentorProfile.aigId) — not student cohorts, which
+// most AIGs don't have — so it works for every AIG.
+const buildAigMentorSlotsCsv = async (aigSlug) => {
+  const aig = await prisma.aIG.findUnique({ where: { slug: String(aigSlug ?? "") } });
+  if (!aig) return { status: 404, error: "AIG not found" };
+  const { headers, rows, mentorCount } = await loadMentorSlotRows({ aigId: aig.id }, { withMentorColumns: true });
+  if (mentorCount === 0) return { status: 404, error: "This AIG has no mentors yet" };
+  return {
+    body: csv(headers, rows),
+    filename: `aig-${safeFilenamePart(aig.slug)}-mentor-slots-${new Date().toISOString().split("T")[0]}.csv`,
+  };
+};
+
 // ── Direct authenticated routes (existing behavior, unchanged) ────────────────
 
 const exportMentorCohort = async (req, res, next) => {
@@ -266,6 +352,22 @@ const exportAdminRoster = async (_req, res, next) => {
 const exportAigRoster = async (req, res, next) => {
   try {
     const result = await buildAigRosterCsv(req.params.aigSlug);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    respondCsv(res, result);
+  } catch (err) { next(err); }
+};
+
+const exportMentorSlots = async (req, res, next) => {
+  try {
+    const result = await buildMentorSlotsCsv(req.user.sub);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    respondCsv(res, result);
+  } catch (err) { next(err); }
+};
+
+const exportAigMentorSlots = async (req, res, next) => {
+  try {
+    const result = await buildAigMentorSlotsCsv(req.params.aigSlug);
     if (result.error) return res.status(result.status).json({ error: result.error });
     respondCsv(res, result);
   } catch (err) { next(err); }
@@ -305,6 +407,8 @@ const issueToken = (req, res, kind, extraClaims = {}) => {
 
 const getMyBookingsExportToken   = (req, res) => issueToken(req, res, "myBookings");
 const getMentorCohortExportToken = (req, res) => issueToken(req, res, "mentorCohort");
+const getMentorSlotsExportToken = (req, res) => issueToken(req, res, "mentorSlots");
+const getAigMentorSlotsExportToken = (req, res) => issueToken(req, res, "aigMentorSlots", { aigSlug: req.params.aigSlug });
 const getAdminRosterExportToken  = (req, res) => issueToken(req, res, "adminRoster");
 const getAigRosterExportToken    = (req, res) => issueToken(req, res, "aigRoster", { aigSlug: req.params.aigSlug });
 
@@ -331,6 +435,8 @@ const downloadWithToken = async (req, res, next) => {
     switch (claims.kind) {
       case "myBookings":   result = await buildMyBookingsCsv(claims.sub); break;
       case "mentorCohort": result = await buildMentorCohortCsv(claims.sub); break;
+      case "mentorSlots":  result = await buildMentorSlotsCsv(claims.sub); break;
+      case "aigMentorSlots": result = await buildAigMentorSlotsCsv(claims.aigSlug); break;
       case "adminRoster":  result = await buildAdminRosterCsv(); break;
       case "aigRoster":    result = await buildAigRosterCsv(claims.aigSlug); break;
       case "secyActivity": result = await buildSecyActivityCsv(claims.from, claims.to); break;
@@ -342,6 +448,7 @@ const downloadWithToken = async (req, res, next) => {
 };
 
 module.exports = {
+  exportMentorSlots, exportAigMentorSlots, getMentorSlotsExportToken, getAigMentorSlotsExportToken,
   exportMentorCohort, exportAdminRoster, exportAigRoster, exportMyBookings,
   getMyBookingsExportToken, getMentorCohortExportToken, getAdminRosterExportToken, getAigRosterExportToken,
   getSecyActivityExportToken,
