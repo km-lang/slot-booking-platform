@@ -264,6 +264,19 @@ router.get(
   adminController.getGroupMentorActivity,
 );
 
+// Academic Secretary full data export: mentor activity (honours the date range)
+// and the complete student roster. Both mint a short-lived token for /export/download.
+router.get(
+  "/admin/secy/export/activity-link",
+  requireRole("SuperADMIN", "ACADEMIC_SECY_VIEW"),
+  exportController.getSecyActivityExportToken,
+);
+router.get(
+  "/admin/secy/export/roster-link",
+  requireRole("SuperADMIN", "ACADEMIC_SECY_VIEW"),
+  exportController.getAdminRosterExportToken,
+);
+
 // ── Data Export ────────────────────────────────────────────────────────────
 router.get("/admin/export/roster", requireRole("SuperADMIN"), exportController.exportAdminRoster);
 router.get("/admin/export/roster-link", requireRole("SuperADMIN"), exportController.getAdminRosterExportToken);

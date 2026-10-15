@@ -110,6 +110,7 @@ export async function apiFetch(path, options = {}) {
 // `filename` is accepted for backward compatibility with existing call sites
 // but is no longer used — the server's Content-Disposition header decides it.
 export async function downloadFile(path, _filename) {
-  const { token } = await apiFetch(`${path}-link`);
+  const [base, query] = path.split("?"); // allow "?from=..&to=.." on the direct path
+  const { token } = await apiFetch(`${base}-link${query ? `?${query}` : ""}`);
   window.location.href = `${API_BASE}/export/download?token=${encodeURIComponent(token)}`;
 }

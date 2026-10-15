@@ -136,20 +136,20 @@ const buildAigRosterCsv = async (aigSlug) => {
   if (!aig) return { status: 404, error: "AIG not found" };
 
   const now = new Date();
+  const memberInclude = {
+    user: {
+      include: {
+        bookings: true,
+        bans: { where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] } },
+      },
+    },
+  };
   const cohorts = await prisma.cohort.findMany({
     where: { aigId: aig.id },
     include: {
       mentorProfiles: { select: { user: { select: { name: true } } } },
-      studentProfiles: {
-        include: {
-          user: {
-            include: {
-              bookings: true,
-              bans: { where: { liftedAt: null, OR: [{ endsAt: null }, { endsAt: { gt: now } }] } },
-            },
-          },
-        },
-      },
+      studentProfiles: { include: memberInclude },
+      sigfiStudentProfiles: { include: memberInclude },
     },
   });
 
@@ -164,7 +164,10 @@ const buildAigRosterCsv = async (aigSlug) => {
 
   const dataRows = cohorts.flatMap((c) => {
     const mentorName = c.mentorProfiles[0]?.user?.name ?? "Unassigned";
-    return c.studentProfiles.map((sp) => {
+    // A student belongs to a cohort via either their primary or SIGFi slot
+    // (see lib/cohortMembership.js) — merge both, de-duplicated.
+    const members = [...new Map([...c.studentProfiles, ...c.sigfiStudentProfiles].map((sp) => [sp.id, sp])).values()];
+    return members.map((sp) => {
       const u         = sp.user;
       const bookings  = u.bookings;
       const confirmed = bookings.filter((b) => b.status === "CONFIRMED").length;
@@ -186,6 +189,30 @@ const buildAigRosterCsv = async (aigSlug) => {
   return {
     body: csv(headers, dataRows),
     filename: `aig-${safeFilenamePart(aig.slug)}-roster-${new Date().toISOString().split("T")[0]}.csv`,
+  };
+};
+
+// Academic Secretary: mentor-level slot activity per AIG/Disha/Crack Tank group,
+// same numbers as the dashboard (optionally windowed by session date).
+const buildSecyActivityCsv = async (from, to) => {
+  // Lazy require — adminController is a heavy module and this avoids any load-order coupling.
+  const { computeGroupMentorActivity } = require("./adminController");
+  const result = await computeGroupMentorActivity(from, to);
+  if (result.error) return result;
+
+  const headers = ["Group", "Category", "Mentor", "Total Slots", "Total Hours"];
+  for (const t of ["CV", "GD", "CASE", "STOCK_PITCH"]) headers.push(`${t} Slots`, `${t} Hours`);
+
+  const dataRows = result.mentors.map((m) => {
+    const cells = [m.groupName, m.groupCategory, m.name, m.totalCount, m.totalHours];
+    for (const t of ["CV", "GD", "CASE", "STOCK_PITCH"]) cells.push(m.byType[t].count, m.byType[t].hours);
+    return cells;
+  });
+
+  const range = from && to ? `-${safeFilenamePart(from)}_to_${safeFilenamePart(to)}` : "";
+  return {
+    body: csv(headers, dataRows),
+    filename: `mentoring-activity${range}-${new Date().toISOString().split("T")[0]}.csv`,
   };
 };
 
@@ -281,6 +308,12 @@ const getMentorCohortExportToken = (req, res) => issueToken(req, res, "mentorCoh
 const getAdminRosterExportToken  = (req, res) => issueToken(req, res, "adminRoster");
 const getAigRosterExportToken    = (req, res) => issueToken(req, res, "aigRoster", { aigSlug: req.params.aigSlug });
 
+const getSecyActivityExportToken = (req, res) => {
+  const { from, to } = req.query;
+  if ((from && !to) || (!from && to)) return res.status(400).json({ error: "Both from and to are required together" });
+  issueToken(req, res, "secyActivity", from && to ? { from: String(from), to: String(to) } : {});
+};
+
 const downloadWithToken = async (req, res, next) => {
   try {
     const { token } = req.query;
@@ -300,6 +333,7 @@ const downloadWithToken = async (req, res, next) => {
       case "mentorCohort": result = await buildMentorCohortCsv(claims.sub); break;
       case "adminRoster":  result = await buildAdminRosterCsv(); break;
       case "aigRoster":    result = await buildAigRosterCsv(claims.aigSlug); break;
+      case "secyActivity": result = await buildSecyActivityCsv(claims.from, claims.to); break;
       default: return res.status(400).json({ error: "Unknown export kind" });
     }
     if (result.error) return res.status(result.status).json({ error: result.error });
@@ -310,5 +344,6 @@ const downloadWithToken = async (req, res, next) => {
 module.exports = {
   exportMentorCohort, exportAdminRoster, exportAigRoster, exportMyBookings,
   getMyBookingsExportToken, getMentorCohortExportToken, getAdminRosterExportToken, getAigRosterExportToken,
+  getSecyActivityExportToken,
   downloadWithToken,
 };

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Building2, Shield, ChevronDown, Filter, X } from "lucide-react";
-import { useSecyMentorActivity } from "../hooks/useApi";
+import { Building2, Shield, ChevronDown, Filter, X, Download, Loader2 } from "lucide-react";
+import { useSecyMentorActivity, useExportCsv } from "../hooks/useApi";
 import AvatarMenu from "../components/AvatarMenu";
 import AppFooter from "../components/AppFooter";
 import Card from "../components/ui/Card";
@@ -103,6 +103,11 @@ export default function AcademicSecyDashboard() {
 
   const clearFilter = () => { setFrom(""); setTo(""); };
 
+  const exportMutation = useExportCsv();
+  const runExport = (path) =>
+    exportMutation.mutate({ path }, { onSettled: () => setTimeout(() => exportMutation.reset(), 2500) });
+  const activityPath = `/admin/secy/export/activity${rangeReady ? `?from=${from}&to=${to}` : ""}`;
+
   return (
     <div className="min-h-screen app-bg text-emerald-950 font-sans pb-12">
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-emerald-900/10 px-4 py-3 flex justify-between items-center gap-3 shadow-sm">
@@ -152,6 +157,33 @@ export default function AcademicSecyDashboard() {
           {(from && !to) || (!from && to) ? (
             <p className="text-xs font-bold text-amber-600 mt-2">Pick both a From and To date to apply the filter.</p>
           ) : null}
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-2 mb-3 text-xs font-bold text-emerald-800/60 uppercase tracking-widest">
+            <Download size={14} /> Data Export (CSV)
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => runExport(activityPath)}
+              disabled={exportMutation.isPending}
+              className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-bold px-4 py-2.5 rounded-xl"
+            >
+              {exportMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              Mentoring activity{rangeReady ? " (selected range)" : " (all-time)"}
+            </button>
+            <button
+              onClick={() => runExport("/admin/secy/export/roster")}
+              disabled={exportMutation.isPending}
+              className="flex items-center gap-2 bg-white border border-emerald-900/15 hover:bg-emerald-50 disabled:opacity-60 text-emerald-900 text-xs font-bold px-4 py-2.5 rounded-xl"
+            >
+              <Download size={14} /> Complete student roster
+            </button>
+            {exportMutation.isSuccess && <span className="text-xs font-bold text-emerald-700">Downloaded</span>}
+            {exportMutation.isError && (
+              <span className="text-xs font-bold text-red-700">{exportMutation.error?.message ?? "Export failed"}</span>
+            )}
+          </div>
         </Card>
 
         {error && (

@@ -867,17 +867,18 @@ const listMentorStats = async (_req, res, next) => {
 const TAKEN_STATUSES = ["CONFIRMED", "ATTENDED", "NO_SHOW"];
 const SLOT_TYPES = ["CV", "GD", "CASE", "STOCK_PITCH"];
 
-const getGroupMentorActivity = async (req, res, next) => {
-  try {
-    const { from, to } = req.query;
+// Shared by the JSON endpoint and the Academic Secretary CSV export. Returns
+// { status, error } on bad input instead of writing a response.
+const computeGroupMentorActivity = async (from, to) => {
+  {
     let fromDate = null;
     let toDate = null;
     if (from || to) {
-      if (!from || !to) return res.status(400).json({ error: "Both from and to are required together" });
+      if (!from || !to) return { status: 400, error: "Both from and to are required together" };
       fromDate = new Date(from);
       toDate = new Date(to);
       if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-        return res.status(400).json({ error: "Invalid from/to date" });
+        return { status: 400, error: "Invalid from/to date" };
       }
       fromDate.setHours(0, 0, 0, 0);
       toDate.setHours(0, 0, 0, 0);
@@ -956,11 +957,19 @@ const getGroupMentorActivity = async (req, res, next) => {
       }))
       .sort((a, b) => a.groupName.localeCompare(b.groupName) || a.name.localeCompare(b.name));
 
-    res.json({
+    return {
       range: fromDate ? { from: fromDate.toISOString(), to: new Date(toDate.getTime() - 1).toISOString() } : null,
       groups: groups.map((g) => ({ slug: g.slug, name: g.name, category: g.category })),
       mentors: mentorRows,
-    });
+    };
+  }
+};
+
+const getGroupMentorActivity = async (req, res, next) => {
+  try {
+    const result = await computeGroupMentorActivity(req.query.from, req.query.to);
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -1141,6 +1150,7 @@ const getCalendarWeek = async (req, res, next) => {
 };
 
 module.exports = {
+  computeGroupMentorActivity,
   getAigOverview,
   getAigSlotHoursReleased,
   getMentorSessionDetail,
