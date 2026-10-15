@@ -56,6 +56,7 @@ new entries should always carry a real prefix.
 
 | Date | Commit | Type | Summary |
 |---|---|---|---|
+| 2026-10-15 | `766ef54` | feat | Mentor "Download my slots taken" CSV (own data only, `/slots/mine/export`); AIG dashboard download now exports all the AIG's mentors' taken slots (`/admin/aig/:slug/mentors-export`) — fixes empty file for AIGs with no student cohorts (e.g. CSC); hide My Cohort card for mentors with no cohort; no migration |
 | 2026-10-15 | `1354e60` | docs | Add deployment playbook (`calvin_deployment_ps.md`) and SIGFi 41 cohort-wise sheet |
 | 2026-10-15 | `1d5caf4` | chore | DB snapshots, incl. verified full production backup 20261015-115911 (no DB change) |
 | 2026-10-15 | `d70fea8` | feat | View-as role switcher for allow-listed viewers (`lib/viewers.js`, `POST /auth/view-as`, read-only view sessions enforced in `verifySession`); no migration |
