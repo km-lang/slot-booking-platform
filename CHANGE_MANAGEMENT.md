@@ -52,6 +52,15 @@ new entries should always carry a real prefix.
 <!-- Newest release at the top of each month's table. Add new months above
      the previous one, immediately under this comment. -->
 
+### October 2026
+
+| Date | Commit | Type | Summary |
+|---|---|---|---|
+| 2026-10-15 | `1354e60` | docs | Add deployment playbook (`calvin_deployment_ps.md`) and SIGFi 41 cohort-wise sheet |
+| 2026-10-15 | `1d5caf4` | chore | DB snapshots, incl. verified full production backup 20261015-115911 (no DB change) |
+| 2026-10-15 | `d70fea8` | feat | View-as role switcher for allow-listed viewers (`lib/viewers.js`, `POST /auth/view-as`, read-only view sessions enforced in `verifySession`); no migration |
+| 2026-10-15 | `d093efa` | feat | Academic Secretary CSV export (mentor activity + full roster); include SIGFi members in AIG roster export |
+
 ### August 2026
 
 | Date | Commit | Type | Summary |
