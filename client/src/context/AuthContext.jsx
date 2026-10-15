@@ -22,6 +22,18 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // View-as switcher (server-checked allow-list): swaps the session for another
+  // role's board. The server marks non-mentor sessions read-only.
+  const switchView = async (payload) => {
+    const { token, user: next } = await apiFetch("/auth/view-as", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setSession(token, next);
+    setUser(next);
+    return next;
+  };
+
   const logout = () => {
     clearSession();
     setUser(null);
@@ -41,6 +53,7 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         isLoading,
         login,
+        switchView,
         logout,
         updateUser,
       }}

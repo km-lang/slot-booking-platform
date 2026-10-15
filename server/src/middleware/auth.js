@@ -3,7 +3,13 @@
 const jwt    = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 
-const verifySession = (req, res, next) => {
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Sessions minted by POST /auth/view-as carry viewAs: true and are strictly
+// read-only — every non-GET request is refused, so a viewer browsing another
+// role's board can never change data. Routes that must stay writable for such
+// a session (token refresh, switching view) use verifySessionAllowViewWrites.
+const checkSession = ({ blockViewWrites }) => (req, res, next) => {
   const header = req.headers.authorization || "";
   const [scheme, token] = header.split(" ");
   if (scheme !== "Bearer" || !token) {
@@ -12,11 +18,17 @@ const verifySession = (req, res, next) => {
 
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
-    next();
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired session" });
   }
+  if (blockViewWrites && req.user.viewAs && !SAFE_METHODS.has(req.method)) {
+    return res.status(403).json({ error: "View-only mode — switch back to your own account to make changes" });
+  }
+  next();
 };
+
+const verifySession = checkSession({ blockViewWrites: true });
+const verifySessionAllowViewWrites = checkSession({ blockViewWrites: false });
 
 const requireRole = (...roles) =>
   (req, res, next) => {
@@ -60,4 +72,4 @@ const requireMentorAigScope = (mentorSlugParam) =>
     }
   };
 
-module.exports = { verifySession, requireRole, requireAigScope, requireMentorAigScope };
+module.exports = { verifySession, verifySessionAllowViewWrites, requireRole, requireAigScope, requireMentorAigScope };

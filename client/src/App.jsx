@@ -16,6 +16,8 @@ import AdminStudentDetail from "./pages/AdminStudentDetail";
 import PlacementAdminDashboard from "./pages/PlacementAdminDashboard";
 import AcademicSecyDashboard from "./pages/AcademicSecyDashboard";
 import ProfileSettings from "./pages/ProfileSettings";
+import ViewAsSwitcher from "./pages/ViewAsSwitcher";
+import ViewAsBanner from "./components/ViewAsBanner";
 import LoginPage from "./pages/LoginPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
 
@@ -27,10 +29,12 @@ function App() {
   return (
     <>
     <AnnouncementPopup />
+    <ViewAsBanner />
     <Routes>
       <Route path="/login" element={t(<LoginPage />)} />
       <Route path="/unauthorized" element={t(<UnauthorizedPage />)} />
       <Route path="/profile" element={t(<ProfileSettings />)} />
+      <Route path="/view-as" element={t(<ViewAsSwitcher />)} />
       <Route path="/" element={<Navigate to="/student" replace />} />
 
       {/* Student flow */}

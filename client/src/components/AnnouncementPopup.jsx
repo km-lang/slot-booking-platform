@@ -12,8 +12,9 @@ const SUPPORT_EMAIL = "km@iiml.ac.in";
 // root (see App.jsx) so it can surface on top of any page for any authenticated
 // role; the server decides what's pending and for whom.
 export default function AnnouncementPopup() {
-  const { isAuthenticated } = useAuth();
-  const { data } = usePendingAnnouncement(isAuthenticated);
+  const { isAuthenticated, user } = useAuth();
+  // No popups inside a read-only view-as session (answers can't be recorded anyway).
+  const { data } = usePendingAnnouncement(isAuthenticated && !user?.viewAs);
   const respond = useRespondToAnnouncement();
   const [rating, setRating] = useState(0);
 

@@ -21,7 +21,8 @@ export default function LoginPage() {
   const isDevMode = import.meta.env.DEV;
 
   const handleSuccess = (user) => {
-    navigate(getRoleHome(user), { replace: true });
+    // Viewers pick a board first (student / mentor / superadmin / AIG / Disha / Secretary).
+    navigate(user.canViewAs ? "/view-as" : getRoleHome(user), { replace: true });
   };
 
   // Dev-mode: plain email form

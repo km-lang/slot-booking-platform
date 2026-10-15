@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { LogOut, UserCog, Shield } from "lucide-react";
+import { LogOut, UserCog, Shield, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
 import { getRoleLabel } from "../lib/roleHome";
@@ -71,6 +71,14 @@ export default function AvatarMenu({ variant = "light", shukracharyaTo }) {
           >
             <UserCog size={15} className="text-emerald-600" /> Edit Profile
           </button>
+          {user?.canViewAs && (
+            <button
+              onClick={() => { setOpen(false); navigate("/view-as"); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-50 active:bg-emerald-100 transition-colors border-b border-emerald-900/5"
+            >
+              <Eye size={15} className="text-emerald-600" /> Switch view
+            </button>
+          )}
           {shukracharyaTo && (
             <button
               onClick={() => { setOpen(false); navigate(shukracharyaTo); }}
